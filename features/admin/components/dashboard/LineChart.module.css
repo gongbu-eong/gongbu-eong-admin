@@ -1,0 +1,192 @@
+.wrap {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
+.titleBlock {
+  position: absolute;
+  left: 16px;
+  top: 24px;
+}
+
+.titleBlock h2 {
+  margin: 0;
+  color: var(--admin-muted);
+  font-size: 17px;
+  font-weight: 700;
+  line-height: normal;
+}
+
+.titleBlock p {
+  margin: 8px 0 0;
+  color: var(--admin-muted);
+  font-size: 14px;
+  font-weight: 400;
+  line-height: normal;
+}
+
+.legends {
+  position: absolute;
+  right: 16px;
+  top: 52px;
+  display: flex;
+  gap: 16px;
+  color: var(--admin-muted);
+  font-size: 13px;
+  line-height: 16px;
+}
+
+.legends span {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+
+.legends i {
+  display: block;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+}
+
+.chart {
+  position: absolute;
+  left: 24px;
+  top: 106px;
+}
+
+.grid {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 188px;
+}
+
+.gridRow {
+  display: flex;
+  align-items: center;
+  height: 47px;
+}
+
+.gridRow span {
+  width: 33px;
+  color: var(--admin-muted);
+  font-size: 14px;
+  font-weight: 400;
+  line-height: normal;
+  text-align: right;
+}
+
+.gridRow i {
+  display: block;
+  width: 711px;
+  height: 1px;
+  margin-left: 8px;
+  background: var(--admin-border);
+}
+
+.svg {
+  position: absolute;
+  left: 0;
+  top: 0;
+  overflow: visible;
+}
+
+.hitArea {
+  cursor: pointer;
+}
+
+.hitArea:hover {
+  fill: rgba(47, 127, 240, 0.08);
+}
+
+.tooltip {
+  position: absolute;
+  z-index: 3;
+  min-width: 158px;
+  max-width: 220px;
+  height: auto;
+  padding: 9px 10px;
+  border: 1px solid var(--admin-border);
+  border-radius: 8px;
+  background: var(--admin-surface);
+  box-shadow: 0 6px 18px rgba(26, 34, 51, 0.12);
+  color: var(--admin-muted);
+  pointer-events: none;
+  text-align: left;
+}
+
+.tooltipDate {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--admin-text);
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 17px;
+  white-space: nowrap;
+}
+
+.tooltipList {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.tooltipRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  min-width: 136px;
+}
+
+.tooltipTitle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 16px;
+}
+
+.tooltipTitle i {
+  display: block;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+}
+
+.tooltipValue {
+  display: block;
+  color: var(--admin-text);
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 17px;
+  white-space: nowrap;
+}
+
+.xAxis {
+  position: absolute;
+  left: 120px;
+  top: 205px;
+  display: grid;
+  width: 586px;
+  transform: translateY(-14px);
+  color: var(--admin-light);
+  font-size: 14px;
+  font-weight: 400;
+  line-height: normal;
+  text-align: center;
+}
+
+.xAxis span {
+  min-width: 0;
+  white-space: nowrap;
+}
+
+.xAxisDenseLabel {
+  font-size: 10px;
+}

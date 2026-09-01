@@ -1,0 +1,71 @@
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  color: var(--admin-muted);
+  font-size: 14px;
+  font-weight: 400;
+  line-height: normal;
+}
+
+.table th {
+  height: 46px;
+  background: var(--admin-surface-soft);
+  color: var(--admin-muted);
+  font-weight: 700;
+}
+
+.table th:first-child {
+  border-radius: var(--admin-radius) 0 0 var(--admin-radius);
+}
+
+.table th:last-child {
+  border-radius: 0 var(--admin-radius) var(--admin-radius) 0;
+}
+
+.table td {
+  height: 64px;
+  border-bottom: 1px solid var(--admin-border);
+}
+
+.left {
+  text-align: left;
+}
+
+.center {
+  text-align: center;
+}
+
+.right {
+  text-align: right;
+}
+
+.pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 24px;
+  height: 18px;
+  color: var(--admin-muted);
+  font-size: 15px;
+  font-weight: 400;
+  line-height: normal;
+}
+
+.pagination button {
+  min-width: 10px;
+  height: 18px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+}
+
+.pagination button:disabled {
+  color: var(--admin-light);
+}
+
+.activePage {
+  color: var(--admin-text) !important;
+  font-weight: 700 !important;
+}

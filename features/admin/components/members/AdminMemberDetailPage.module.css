@@ -1,0 +1,359 @@
+.profileCard {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 1211px;
+  height: 105px;
+  margin-top: 16px;
+  padding: 0 32px;
+  border-radius: var(--admin-radius);
+  background: #ffffff;
+  box-shadow: var(--admin-shadow);
+}
+
+.avatar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  overflow: hidden;
+}
+
+.avatar img {
+  display: block;
+  width: 64px;
+  height: 64px;
+  object-fit: contain;
+}
+
+.memberInfo {
+  margin-left: 16px;
+}
+
+.nameRow {
+  display: flex;
+  align-items: center;
+  height: 22px;
+}
+
+.nameRow strong {
+  margin-right: 8px;
+  color: var(--admin-text);
+  font-size: 14px;
+  font-weight: 700;
+  line-height: normal;
+}
+
+.paidBadge,
+.statusBadge,
+.blockedBadge,
+.providerBadge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 22px;
+  margin-left: 8px;
+  padding: 0 9px;
+  border-radius: 5555px;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: normal;
+}
+
+.paidBadge {
+  background: var(--admin-primary-soft);
+  color: var(--admin-primary);
+}
+
+.statusBadge {
+  background: #e3f8ef;
+  color: #1fb573;
+}
+
+.blockedBadge {
+  background: #fff0ef;
+  color: var(--admin-danger);
+}
+
+.providerBadge {
+  background: #f9e000;
+  color: #3b1c1c;
+}
+
+.memberInfo p {
+  margin: 8px 0 0;
+  color: var(--admin-muted);
+  font-size: 14px;
+  font-weight: 400;
+  line-height: normal;
+}
+
+.actions {
+  display: flex;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.actions button {
+  width: 100px;
+  height: 46px;
+  border-radius: var(--admin-radius);
+  font-size: 15px;
+  font-weight: 700;
+  line-height: normal;
+}
+
+.pauseButton {
+  border: 1px solid #ffe9b1;
+  background: #fff9e8;
+  color: #a5760a;
+}
+
+.withdrawButton {
+  border: 1px solid #f3bcba;
+  background: #fff0ef;
+  color: var(--admin-danger);
+}
+
+.tabs {
+  display: flex;
+  gap: 16px;
+  width: 1055px;
+  height: 46px;
+  margin-top: 24px;
+}
+
+.tabs a {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 137px;
+  height: 46px;
+  border-radius: 5555px;
+  background: #ffffff;
+  color: var(--admin-muted);
+  font-size: 14px;
+  font-weight: 400;
+  line-height: normal;
+}
+
+.tabs .activeTab {
+  background: var(--admin-primary);
+  color: #ffffff;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.overviewCard,
+.tableCard {
+  position: relative;
+  width: 1211px;
+  margin-top: 24px;
+  border-radius: var(--admin-radius);
+  background: #ffffff;
+  box-shadow: var(--admin-shadow);
+}
+
+.overviewCard {
+  height: 327px;
+  padding: 40px 24px;
+}
+
+.tableCard {
+  min-height: 682px;
+  padding: 40px 24px;
+}
+
+.overviewCard h2,
+.tableCard h2 {
+  margin: 0 0 31px;
+  color: var(--admin-muted);
+  font-size: 17px;
+  font-weight: 700;
+  line-height: normal;
+}
+
+.statGrid,
+.statGridThree {
+  display: grid;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.statGrid {
+  grid-template-columns: repeat(4, 278px);
+}
+
+.statGridThree {
+  grid-template-columns: repeat(3, 278px);
+}
+
+.statItem {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 278px;
+  height: 63px;
+  padding: 0 32px;
+  border: 1px solid var(--admin-border);
+  border-radius: var(--admin-radius);
+  background: var(--admin-bg);
+}
+
+.statItem span {
+  color: var(--admin-muted);
+  font-size: 14px;
+  font-weight: 400;
+  line-height: normal;
+}
+
+.statItem strong {
+  color: var(--admin-muted);
+  font-size: 26px;
+  font-weight: 800;
+  line-height: normal;
+  text-align: right;
+}
+
+.infoGrid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  width: 1163px;
+  border-bottom: 1px solid var(--admin-border);
+}
+
+.infoGrid p {
+  display: grid;
+  grid-template-columns: 295px 1fr;
+  align-items: center;
+  height: 46px;
+  margin: 0;
+  border-top: 1px solid var(--admin-border);
+  color: var(--admin-muted);
+  font-size: 14px;
+  font-weight: 400;
+  line-height: normal;
+}
+
+.infoGrid span {
+  color: var(--admin-light);
+}
+
+.infoGrid strong {
+  overflow: hidden;
+  color: var(--admin-muted);
+  font-weight: 400;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dataTable {
+  width: 1163px;
+  border-collapse: collapse;
+  table-layout: fixed;
+  color: var(--admin-muted);
+  font-size: 14px;
+  font-weight: 400;
+  line-height: normal;
+}
+
+.dataTable th,
+.dataTable td {
+  height: 64px;
+  border-bottom: 1px solid var(--admin-border);
+  text-align: center;
+  vertical-align: middle;
+}
+
+.dataTable th {
+  height: 46px;
+  background: var(--admin-bg);
+  color: var(--admin-light);
+  font-weight: 400;
+}
+
+.dataTable td {
+  color: var(--admin-muted);
+}
+
+.dataTable td:nth-child(2),
+.dataTable td:nth-child(3) {
+  overflow: hidden;
+  padding: 0 16px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 24px;
+  margin-top: 24px;
+  color: var(--admin-muted);
+  font-size: 15px;
+  font-weight: 400;
+  line-height: normal;
+}
+
+.pagination button {
+  min-width: 10px;
+  height: 18px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+}
+
+.pagination button:disabled {
+  color: var(--admin-light);
+}
+
+.currentPage {
+  color: var(--admin-primary) !important;
+}
+
+.emptyState {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1163px;
+  height: 160px;
+  border-top: 1px solid var(--admin-border);
+  border-bottom: 1px solid var(--admin-border);
+  color: var(--admin-light);
+  font-size: 14px;
+}
+
+.backLink {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 137px;
+  height: 46px;
+  margin: 24px 0 0 537px;
+  border: 1px solid var(--admin-border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--admin-muted);
+  font-size: 14px;
+  font-weight: 400;
+  line-height: normal;
+}
+
+.emptyCard {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1211px;
+  height: 280px;
+  margin-top: 16px;
+  border-radius: var(--admin-radius);
+  background: #ffffff;
+  box-shadow: var(--admin-shadow);
+  color: var(--admin-muted);
+  font-size: 14px;
+}

@@ -1,0 +1,153 @@
+.page {
+  position: relative;
+  width: 1620px;
+  min-height: 1047px;
+}
+
+.periodPill {
+  position: absolute;
+  left: 0;
+  top: 16px;
+  display: flex;
+  align-items: center;
+  height: 46px;
+  padding: 0 22px;
+  border-radius: 555px;
+  background: var(--admin-surface);
+  color: var(--admin-muted);
+  font-size: 14px;
+  font-weight: 400;
+  line-height: normal;
+}
+
+.periodPill strong {
+  color: var(--admin-primary);
+  font-weight: 700;
+}
+
+.metrics {
+  position: absolute;
+  left: 0;
+  top: 78px;
+  display: grid;
+  grid-template-columns: repeat(4, 393px);
+  gap: 16px;
+}
+
+.tableCard {
+  position: absolute;
+  left: 0;
+  top: 199px;
+  width: 1620px;
+  min-height: 646px;
+  padding: 0;
+  overflow: hidden;
+}
+
+.tableHeaderBlock {
+  position: absolute;
+  left: 16px;
+  top: 24px;
+}
+
+.tableHeaderBlock h2 {
+  margin: 0;
+  color: var(--admin-muted);
+  font-size: 17px;
+  font-weight: 700;
+  line-height: normal;
+}
+
+.tableHeaderBlock p {
+  margin: 8px 0 0;
+  color: var(--admin-muted);
+  font-size: 14px;
+  font-weight: 400;
+  line-height: normal;
+}
+
+.summary {
+  position: absolute;
+  right: 16px;
+  top: 31px;
+  color: var(--admin-muted);
+  font-size: 14px;
+  font-weight: 400;
+  line-height: normal;
+}
+
+.summary strong {
+  color: var(--admin-text);
+  font-weight: 800;
+}
+
+.table {
+  position: absolute;
+  left: 16px;
+  top: 84px;
+  width: 1588px;
+  border-collapse: collapse;
+  color: var(--admin-muted);
+  font-size: 14px;
+  font-weight: 400;
+  line-height: normal;
+  table-layout: fixed;
+}
+
+.table th {
+  height: 46px;
+  background: var(--admin-bg);
+  color: var(--admin-muted);
+  font-weight: 700;
+  text-align: center;
+}
+
+.table th:first-child {
+  border-radius: 5px 0 0 0;
+}
+
+.table th:last-child {
+  border-radius: 0 5px 0 0;
+}
+
+.table td {
+  height: 58px;
+  border-bottom: 1px solid var(--admin-border);
+  background: var(--admin-surface);
+  text-align: center;
+  vertical-align: middle;
+}
+
+.table th:nth-child(1),
+.table td:nth-child(1) {
+  width: 180px;
+}
+
+.table th:nth-child(2),
+.table td:nth-child(2) {
+  width: 330px;
+}
+
+.table th:nth-child(10),
+.table td:nth-child(10) {
+  width: 130px;
+}
+
+.nameCell,
+.linkCell {
+  padding: 0 16px;
+  overflow: hidden;
+  text-align: left !important;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nameCell {
+  color: var(--admin-text);
+  font-weight: 700;
+}
+
+.emptyCell {
+  height: 320px !important;
+  color: var(--admin-light);
+}

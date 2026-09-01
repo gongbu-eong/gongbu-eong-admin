@@ -1,0 +1,33 @@
+.metrics {
+  display: grid;
+  grid-template-columns: repeat(4, 393px);
+  gap: 16px;
+  width: 1620px;
+  margin-top: 20px;
+}
+
+.chartGrid {
+  display: grid;
+  grid-template-columns: repeat(2, 802px);
+  gap: 16px;
+  width: 1620px;
+  margin-top: 16px;
+}
+
+.chartCard {
+  height: 400px;
+}
+
+.lowerGrid {
+  display: grid;
+  grid-template-columns: 598px 598px 393px;
+  gap: 16px;
+  width: 1620px;
+  margin-top: 16px;
+}
+
+.funnelCard,
+.channelCard,
+.workCard {
+  height: 410px;
+}

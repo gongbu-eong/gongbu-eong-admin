@@ -1,0 +1,51 @@
+.card {
+  width: 393px;
+  height: 105px;
+  padding: 24px 16px 0;
+}
+
+.label {
+  margin: 0;
+  color: var(--admin-muted);
+  font-size: 15px;
+  font-weight: 700;
+  line-height: normal;
+}
+
+.row {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  margin-top: 4px;
+}
+
+.value {
+  margin: 0;
+  color: var(--admin-muted);
+  font-size: 26px;
+  font-weight: 800;
+  line-height: normal;
+  white-space: nowrap;
+}
+
+.value span {
+  margin-left: 4px;
+  font-size: 14px;
+  font-weight: 400;
+}
+
+.delta {
+  margin: 0 0 7px;
+  font-size: 14px;
+  font-weight: 400;
+  line-height: normal;
+  white-space: nowrap;
+}
+
+.up {
+  color: var(--admin-danger);
+}
+
+.down {
+  color: var(--admin-primary);
+}

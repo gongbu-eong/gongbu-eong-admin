@@ -1,0 +1,492 @@
+.page {
+  position: relative;
+  width: 1620px;
+  min-height: 1455px;
+}
+
+.toolbar {
+  position: absolute;
+  right: 0;
+  top: -49px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 46px;
+}
+
+.segmented {
+  display: flex;
+  align-items: center;
+  width: 240px;
+  height: 46px;
+  padding: 5px;
+  border-radius: 5px;
+  background: var(--admin-surface);
+}
+
+.segmented button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 36px;
+  padding: 0 16px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--admin-surface);
+  color: var(--admin-muted);
+  font-size: 14px;
+  font-weight: 400;
+  line-height: normal;
+  white-space: nowrap;
+}
+
+.segmented .segmentedActive {
+  background: var(--admin-primary);
+  color: #fff;
+  font-weight: 800;
+}
+
+.dateRange {
+  display: flex;
+  align-items: center;
+  width: 348px;
+  height: 46px;
+  padding: 0 16px;
+  border-radius: 5px;
+  background: var(--admin-surface);
+  color: var(--admin-muted);
+  font-size: 14px;
+  font-weight: 400;
+  line-height: normal;
+}
+
+.dateRange label {
+  position: relative;
+  display: block;
+  width: 90px;
+}
+
+.dateRange input {
+  display: block;
+  width: 90px;
+  height: 46px;
+  padding: 0;
+  border: 0;
+  outline: 0;
+  appearance: none;
+  background: transparent;
+  color: var(--admin-muted);
+  font: inherit;
+  white-space: nowrap;
+}
+
+.dateRange input::-webkit-calendar-picker-indicator {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.dateRange img {
+  display: block;
+  width: 24px;
+  height: 24px;
+  object-fit: contain;
+}
+
+.dateRange i {
+  display: block;
+  width: 17px;
+  font-style: normal;
+  text-align: center;
+}
+
+.dateRange button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 47px;
+  height: 28px;
+  margin-left: 8px;
+  border: 0;
+  border-radius: 7px;
+  background: var(--admin-primary);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 800;
+  line-height: normal;
+}
+
+.createButton {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 139px;
+  height: 46px;
+  border: 0;
+  border-radius: var(--admin-radius);
+  background: var(--admin-primary);
+  color: #fff;
+  font-size: 15px;
+  font-weight: 800;
+  line-height: normal;
+  white-space: nowrap;
+}
+
+.periodPill {
+  position: absolute;
+  left: 0;
+  top: 16px;
+  display: flex;
+  align-items: center;
+  height: 46px;
+  padding: 0 22px;
+  border-radius: 555px;
+  background: var(--admin-surface);
+  color: var(--admin-muted);
+  font-size: 14px;
+  font-weight: 400;
+  line-height: normal;
+}
+
+.periodPill strong {
+  color: var(--admin-primary);
+  font-weight: 700;
+}
+
+.metrics {
+  position: absolute;
+  left: 0;
+  top: 78px;
+  display: grid;
+  grid-template-columns: repeat(4, 393px);
+  gap: 16px;
+}
+
+.chartGrid {
+  position: absolute;
+  left: 0;
+  top: 199px;
+  display: grid;
+  grid-template-columns: repeat(2, 802px);
+  gap: 16px;
+}
+
+.distributionCard,
+.trendCard {
+  position: relative;
+  height: 400px;
+}
+
+.cardTitle {
+  position: absolute;
+  left: 16px;
+  top: 24px;
+}
+
+.cardTitle h2,
+.detailHeader h2 {
+  margin: 0;
+  color: var(--admin-muted);
+  font-size: 17px;
+  font-weight: 700;
+  line-height: normal;
+}
+
+.cardTitle p {
+  margin: 8px 0 0;
+  color: var(--admin-muted);
+  font-size: 14px;
+  font-weight: 400;
+  line-height: normal;
+}
+
+.donut {
+  position: absolute;
+  left: 16px;
+  top: 113px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 240px;
+  height: 240px;
+  border-radius: 50%;
+}
+
+.donut::before {
+  position: absolute;
+  inset: 30px;
+  border-radius: 50%;
+  background: #fff;
+  content: "";
+}
+
+.donut div {
+  position: relative;
+  z-index: 1;
+  text-align: center;
+}
+
+.donut span {
+  display: block;
+  color: var(--admin-muted);
+  font-size: 14px;
+  font-weight: 400;
+  line-height: normal;
+}
+
+.donut strong {
+  display: block;
+  margin-top: 0;
+  color: var(--admin-muted);
+  font-size: 40px;
+  font-weight: 800;
+  line-height: 50px;
+}
+
+.channelBars {
+  position: absolute;
+  left: 272px;
+  top: 96px;
+  width: 514px;
+}
+
+.channelBar {
+  height: 33px;
+}
+
+.channelBar + .channelBar {
+  margin-top: 27px;
+}
+
+.channelBarHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 17px;
+  color: var(--admin-muted);
+  font-size: 14px;
+  line-height: normal;
+}
+
+.channelBarHead strong {
+  font-weight: 700;
+}
+
+.channelBarHead span {
+  color: var(--admin-muted);
+  font-weight: 400;
+}
+
+.channelBarHead b {
+  color: var(--admin-text);
+  font-weight: 700;
+}
+
+.barTrack {
+  position: relative;
+  width: 514px;
+  height: 8px;
+  margin-top: 8px;
+  overflow: hidden;
+  border-radius: 555px;
+  background: var(--admin-bg);
+}
+
+.barTrack i {
+  display: block;
+  height: 8px;
+  border-radius: 555px;
+}
+
+.detailCard {
+  position: absolute;
+  left: 0;
+  top: 615px;
+  width: 1620px;
+  height: 400px;
+}
+
+.dailyDetailCard {
+  position: absolute;
+  left: 0;
+  top: 1031px;
+  width: 1620px;
+  height: 392px;
+}
+
+.detailHeader {
+  position: absolute;
+  left: 16px;
+  right: 16px;
+  top: 16px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.detailHeader h2 {
+  margin-top: 8px;
+}
+
+.dailyHeader {
+  position: absolute;
+  left: 16px;
+  top: 24px;
+}
+
+.dailyHeader h2 {
+  margin: 0;
+  color: var(--admin-muted);
+  font-size: 17px;
+  font-weight: 700;
+  line-height: normal;
+}
+
+.dailyHeader p {
+  margin: 8px 0 0;
+  color: var(--admin-muted);
+  font-size: 14px;
+  font-weight: 400;
+  line-height: normal;
+}
+
+.detailHeader button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 112px;
+  height: 36px;
+  border: 1px solid var(--admin-primary-soft);
+  border-radius: 8px;
+  background: var(--admin-surface);
+  color: var(--admin-primary);
+  font-size: 13px;
+  font-weight: 700;
+  line-height: normal;
+}
+
+.table {
+  position: absolute;
+  left: 16px;
+  top: 68px;
+  width: 1588px;
+  color: var(--admin-muted);
+  font-size: 14px;
+  line-height: normal;
+}
+
+.tableHeader,
+.tableRow,
+.totalRow {
+  display: grid;
+  grid-template-columns: repeat(4, 397px);
+  align-items: center;
+  height: 46px;
+}
+
+.tableHeader {
+  border-radius: 5px 5px 0 0;
+  background: var(--admin-bg);
+  color: var(--admin-muted);
+  text-align: center;
+}
+
+.tableRow {
+  border-bottom: 1px solid var(--admin-border);
+  background: var(--admin-surface);
+  text-align: center;
+}
+
+.totalRow {
+  border-top: 1px solid var(--admin-light);
+  color: var(--admin-text);
+  font-weight: 700;
+  text-align: center;
+}
+
+.channelCell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-left: 40px;
+  text-align: left;
+}
+
+.channelCell i {
+  display: block;
+  width: 15px;
+  height: 15px;
+  border-radius: 2px;
+}
+
+.up {
+  color: var(--admin-danger);
+}
+
+.down {
+  color: var(--admin-primary);
+}
+
+.dailyTable {
+  position: absolute;
+  left: 16px;
+  top: 84px;
+  width: 1588px;
+  color: var(--admin-muted);
+  font-size: 14px;
+  font-weight: 400;
+  line-height: normal;
+}
+
+.dailyTableHeader,
+.dailyTableRow {
+  display: grid;
+  grid-template-columns: 180px repeat(5, 220px) 308px;
+  align-items: center;
+  min-height: 46px;
+  text-align: center;
+}
+
+.dailyTableHeader {
+  border-radius: 5px 5px 0 0;
+  background: var(--admin-bg);
+}
+
+.dailyTableHeader span {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.dailyTableHeader i {
+  display: block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+
+.dailyTableRow {
+  border-bottom: 1px solid var(--admin-border);
+  background: var(--admin-surface);
+  color: var(--admin-text);
+}
+
+.dailyTableRow strong {
+  color: var(--admin-text);
+  font-weight: 700;
+}
+
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
