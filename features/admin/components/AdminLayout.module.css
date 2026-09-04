@@ -124,6 +124,24 @@
   font-weight: 700;
 }
 
+.logoutForm {
+  position: absolute;
+  left: 16px;
+  right: 16px;
+  bottom: 24px;
+}
+
+.logoutForm button {
+  width: 100%;
+  height: 42px;
+  border: 1px solid var(--admin-border);
+  border-radius: var(--admin-radius);
+  background: var(--admin-surface);
+  color: var(--admin-muted);
+  font-size: 14px;
+  font-weight: 700;
+}
+
 .main {
   width: calc(100% - 236px);
   min-height: 100vh;
@@ -204,6 +222,11 @@
 
   .subNav {
     display: none;
+  }
+
+  .logoutForm {
+    position: static;
+    margin-top: 12px;
   }
 
   .main {

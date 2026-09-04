@@ -1,4 +1,5 @@
 import { AdminSidebar } from "@/features/admin/components/AdminSidebar";
+import { requireAdminSession } from "@/features/admin/server/auth.repository";
 import styles from "./AdminLayout.module.css";
 
 type AdminLayoutProps = {
@@ -9,13 +10,15 @@ type AdminLayoutProps = {
   children: React.ReactNode;
 };
 
-export function AdminLayout({
+export async function AdminLayout({
   title,
   description,
   activeNav,
   activeSubNav,
   children,
 }: AdminLayoutProps) {
+  await requireAdminSession();
+
   return (
     <div className={styles.shell}>
       <AdminSidebar activeNav={activeNav} activeSubNav={activeSubNav} />

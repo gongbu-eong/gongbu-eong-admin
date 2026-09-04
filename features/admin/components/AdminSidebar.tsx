@@ -58,6 +58,9 @@ export function AdminSidebar({ activeNav, activeSubNav }: AdminSidebarProps) {
           );
         })}
       </nav>
+      <form className={styles.logoutForm} action="/logout" method="post">
+        <button type="submit">로그아웃</button>
+      </form>
     </aside>
   );
 }

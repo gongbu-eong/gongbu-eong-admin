@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
+import { getAdminSession } from "@/features/admin/server/auth.repository";
 import { updateMemberStatus } from "@/features/admin/server/members.repository";
 
 type MemberStatusRouteContext = {
@@ -12,6 +13,14 @@ export async function PATCH(
   request: NextRequest,
   { params }: MemberStatusRouteContext,
 ) {
+  const adminSession = await getAdminSession();
+  if (!adminSession) {
+    return NextResponse.json(
+      { ok: false, message: "관리자 로그인이 필요합니다." },
+      { status: 401 },
+    );
+  }
+
   const { userId } = await params;
   const body = (await request.json().catch(() => null)) as {
     status?: string;
