@@ -914,7 +914,53 @@ export async function updateMemberStatus(
 
   if ((result.rowCount || 0) > 0 && status !== "active") {
     await query(
+      `
+        INSERT INTO public.oauth_login_restrictions (
+          user_id,
+          provider,
+          provider_user_id,
+          provider_email,
+          status,
+          restricted_until,
+          reason,
+          updated_at
+        )
+        SELECT
+          accounts.user_id,
+          accounts.provider,
+          accounts.provider_user_id,
+          accounts.provider_email,
+          $2::public.user_status,
+          CASE
+            WHEN $2::text = 'blocked' THEN users.blocked_until
+            ELSE users.rejoin_blocked_until
+          END,
+          CASE
+            WHEN $2::text = 'blocked' THEN 'admin_block'
+            ELSE 'admin_forced_withdrawal'
+          END,
+          NOW()
+        FROM public.user_oauth_accounts accounts
+        JOIN public.users users ON users.id = accounts.user_id
+        WHERE accounts.user_id = $1::uuid
+        ON CONFLICT (provider, provider_user_id) DO UPDATE SET
+          user_id = EXCLUDED.user_id,
+          provider_email = EXCLUDED.provider_email,
+          status = EXCLUDED.status,
+          restricted_until = EXCLUDED.restricted_until,
+          reason = EXCLUDED.reason,
+          updated_at = NOW()
+      `,
+      [userId, status],
+    );
+
+    await query(
       "DELETE FROM public.user_sessions WHERE user_id = $1::uuid",
+      [userId],
+    );
+  } else if ((result.rowCount || 0) > 0) {
+    await query(
+      "DELETE FROM public.oauth_login_restrictions WHERE user_id = $1::uuid",
       [userId],
     );
   }
