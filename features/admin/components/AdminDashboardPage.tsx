@@ -5,8 +5,35 @@ import { FunnelList } from "@/features/admin/components/dashboard/FunnelList";
 import { LineChart } from "@/features/admin/components/dashboard/LineChart";
 import { MetricCard } from "@/features/admin/components/dashboard/MetricCard";
 import { WorkList } from "@/features/admin/components/dashboard/WorkList";
+import type { LinePoint } from "@/features/admin/data/dashboard";
 import { getDashboardData } from "@/features/admin/server/dashboard.repository";
 import styles from "./AdminDashboardPage.module.css";
+
+function createChartScale(series: LinePoint[][]) {
+  const maxPointValue = Math.max(
+    ...series.flatMap((points) => points.map((point) => point.value)),
+    0,
+  );
+  const paddedMax = Math.max(1, maxPointValue * 1.15);
+  const step = getNiceStep(paddedMax / 4);
+  const maxValue = step * 4;
+
+  return {
+    maxValue,
+    yLabels: Array.from({ length: 5 }, (_, index) =>
+      Math.round(maxValue - step * index).toLocaleString("ko-KR"),
+    ),
+  };
+}
+
+function getNiceStep(value: number) {
+  const magnitude = 10 ** Math.floor(Math.log10(Math.max(value, 1)));
+  const normalized = value / magnitude;
+  const niceNormalized =
+    normalized <= 1 ? 1 : normalized <= 2 ? 2 : normalized <= 5 ? 5 : 10;
+
+  return niceNormalized * magnitude;
+}
 
 export async function AdminDashboardPage() {
   const {
@@ -19,6 +46,8 @@ export async function AdminDashboardPage() {
     visitorTrend,
     workItems,
   } = await getDashboardData();
+  const visitorScale = createChartScale([visitorTrend]);
+  const diagnosisSignupScale = createChartScale([diagnosisTrend, signupTrend]);
 
   return (
     <AdminLayout
@@ -37,7 +66,7 @@ export async function AdminDashboardPage() {
           <LineChart
             title="방문자 추이"
             subtitle="최근 7일"
-            yLabels={["1,600", "1,200", "800", "400", "0"]}
+            yLabels={visitorScale.yLabels}
             series={[
               {
                 label: "방문자",
@@ -45,14 +74,14 @@ export async function AdminDashboardPage() {
                 data: visitorTrend,
               },
             ]}
-            maxValue={1600}
+            maxValue={visitorScale.maxValue}
           />
         </AdminCard>
         <AdminCard className={styles.chartCard}>
           <LineChart
             title="진단 수행 · 신규 가입"
             subtitle="최근 7일"
-            yLabels={["400", "300", "200", "100", "0"]}
+            yLabels={diagnosisSignupScale.yLabels}
             legends={[
               { label: "진단 수행", color: "#20bf7a" },
               { label: "신규 가입", color: "#ffb000" },
@@ -69,7 +98,7 @@ export async function AdminDashboardPage() {
                 data: signupTrend,
               },
             ]}
-            maxValue={400}
+            maxValue={diagnosisSignupScale.maxValue}
           />
         </AdminCard>
       </section>

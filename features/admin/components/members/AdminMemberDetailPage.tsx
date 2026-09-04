@@ -6,6 +6,7 @@ import {
   getMemberDetailData,
   normalizeMemberTab,
 } from "@/features/admin/server/members.repository";
+import { AdminMemberActions } from "./AdminMemberActions";
 import styles from "./AdminMemberDetailPage.module.css";
 
 const tabs: Array<{ label: string; value: MemberDetailTab }> = [
@@ -72,14 +73,10 @@ export async function AdminMemberDetailPage({
                 {member.campaign} · 가입 {member.joinedAt}
               </p>
             </div>
-            <div className={styles.actions}>
-              <button className={styles.pauseButton} type="button">
-                계정 정지
-              </button>
-              <button className={styles.withdrawButton} type="button">
-                강제 탈퇴
-              </button>
-            </div>
+            <AdminMemberActions
+              userId={member.id}
+              statusLabel={member.statusLabel}
+            />
           </section>
 
           <nav className={styles.tabs} aria-label="회원 상세 탭">
@@ -131,6 +128,15 @@ export async function AdminMemberDetailPage({
                   label="상태"
                   value={`${member.statusLabel} / ${member.paidLabel}`}
                 />
+                {member.blockedUntil !== "-" ? (
+                  <InfoRow label="정지 만료일" value={member.blockedUntil} />
+                ) : null}
+                {member.rejoinBlockedUntil !== "-" ? (
+                  <InfoRow
+                    label="재가입 제한일"
+                    value={member.rejoinBlockedUntil}
+                  />
+                ) : null}
               </div>
             </section>
           ) : null}

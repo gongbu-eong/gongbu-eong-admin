@@ -48,7 +48,10 @@ export type MemberSummary = {
   avatarSrc: string;
   backgroundColor: string;
   provider: string;
+  status: string;
   statusLabel: string;
+  blockedUntil: string;
+  rejoinBlockedUntil: string;
   paidLabel: string;
   remainingCredits: number;
   purchaseCount: number;
@@ -135,6 +138,8 @@ type MemberRow = {
   profile_avatar_key: string | null;
   profile_background_color: string | null;
   status: string;
+  blocked_until: string | Date | null;
+  rejoin_blocked_until: string | Date | null;
   signup_at: string | Date | null;
   last_login_at: string | Date | null;
   provider: string | null;
@@ -423,7 +428,10 @@ function toMemberSummary(row: MemberRow): MemberSummary {
     avatarSrc: `/my/avatars/${avatarKey}-profile.png`,
     backgroundColor: row.profile_background_color || "#c4c6ca",
     provider: formatProvider(row.provider),
+    status: row.status,
     statusLabel: formatStatus(row.status),
+    blockedUntil: formatDateTime(row.blocked_until),
+    rejoinBlockedUntil: formatDateTime(row.rejoin_blocked_until),
     paidLabel: purchaseCount > 0 ? "유료" : "무료",
     remainingCredits: numberValue(row.remaining_credits),
     purchaseCount,
@@ -448,6 +456,8 @@ function createMemberSelectSql(whereClause: string) {
       users.profile_avatar_key,
       users.profile_background_color,
       users.status::TEXT,
+      users.blocked_until,
+      users.rejoin_blocked_until,
       COALESCE(users.signup_completed_at, users.created_at) AS signup_at,
       users.last_login_at,
       oauth.provider::TEXT,
@@ -605,8 +615,7 @@ export async function getMemberListData(
       ? query<MemberRow>(
           `
             ${createMemberSelectSql(`
-              WHERE users.status <> 'withdrawn'
-                AND users.id = $1::uuid
+              WHERE users.id = $1::uuid
             `)}
             LIMIT 1
           `,
@@ -681,8 +690,10 @@ export async function getMemberDetailData(
   const memberResult = await query<MemberRow>(
     `
       ${createMemberSelectSql(`
-        WHERE users.status <> 'withdrawn'
-          AND ($1::uuid IS NULL OR users.id = $1::uuid)
+        WHERE (
+          ($1::uuid IS NULL AND users.status <> 'withdrawn')
+          OR ($1::uuid IS NOT NULL AND users.id = $1::uuid)
+        )
       `)}
       ORDER BY COALESCE(users.signup_completed_at, users.created_at) DESC
       LIMIT 1
@@ -856,4 +867,57 @@ export async function getMemberDetailData(
     })),
     memoTableAvailable,
   };
+}
+
+export async function updateMemberStatus(
+  userId: string,
+  status: "active" | "blocked" | "withdrawn",
+  days?: number,
+) {
+  if (!isUuid(userId)) {
+    return false;
+  }
+
+  const result = await query<{ id: string }>(
+    `
+      UPDATE public.users
+      SET
+        status = $2::public.user_status,
+        blocked_until = CASE
+          WHEN $2::text = 'blocked' THEN NOW() + ($3::integer * INTERVAL '1 day')
+          ELSE NULL
+        END,
+        rejoin_blocked_until = CASE
+          WHEN $2::text = 'withdrawn' THEN NOW() + ($3::integer * INTERVAL '1 day')
+          ELSE NULL
+        END,
+        withdrawn_at = CASE
+          WHEN $2::text = 'withdrawn' THEN COALESCE(withdrawn_at, NOW())
+          WHEN $2::text = 'active' THEN NULL
+          ELSE withdrawn_at
+        END,
+        sanction_reason = CASE
+          WHEN $2::text = 'blocked' THEN 'admin_block'
+          WHEN $2::text = 'withdrawn' THEN 'admin_forced_withdrawal'
+          ELSE NULL
+        END,
+        sanction_updated_at = CASE
+          WHEN $2::text IN ('blocked', 'withdrawn') THEN NOW()
+          ELSE NULL
+        END,
+        updated_at = NOW()
+      WHERE id = $1::uuid
+      RETURNING id
+    `,
+    [userId, status, days || 0],
+  );
+
+  if ((result.rowCount || 0) > 0 && status !== "active") {
+    await query(
+      "DELETE FROM public.user_sessions WHERE user_id = $1::uuid",
+      [userId],
+    );
+  }
+
+  return (result.rowCount || 0) > 0;
 }

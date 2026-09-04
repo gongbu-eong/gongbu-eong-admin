@@ -58,23 +58,10 @@ export const navItems: NavItem[] = [
     icon: "/admin-assets/nav-dashboard.png",
   },
   {
-    label: "유입 ·트래픽",
+    label: "유입 · 트래픽",
     key: "traffic",
     href: "/traffic",
     icon: "/admin-assets/nav-traffic.png",
-    expandable: true,
-    children: [
-      {
-        label: "유입 경로 분석",
-        key: "traffic-source",
-        href: "/traffic",
-      },
-      {
-        label: "캠페인·링크별 성과",
-        key: "traffic-campaigns",
-        href: "/traffic/campaigns",
-      },
-    ],
   },
   {
     label: "회원 관리",
@@ -83,31 +70,11 @@ export const navItems: NavItem[] = [
     icon: "/admin-assets/nav-user.png",
   },
   {
-    label: "진단권 결제",
-    key: "credits",
-    href: "#",
-    icon: "/admin-assets/nav-credit.png",
-    expandable: true,
-  },
-  {
-    label: "공고 관리",
-    key: "jobs",
-    href: "#",
-    icon: "/admin-assets/nav-job.png",
-    expandable: true,
-  },
-  {
     label: "커뮤니티 관리",
     key: "community",
     href: "#",
     icon: "/admin-assets/nav-community.png",
     expandable: true,
-  },
-  {
-    label: "콘텐츠 관리",
-    key: "contents",
-    href: "#",
-    icon: "/admin-assets/nav-content.png",
   },
   {
     label: "공지·알림",

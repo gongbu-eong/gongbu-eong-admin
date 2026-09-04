@@ -51,7 +51,6 @@ export async function TrafficSourcePage({ filters }: TrafficSourcePageProps) {
           preset={data.preset}
           startDate={data.startDate}
           endDate={data.endDate}
-          createButton
         />
 
         <div className={styles.periodPill}>

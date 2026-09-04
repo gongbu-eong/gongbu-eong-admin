@@ -2,8 +2,8 @@
   position: relative;
   display: flex;
   align-items: center;
-  width: 1211px;
-  height: 105px;
+  width: 100%;
+  min-height: 105px;
   margin-top: 16px;
   padding: 0 32px;
   border-radius: var(--admin-radius);
@@ -105,6 +105,11 @@
   line-height: normal;
 }
 
+.actions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
 .pauseButton {
   border: 1px solid #ffe9b1;
   background: #fff9e8;
@@ -120,9 +125,10 @@
 .tabs {
   display: flex;
   gap: 16px;
-  width: 1055px;
-  height: 46px;
+  width: 100%;
+  min-height: 46px;
   margin-top: 24px;
+  overflow-x: auto;
 }
 
 .tabs a {
@@ -149,15 +155,17 @@
 .overviewCard,
 .tableCard {
   position: relative;
-  width: 1211px;
+  width: 100%;
   margin-top: 24px;
+  overflow-x: auto;
   border-radius: var(--admin-radius);
   background: #ffffff;
   box-shadow: var(--admin-shadow);
 }
 
 .overviewCard {
-  height: 327px;
+  min-height: 327px;
+  height: auto;
   padding: 40px 24px;
 }
 
@@ -183,18 +191,18 @@
 }
 
 .statGrid {
-  grid-template-columns: repeat(4, 278px);
+  grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
 .statGridThree {
-  grid-template-columns: repeat(3, 278px);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
 .statItem {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  width: 278px;
+  width: 100%;
   height: 63px;
   padding: 0 32px;
   border: 1px solid var(--admin-border);
@@ -220,7 +228,7 @@
 .infoGrid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
-  width: 1163px;
+  width: 100%;
   border-bottom: 1px solid var(--admin-border);
 }
 
@@ -250,7 +258,8 @@
 }
 
 .dataTable {
-  width: 1163px;
+  min-width: 900px;
+  width: 100%;
   border-collapse: collapse;
   table-layout: fixed;
   color: var(--admin-muted);
@@ -320,7 +329,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 1163px;
+  width: 100%;
   height: 160px;
   border-top: 1px solid var(--admin-border);
   border-bottom: 1px solid var(--admin-border);
@@ -334,7 +343,7 @@
   justify-content: center;
   width: 137px;
   height: 46px;
-  margin: 24px 0 0 537px;
+  margin: 24px auto 0;
   border: 1px solid var(--admin-border);
   border-radius: 999px;
   background: transparent;
@@ -348,7 +357,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 1211px;
+  width: 100%;
   height: 280px;
   margin-top: 16px;
   border-radius: var(--admin-radius);
@@ -356,4 +365,72 @@
   box-shadow: var(--admin-shadow);
   color: var(--admin-muted);
   font-size: 14px;
+}
+
+@media (max-width: 1180px) {
+  .profileCard {
+    align-items: flex-start;
+    flex-wrap: wrap;
+    gap: 16px;
+    padding: 24px;
+  }
+
+  .memberInfo {
+    flex: 1 1 260px;
+  }
+
+  .actions {
+    width: 100%;
+    margin-left: 0;
+  }
+
+  .actions button {
+    flex: 1;
+    width: auto;
+  }
+
+  .statGrid,
+  .statGridThree,
+  .infoGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .infoGrid p {
+    grid-template-columns: 140px 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .profileCard {
+    padding: 20px 16px;
+  }
+
+  .nameRow {
+    flex-wrap: wrap;
+    height: auto;
+    gap: 6px;
+  }
+
+  .paidBadge,
+  .statusBadge,
+  .blockedBadge,
+  .providerBadge {
+    margin-left: 0;
+  }
+
+  .tabs a {
+    width: auto;
+    min-width: 112px;
+    padding: 0 16px;
+  }
+
+  .statGrid,
+  .statGridThree,
+  .infoGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .infoGrid p {
+    grid-template-columns: 110px 1fr;
+  }
 }

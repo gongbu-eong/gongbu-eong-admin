@@ -268,12 +268,22 @@ function groupChannelRows(rows: ChannelCountRow[]) {
 }
 
 function createYLabels(maxValue: number) {
-  const roundedMax = Math.max(400, Math.ceil(maxValue / 100) * 100);
-  const step = roundedMax / 4;
+  const paddedMax = Math.max(1, maxValue * 1.15);
+  const step = getNiceStep(paddedMax / 4);
+  const roundedMax = step * 4;
 
   return Array.from({ length: 5 }, (_, index) =>
     Math.round(roundedMax - step * index).toLocaleString("ko-KR"),
   );
+}
+
+function getNiceStep(value: number) {
+  const magnitude = 10 ** Math.floor(Math.log10(Math.max(value, 1)));
+  const normalized = value / magnitude;
+  const niceNormalized =
+    normalized <= 1 ? 1 : normalized <= 2 ? 2 : normalized <= 5 ? 5 : 10;
+
+  return niceNormalized * magnitude;
 }
 
 async function getPeriod(params: unknown[]) {
@@ -456,7 +466,7 @@ export async function getTrafficData(args?: TrafficQuery): Promise<TrafficData> 
 
     return { date: day, counts, total };
   });
-  const maxValue = Math.max(400, Math.ceil(maxTrendValue / 100) * 100);
+  const maxValue = getNiceStep(Math.max(1, maxTrendValue * 1.15) / 4) * 4;
   const periodValue = `${period?.start_label || ""}~${period?.end_label || ""}`;
 
   return {

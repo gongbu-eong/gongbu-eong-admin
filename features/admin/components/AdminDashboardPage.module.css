@@ -1,28 +1,29 @@
 .metrics {
   display: grid;
-  grid-template-columns: repeat(4, 393px);
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 16px;
-  width: 1620px;
+  width: 100%;
   margin-top: 20px;
 }
 
 .chartGrid {
   display: grid;
-  grid-template-columns: repeat(2, 802px);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 16px;
-  width: 1620px;
+  width: 100%;
   margin-top: 16px;
 }
 
 .chartCard {
   height: 400px;
+  overflow-x: auto;
 }
 
 .lowerGrid {
   display: grid;
-  grid-template-columns: 598px 598px 393px;
+  grid-template-columns: minmax(0, 1.5fr) minmax(0, 1.5fr) minmax(280px, 1fr);
   gap: 16px;
-  width: 1620px;
+  width: 100%;
   margin-top: 16px;
 }
 
@@ -30,4 +31,29 @@
 .channelCard,
 .workCard {
   height: 410px;
+}
+
+@media (max-width: 1280px) {
+  .metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .chartGrid,
+  .lowerGrid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .metrics {
+    grid-template-columns: 1fr;
+  }
+
+  .chartCard,
+  .funnelCard,
+  .channelCard,
+  .workCard {
+    min-height: 360px;
+    height: auto;
+  }
 }

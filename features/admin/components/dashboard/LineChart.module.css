@@ -57,42 +57,24 @@
   top: 106px;
 }
 
-.grid {
-  position: absolute;
-  left: 0;
-  top: 0;
-  width: 100%;
-  height: 188px;
-}
-
-.gridRow {
-  display: flex;
-  align-items: center;
-  height: 47px;
-}
-
-.gridRow span {
-  width: 33px;
-  color: var(--admin-muted);
-  font-size: 14px;
-  font-weight: 400;
-  line-height: normal;
-  text-align: right;
-}
-
-.gridRow i {
-  display: block;
-  width: 711px;
-  height: 1px;
-  margin-left: 8px;
-  background: var(--admin-border);
-}
-
 .svg {
   position: absolute;
   left: 0;
   top: 0;
   overflow: visible;
+}
+
+.gridLayer text {
+  fill: var(--admin-muted);
+  font-size: 14px;
+  font-weight: 400;
+  text-anchor: end;
+}
+
+.gridLayer line {
+  stroke: var(--admin-border);
+  stroke-width: 1;
+  shape-rendering: crispEdges;
 }
 
 .hitArea {
@@ -170,11 +152,9 @@
 
 .xAxis {
   position: absolute;
-  left: 120px;
-  top: 205px;
-  display: grid;
-  width: 586px;
-  transform: translateY(-14px);
+  left: 0;
+  top: 0;
+  width: 100%;
   color: var(--admin-light);
   font-size: 14px;
   font-weight: 400;
@@ -183,7 +163,8 @@
 }
 
 .xAxis span {
-  min-width: 0;
+  position: absolute;
+  transform: translateX(-50%);
   white-space: nowrap;
 }
 

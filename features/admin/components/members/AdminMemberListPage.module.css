@@ -1,21 +1,23 @@
 .page {
   position: relative;
-  width: 1620px;
-  min-height: 967px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 393px);
+  gap: 16px;
+  width: 100%;
+  min-height: 0;
 }
 
 .metrics {
-  position: absolute;
-  left: 0;
-  top: 16px;
+  grid-column: 1 / -1;
   display: grid;
-  grid-template-columns: repeat(4, 393px);
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 16px;
+  margin-top: 16px;
 }
 
 .metricCard {
   position: relative;
-  width: 393px;
+  width: 100%;
   height: 105px;
   padding: 24px 16px;
   border-radius: var(--admin-radius);
@@ -67,12 +69,11 @@
 }
 
 .listCard {
-  position: absolute;
-  left: 0;
-  top: 137px;
-  width: 1211px;
-  height: 830px;
+  position: relative;
+  width: 100%;
+  min-height: 830px;
   padding: 24px 16px;
+  overflow-x: auto;
   border-radius: var(--admin-radius);
   background: var(--admin-surface);
   box-shadow: var(--admin-shadow);
@@ -87,21 +88,22 @@
 }
 
 .filters {
-  position: absolute;
-  left: 16px;
-  top: 60px;
+  position: static;
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 16px;
-  width: 1179px;
-  height: 46px;
+  width: 100%;
+  min-height: 46px;
+  margin-top: 18px;
 }
 
 .searchBox {
   position: relative;
   display: flex;
   align-items: center;
-  width: 565px;
+  flex: 1 1 280px;
+  width: auto;
   height: 46px;
   border: 1px solid var(--admin-border);
   border-radius: var(--admin-radius);
@@ -140,7 +142,7 @@
 }
 
 .searchBox input {
-  width: 493px;
+  width: calc(100% - 56px);
   height: 44px;
   margin-left: 16px;
   border: 0;
@@ -158,7 +160,9 @@
 .segmented {
   display: flex;
   align-items: center;
-  width: 342px;
+  flex: 0 1 auto;
+  width: auto;
+  overflow-x: auto;
   height: 46px;
   padding: 5px;
   border: 1px solid var(--admin-border);
@@ -189,7 +193,8 @@
 .channelSelect {
   position: relative;
   display: block;
-  width: 240px;
+  flex: 0 0 220px;
+  width: 220px;
   height: 46px;
   border: 1px solid var(--admin-border);
   border-radius: var(--admin-radius);
@@ -224,10 +229,10 @@
 }
 
 .table {
-  position: absolute;
-  left: 16px;
-  top: 130px;
-  width: 1179px;
+  position: static;
+  min-width: 1179px;
+  width: 100%;
+  margin-top: 24px;
   color: var(--admin-muted);
   font-size: 14px;
   font-weight: 400;
@@ -240,6 +245,7 @@
   grid-template-columns: 300px 120px 310px 100px 100px 90px 100px 59px;
   align-items: center;
   width: 1179px;
+  min-width: 1179px;
 }
 
 .tableHeader {
@@ -363,9 +369,9 @@
 }
 
 .pagination {
-  position: absolute;
-  left: 451px;
-  bottom: 24px;
+  position: static;
+  justify-content: center;
+  margin-top: 24px;
   display: flex;
   align-items: center;
   gap: 24px;
@@ -391,11 +397,9 @@
 }
 
 .previewCard {
-  position: absolute;
-  left: 1227px;
-  top: 137px;
+  position: relative;
   width: 393px;
-  height: 830px;
+  min-height: 830px;
   padding: 24px 32px;
   border-radius: var(--admin-radius);
   background: var(--admin-surface);
@@ -403,9 +407,7 @@
 }
 
 .selectHintCard {
-  position: absolute;
-  left: 1227px;
-  top: 137px;
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -521,4 +523,42 @@
   font-size: 16px;
   font-weight: 600;
   line-height: normal;
+}
+
+@media (max-width: 1280px) {
+  .page {
+    grid-template-columns: 1fr;
+  }
+
+  .metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .previewCard,
+  .selectHintCard {
+    width: 100%;
+    min-height: auto;
+    height: auto;
+  }
+
+  .detailButton {
+    position: static;
+    width: 100%;
+    margin-top: 24px;
+  }
+}
+
+@media (max-width: 640px) {
+  .metrics {
+    grid-template-columns: 1fr;
+  }
+
+  .segmented {
+    width: 100%;
+  }
+
+  .channelSelect {
+    flex-basis: 100%;
+    width: 100%;
+  }
 }

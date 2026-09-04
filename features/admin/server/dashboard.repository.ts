@@ -39,7 +39,6 @@ type FunnelRow = {
   diagnosis_started: string;
   diagnosis_completed: string;
   result_views: string;
-  purchases: string;
 };
 
 type ChannelRow = {
@@ -387,22 +386,18 @@ export async function getDashboardData(): Promise<DashboardData> {
         FROM (${diagnosisResultViewEventsSql}) result_views, bounds
         WHERE event_at >= today_start AND event_at < tomorrow_start
       ) AS result_views,
-      (
-        SELECT COUNT(*)
-        FROM public.payments, bounds
-        WHERE status = 'paid'
-          AND COALESCE(paid_at, created_at) >= today_start
-          AND COALESCE(paid_at, created_at) < tomorrow_start
-      ) AS purchases
+      0 AS unused
   `);
 
   const funnelRow = funnelResult.rows[0];
   const visitors = numberValue(funnelRow?.visitors);
-  const started = numberValue(funnelRow?.diagnosis_started);
-  const completed = numberValue(funnelRow?.diagnosis_completed);
-  const resultViews = numberValue(funnelRow?.result_views);
-  const purchases = numberValue(funnelRow?.purchases);
-  const base = Math.max(visitors, started, completed, resultViews, purchases, 1);
+  const rawStarted = numberValue(funnelRow?.diagnosis_started);
+  const rawCompleted = numberValue(funnelRow?.diagnosis_completed);
+  const rawResultViews = numberValue(funnelRow?.result_views);
+  const started = Math.max(rawStarted, rawCompleted, rawResultViews);
+  const completed = Math.min(started, Math.max(rawCompleted, rawResultViews));
+  const resultViews = Math.min(completed, rawResultViews);
+  const base = Math.max(visitors, started, completed, resultViews, 1);
 
   const channelResult = await query<ChannelRow>(`
     WITH bounds AS (
@@ -481,7 +476,6 @@ export async function getDashboardData(): Promise<DashboardData> {
       createFunnel(2, "진단 시작", started, visitors, base),
       createFunnel(3, "진단 완료", completed, started, base),
       createFunnel(4, "결과 확인", resultViews, completed, base),
-      createFunnel(5, "진단권 구매", purchases, resultViews, base),
     ],
     channels: sortedChannels.map(([label, count]) => ({
       label,

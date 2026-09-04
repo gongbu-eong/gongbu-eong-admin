@@ -10,7 +10,7 @@ export function FunnelList({ items }: FunnelListProps) {
     <section className={styles.wrap}>
       <header className={styles.header}>
         <h2>진단 전환 퍼널</h2>
-        <p>방문부터 구매까지 유저의 이탈율을 봅니다.</p>
+        <p>방문부터 결과 확인까지 유저의 이탈율을 봅니다.</p>
       </header>
       <div className={styles.list}>
         {items.map((item) => (

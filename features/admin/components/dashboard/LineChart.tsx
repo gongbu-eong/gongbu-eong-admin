@@ -20,11 +20,12 @@ type LineChartProps = {
 };
 
 const chartWidth = 754;
-const chartHeight = 205;
-const plotLeft = 132;
-const plotTop = 0;
-const plotWidth = 568;
+const chartHeight = 232;
+const plotLeft = 50;
+const plotTop = 8;
+const plotWidth = 680;
 const plotHeight = 188;
+const xAxisTop = plotTop + plotHeight + 15;
 
 function toPoint(
   point: LinePoint,
@@ -98,6 +99,13 @@ export function LineChart({
     index === 0 ||
     index === xLabels.length - 1 ||
     index % 3 === 0;
+  const yAxisLines = yLabels.map((label, index) => ({
+    label,
+    y:
+      plotTop +
+      (yLabels.length > 1 ? (plotHeight / (yLabels.length - 1)) * index : 0),
+  }));
+  const xAxisPoints = plottedSeries[0]?.points ?? [];
 
   return (
     <div className={styles.wrap}>
@@ -120,14 +128,6 @@ export function LineChart({
         style={{ width: chartWidth, height: chartHeight }}
         onMouseLeave={() => setSelectedPoint(null)}
       >
-        <div className={styles.grid}>
-          {yLabels.map((label, index) => (
-            <div className={styles.gridRow} key={label}>
-              <span>{label}</span>
-              <i />
-            </div>
-          ))}
-        </div>
         <svg
           className={styles.svg}
           width={chartWidth}
@@ -135,6 +135,21 @@ export function LineChart({
           viewBox={`0 0 ${chartWidth} ${chartHeight}`}
           aria-label={title}
         >
+          <g className={styles.gridLayer}>
+            {yAxisLines.map((line) => (
+              <g key={line.label}>
+                <text x={plotLeft - 10} y={line.y + 5}>
+                  {line.label}
+                </text>
+                <line
+                  x1={plotLeft}
+                  x2={plotLeft + plotWidth}
+                  y1={line.y}
+                  y2={line.y}
+                />
+              </g>
+            ))}
+          </g>
           {plottedSeries.map((item) => (
               <g key={`${item.color}-${item.label || "series"}`}>
                 <path
@@ -220,15 +235,16 @@ export function LineChart({
         ) : null}
         <div
           className={styles.xAxis}
-          style={{
-            gridTemplateColumns: `repeat(${Math.max(xLabels.length, 1)}, minmax(0, 1fr))`,
-          }}
         >
           {xLabels.map((label, index) => (
             <span
               className={
                 xLabels.length > 14 ? styles.xAxisDenseLabel : undefined
               }
+              style={{
+                left: xAxisPoints[index]?.x ?? plotLeft,
+                top: xAxisTop,
+              }}
               key={`${label}-${index}`}
             >
               {shouldShowXAxisLabel(index) ? label : ""}

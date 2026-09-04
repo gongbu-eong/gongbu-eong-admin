@@ -12,8 +12,14 @@ export function AdminSidebar({ activeNav, activeSubNav }: AdminSidebarProps) {
   return (
     <aside className={styles.sidebar}>
       <div className={styles.logo} aria-label="공부엉이 관리자">
-        <span>공</span>
-        부엉이
+        <Image
+          src="/admin-assets/main-logo.png"
+          width={59}
+          height={26}
+          alt="공부엉이"
+          priority
+          unoptimized
+        />
       </div>
       <nav className={styles.nav}>
         {navItems.map((item) => {
