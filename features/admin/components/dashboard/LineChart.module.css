@@ -85,6 +85,10 @@
   fill: rgba(47, 127, 240, 0.08);
 }
 
+.fadedSeries {
+  opacity: 0.18;
+}
+
 .tooltip {
   position: absolute;
   z-index: 3;
@@ -123,6 +127,10 @@
   justify-content: space-between;
   gap: 14px;
   min-width: 136px;
+}
+
+.tooltipRowFaded {
+  opacity: 0.28;
 }
 
 .tooltipTitle {

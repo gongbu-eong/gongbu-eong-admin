@@ -27,7 +27,6 @@ export type TrafficData = {
   preset: TrafficPeriodPreset;
   startDate: string;
   endDate: string;
-  dailyViewLabel: string;
   channels: TrafficChannel[];
   trendSeries: TrafficTrendSeries[];
   dailyRows: TrafficDailyChannelRow[];

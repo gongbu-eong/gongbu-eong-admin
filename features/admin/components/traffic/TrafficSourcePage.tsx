@@ -106,7 +106,7 @@ export async function TrafficSourcePage({ filters }: TrafficSourcePageProps) {
           <AdminCard className={styles.trendCard}>
             <LineChart
               title="채널별 유입 추이"
-              subtitle={`${data.dailyViewLabel} · 채널별 유입 흐름`}
+              subtitle="최근 7일 기준 · 채널별 유입 흐름"
               yLabels={data.yLabels}
               legends={data.trendSeries.map((series) => ({
                 label: series.label,
@@ -121,7 +121,6 @@ export async function TrafficSourcePage({ filters }: TrafficSourcePageProps) {
         <AdminCard className={styles.detailCard}>
           <div className={styles.detailHeader}>
             <h2>채널별 상세</h2>
-            <button type="button">{data.dailyViewLabel}</button>
           </div>
           <div className={styles.table}>
             <div className={styles.tableHeader}>
@@ -162,37 +161,35 @@ export async function TrafficSourcePage({ filters }: TrafficSourcePageProps) {
           </div>
         </AdminCard>
 
-        {data.preset !== "today" ? (
-          <AdminCard className={styles.dailyDetailCard}>
-            <div className={styles.dailyHeader}>
-              <h2>날짜별 채널 상세</h2>
-              <p>{data.dailyViewLabel}</p>
+        <AdminCard className={styles.dailyDetailCard}>
+          <div className={styles.dailyHeader}>
+            <h2>날짜별 채널 상세</h2>
+            <p>최근 7일 기준</p>
+          </div>
+          <div className={styles.dailyTable}>
+            <div className={styles.dailyTableHeader}>
+              <span>날짜</span>
+              {data.trendSeries.map((series) => (
+                <span key={series.label}>
+                  <i style={{ backgroundColor: series.color }} />
+                  {series.label}
+                </span>
+              ))}
+              <span>합계</span>
             </div>
-            <div className={styles.dailyTable}>
-              <div className={styles.dailyTableHeader}>
-                <span>날짜</span>
+            {data.dailyRows.map((row) => (
+              <div className={styles.dailyTableRow} key={row.date}>
+                <span>{row.date}</span>
                 {data.trendSeries.map((series) => (
                   <span key={series.label}>
-                    <i style={{ backgroundColor: series.color }} />
-                    {series.label}
+                    {formatCount(row.counts[series.label] || 0)}건
                   </span>
                 ))}
-                <span>합계</span>
+                <strong>{formatCount(row.total)}건</strong>
               </div>
-              {data.dailyRows.map((row) => (
-                <div className={styles.dailyTableRow} key={row.date}>
-                  <span>{row.date}</span>
-                  {data.trendSeries.map((series) => (
-                    <span key={series.label}>
-                      {formatCount(row.counts[series.label] || 0)}건
-                    </span>
-                  ))}
-                  <strong>{formatCount(row.total)}건</strong>
-                </div>
-              ))}
-            </div>
-          </AdminCard>
-        ) : null}
+            ))}
+          </div>
+        </AdminCard>
       </section>
     </AdminLayout>
   );

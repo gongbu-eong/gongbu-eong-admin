@@ -42,12 +42,14 @@ function toPoint(
 
 type SelectedPointGroup = {
   pointLabel: string;
+  activeSeriesIndex: number;
   x: number;
   y: number;
   items: Array<{
     label: string;
     value: number;
     color: string;
+    seriesIndex: number;
   }>;
 };
 
@@ -82,15 +84,22 @@ export function LineChart({
       }),
     [series, maxValue, xLabels.length],
   );
-  const selectPointGroup = (index: number, x: number, y: number) => {
+  const selectPointGroup = (
+    index: number,
+    x: number,
+    y: number,
+    activeSeriesIndex: number,
+  ) => {
     setSelectedPoint({
       pointLabel: xLabels[index] || "",
+      activeSeriesIndex,
       x,
       y,
       items: series.map((item, seriesIndex) => ({
         label: item.label || legends?.[seriesIndex]?.label || title,
         value: item.data[index]?.value || 0,
         color: item.color,
+        seriesIndex,
       })),
     });
   };
@@ -150,8 +159,16 @@ export function LineChart({
               </g>
             ))}
           </g>
-          {plottedSeries.map((item) => (
-              <g key={`${item.color}-${item.label || "series"}`}>
+          {plottedSeries.map((item, seriesIndex) => {
+            const isFaded =
+              selectedPoint !== null &&
+              selectedPoint.activeSeriesIndex !== seriesIndex;
+
+            return (
+              <g
+                className={isFaded ? styles.fadedSeries : undefined}
+                key={`${item.color}-${item.label || "series"}`}
+              >
                 <path
                   d={item.d}
                   fill="none"
@@ -180,8 +197,12 @@ export function LineChart({
                         cy={point.y}
                         r="14"
                         fill="transparent"
-                        onMouseEnter={() => selectPointGroup(index, point.x, point.y)}
-                        onFocus={() => selectPointGroup(index, point.x, point.y)}
+                        onMouseEnter={() =>
+                          selectPointGroup(index, point.x, point.y, seriesIndex)
+                        }
+                        onFocus={() =>
+                          selectPointGroup(index, point.x, point.y, seriesIndex)
+                        }
                         onBlur={() => setSelectedPoint(null)}
                         tabIndex={0}
                       >
@@ -205,7 +226,8 @@ export function LineChart({
                   );
                 })}
               </g>
-          ))}
+            );
+          })}
         </svg>
         {selectedPoint ? (
           <div
@@ -220,7 +242,14 @@ export function LineChart({
             <span className={styles.tooltipDate}>{selectedPoint.pointLabel}</span>
             <span className={styles.tooltipList}>
               {selectedPoint.items.map((item) => (
-                <span className={styles.tooltipRow} key={item.label}>
+                <span
+                  className={`${styles.tooltipRow} ${
+                    item.seriesIndex !== selectedPoint.activeSeriesIndex
+                      ? styles.tooltipRowFaded
+                      : ""
+                  }`}
+                  key={item.label}
+                >
                   <span className={styles.tooltipTitle}>
                     <i style={{ backgroundColor: item.color }} />
                     {item.label}

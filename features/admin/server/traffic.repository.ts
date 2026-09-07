@@ -182,7 +182,9 @@ function formatCount(value: number) {
 }
 
 function formatPercent(value: number) {
-  return `${value.toFixed(1).replace(/\.0$/, "")}%`;
+  return `${value.toLocaleString("ko-KR", {
+    maximumFractionDigits: 1,
+  })}%`;
 }
 
 function normalizePreset(value?: TrafficQuery["preset"]): TrafficPeriodPreset {
@@ -203,13 +205,6 @@ function createParams(args?: TrafficQuery) {
     preset === "custom" ? normalizeDate(args?.startDate) : "",
     preset === "custom" ? normalizeDate(args?.endDate) : "",
   ];
-}
-
-function dailyViewLabel(preset: TrafficPeriodPreset) {
-  if (preset === "30d") return "최근 30일의 일별로 보기";
-  if (preset === "custom") return "선택 기간의 일별로 보기";
-  if (preset === "today") return "오늘 일별로 보기";
-  return "최근 7일의 일별로 보기";
 }
 
 function createDelta(current: number, previous: number, suffix: string) {
@@ -308,6 +303,7 @@ export async function getTrafficData(args?: TrafficQuery): Promise<TrafficData> 
   const normalizedArgs = { ...args, preset: args?.preset || args?.period };
   const preset = normalizePreset(normalizedArgs.preset);
   const params = createParams(normalizedArgs);
+  const trendParams = createParams({ preset: "7d" });
   const period = await getPeriod(params);
 
   const currentResult = await query<ChannelCountRow>(
@@ -389,7 +385,7 @@ export async function getTrafficData(args?: TrafficQuery): Promise<TrafficData> 
          AND grouped.source_value = channels.label
         ORDER BY days.day_kst, channels.sort_order
       `,
-      params,
+      trendParams,
     );
 
   const currentChannels = groupChannelRows(currentResult.rows);
@@ -465,7 +461,7 @@ export async function getTrafficData(args?: TrafficQuery): Promise<TrafficData> 
     const total = Object.values(counts).reduce((sum, count) => sum + count, 0);
 
     return { date: day, counts, total };
-  });
+  }).reverse();
   const maxValue = getNiceStep(Math.max(1, maxTrendValue * 1.15) / 4) * 4;
   const periodValue = `${period?.start_label || ""}~${period?.end_label || ""}`;
 
@@ -505,7 +501,6 @@ export async function getTrafficData(args?: TrafficQuery): Promise<TrafficData> 
     preset,
     startDate: period?.start_date || "",
     endDate: period?.end_date || "",
-    dailyViewLabel: dailyViewLabel(preset),
     channels,
     trendSeries: trafficChannelOrder.map((label) => ({
       label,
