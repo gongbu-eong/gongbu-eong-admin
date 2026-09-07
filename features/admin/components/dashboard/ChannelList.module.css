@@ -2,6 +2,7 @@
   width: 100%;
   height: 100%;
   padding: 24px 16px;
+  overflow: hidden;
 }
 
 .header {
@@ -77,6 +78,7 @@
 
 .body {
   flex: 1;
+  min-width: 0;
   margin-left: 8px;
   padding-top: 3px;
 }
@@ -91,12 +93,19 @@
 }
 
 .top strong {
+  min-width: 0;
+  overflow: hidden;
   font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .top b {
+  flex: 0 0 auto;
+  padding-left: 8px;
   color: var(--admin-text);
   font-weight: 700;
+  white-space: nowrap;
 }
 
 .top span {
@@ -105,7 +114,7 @@
 }
 
 .track {
-  width: 518px;
+  width: 100%;
   height: 8px;
   margin-top: 8px;
   border-radius: 555px;

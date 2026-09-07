@@ -299,6 +299,84 @@ async function getPeriod(params: unknown[]) {
   return result.rows[0];
 }
 
+async function getDailyChannelTrendRows(params: unknown[]) {
+  const result = await query<TrendRow>(
+    `
+      ${periodBoundsSql},
+      days AS (
+        SELECT generate_series(start_day, end_day, INTERVAL '1 day')::date AS day_kst
+        FROM ranges
+      ),
+      channels AS (
+        SELECT *
+        FROM (VALUES
+          ('인스타그램', 1),
+          ('블로그', 2),
+          ('스레드', 3),
+          ('검색', 4),
+          ('직접유입', 5)
+        ) AS channel(label, sort_order)
+      ),
+      normalized_logs AS (
+        SELECT
+          days.day_kst,
+          CASE
+            WHEN LOWER(logs.source_value) LIKE '%instagram%'
+              OR LOWER(logs.source_value) = 'ig'
+              THEN '인스타그램'
+            WHEN LOWER(logs.source_value) LIKE '%blog%'
+              THEN '블로그'
+            WHEN LOWER(logs.source_value) LIKE '%thread%'
+              THEN '스레드'
+            WHEN LOWER(logs.source_value) LIKE '%naver%'
+              OR LOWER(logs.source_value) LIKE '%google%'
+              OR LOWER(logs.source_value) LIKE '%daum%'
+              OR LOWER(logs.source_value) LIKE '%search%'
+              THEN '검색'
+            ELSE '직접유입'
+          END AS source_value,
+          logs.id
+        FROM days
+        JOIN (${trafficEventsSql}) logs
+          ON logs.event_at >= days.day_kst::timestamp AT TIME ZONE 'Asia/Seoul'
+         AND logs.event_at < (days.day_kst + 1)::timestamp AT TIME ZONE 'Asia/Seoul'
+      ),
+      grouped AS (
+        SELECT day_kst, source_value, COUNT(*) AS count
+        FROM normalized_logs
+        GROUP BY day_kst, source_value
+      )
+      SELECT
+        to_char(days.day_kst, 'MM/DD') AS label,
+        channels.label AS source_value,
+        COALESCE(grouped.count, 0) AS count
+      FROM days
+      CROSS JOIN channels
+      LEFT JOIN grouped
+        ON grouped.day_kst = days.day_kst
+       AND grouped.source_value = channels.label
+      ORDER BY days.day_kst, channels.sort_order
+    `,
+    params,
+  );
+
+  return result.rows;
+}
+
+function createTrendData(rows: TrendRow[]) {
+  const labels = Array.from(new Set(rows.map((row) => row.label)));
+  const map = new Map<string, Map<string, number>>();
+
+  for (const row of rows) {
+    const label = mapChannelLabel(row.source_value);
+    const dateMap = map.get(label) || new Map<string, number>();
+    dateMap.set(row.label, (dateMap.get(row.label) || 0) + numberValue(row.count));
+    map.set(label, dateMap);
+  }
+
+  return { labels, map };
+}
+
 export async function getTrafficData(args?: TrafficQuery): Promise<TrafficData> {
   const normalizedArgs = { ...args, preset: args?.preset || args?.period };
   const preset = normalizePreset(normalizedArgs.preset);
@@ -328,65 +406,8 @@ export async function getTrafficData(args?: TrafficQuery): Promise<TrafficData> 
       `,
       params,
     );
-  const trendResult = await query<TrendRow>(
-      `
-        ${periodBoundsSql},
-        days AS (
-          SELECT generate_series(start_day, end_day, INTERVAL '1 day')::date AS day_kst
-          FROM ranges
-        ),
-        channels AS (
-          SELECT *
-          FROM (VALUES
-            ('인스타그램', 1),
-            ('블로그', 2),
-            ('스레드', 3),
-            ('검색', 4),
-            ('직접유입', 5)
-          ) AS channel(label, sort_order)
-        ),
-        normalized_logs AS (
-          SELECT
-            days.day_kst,
-            CASE
-              WHEN LOWER(logs.source_value) LIKE '%instagram%'
-                OR LOWER(logs.source_value) = 'ig'
-                THEN '인스타그램'
-              WHEN LOWER(logs.source_value) LIKE '%blog%'
-                THEN '블로그'
-              WHEN LOWER(logs.source_value) LIKE '%thread%'
-                THEN '스레드'
-              WHEN LOWER(logs.source_value) LIKE '%naver%'
-                OR LOWER(logs.source_value) LIKE '%google%'
-                OR LOWER(logs.source_value) LIKE '%daum%'
-                OR LOWER(logs.source_value) LIKE '%search%'
-                THEN '검색'
-              ELSE '직접유입'
-            END AS source_value,
-            logs.id
-          FROM days
-          JOIN (${trafficEventsSql}) logs
-            ON logs.event_at >= days.day_kst::timestamp AT TIME ZONE 'Asia/Seoul'
-           AND logs.event_at < (days.day_kst + 1)::timestamp AT TIME ZONE 'Asia/Seoul'
-        ),
-        grouped AS (
-          SELECT day_kst, source_value, COUNT(*) AS count
-          FROM normalized_logs
-          GROUP BY day_kst, source_value
-        )
-        SELECT
-          to_char(days.day_kst, 'MM/DD') AS label,
-          channels.label AS source_value,
-          COALESCE(grouped.count, 0) AS count
-        FROM days
-        CROSS JOIN channels
-        LEFT JOIN grouped
-          ON grouped.day_kst = days.day_kst
-         AND grouped.source_value = channels.label
-        ORDER BY days.day_kst, channels.sort_order
-      `,
-      trendParams,
-    );
+  const trendRows = await getDailyChannelTrendRows(trendParams);
+  const dailyTrendRows = await getDailyChannelTrendRows(params);
 
   const currentChannels = groupChannelRows(currentResult.rows);
   const previousChannels = groupChannelRows(previousResult.rows);
@@ -432,17 +453,8 @@ export async function getTrafficData(args?: TrafficQuery): Promise<TrafficData> 
     "재방문·브랜드 지표",
   );
 
-  const trendLabels = Array.from(
-    new Set(trendResult.rows.map((row) => row.label)),
-  );
-  const trendMap = new Map<string, Map<string, number>>();
-
-  for (const row of trendResult.rows) {
-    const label = mapChannelLabel(row.source_value);
-    const dateMap = trendMap.get(label) || new Map<string, number>();
-    dateMap.set(row.label, (dateMap.get(row.label) || 0) + numberValue(row.count));
-    trendMap.set(label, dateMap);
-  }
+  const { labels: trendLabels, map: trendMap } = createTrendData(trendRows);
+  const { labels: dailyLabels, map: dailyMap } = createTrendData(dailyTrendRows);
 
   const maxTrendValue = Math.max(
     ...Array.from(trendMap.values()).flatMap((dateMap) =>
@@ -450,10 +462,10 @@ export async function getTrafficData(args?: TrafficQuery): Promise<TrafficData> 
     ),
     0,
   );
-  const dailyRows = trendLabels.map((day) => {
+  const dailyRows = dailyLabels.map((day) => {
     const counts = trafficChannelOrder.reduce<Record<string, number>>(
       (accumulator, label) => {
-        accumulator[label] = trendMap.get(label)?.get(day) || 0;
+        accumulator[label] = dailyMap.get(label)?.get(day) || 0;
         return accumulator;
       },
       {},

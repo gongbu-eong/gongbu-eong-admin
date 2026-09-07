@@ -54,7 +54,9 @@
 .chart {
   position: absolute;
   left: 24px;
+  right: 24px;
   top: 106px;
+  min-width: 0;
 }
 
 .svg {

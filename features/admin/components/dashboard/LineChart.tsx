@@ -20,12 +20,12 @@ type LineChartProps = {
 };
 
 const chartWidth = 754;
-const chartHeight = 232;
-const plotLeft = 50;
+const chartHeight = 252;
+const plotLeft = 86;
 const plotTop = 8;
-const plotWidth = 680;
+const plotWidth = 620;
 const plotHeight = 188;
-const xAxisTop = plotTop + plotHeight + 15;
+const xAxisTop = plotTop + plotHeight + 26;
 
 function toPoint(
   point: LinePoint,
@@ -115,6 +115,17 @@ export function LineChart({
       (yLabels.length > 1 ? (plotHeight / (yLabels.length - 1)) * index : 0),
   }));
   const xAxisPoints = plottedSeries[0]?.points ?? [];
+  const getValueLabelProps = (index: number) => {
+    if (index === 0) {
+      return { xOffset: 12, textAnchor: "start" as const };
+    }
+
+    if (index === xLabels.length - 1) {
+      return { xOffset: -12, textAnchor: "end" as const };
+    }
+
+    return { xOffset: 0, textAnchor: "middle" as const };
+  };
 
   return (
     <div className={styles.wrap}>
@@ -134,20 +145,21 @@ export function LineChart({
       ) : null}
       <div
         className={styles.chart}
-        style={{ width: chartWidth, height: chartHeight }}
+        style={{ height: chartHeight }}
         onMouseLeave={() => setSelectedPoint(null)}
       >
         <svg
           className={styles.svg}
-          width={chartWidth}
+          width="100%"
           height={chartHeight}
           viewBox={`0 0 ${chartWidth} ${chartHeight}`}
+          preserveAspectRatio="none"
           aria-label={title}
         >
           <g className={styles.gridLayer}>
             {yAxisLines.map((line) => (
               <g key={line.label}>
-                <text x={plotLeft - 10} y={line.y + 5}>
+                <text x={plotLeft - 22} y={line.y + 5}>
                   {line.label}
                 </text>
                 <line
@@ -211,16 +223,22 @@ export function LineChart({
                         </title>
                       </circle>
                       {showStaticLabels ? (
-                        <text
-                          x={point.x}
-                          y={Math.max(13, point.y - 17)}
-                          fill={item.color}
-                          fontSize="13"
-                          fontWeight="400"
-                          textAnchor="middle"
-                        >
-                          {point.source.value.toLocaleString("ko-KR")}
-                        </text>
+                        (() => {
+                          const labelProps = getValueLabelProps(index);
+
+                          return (
+                            <text
+                              x={point.x + labelProps.xOffset}
+                              y={Math.max(13, point.y - 17)}
+                              fill={item.color}
+                              fontSize="13"
+                              fontWeight="400"
+                              textAnchor={labelProps.textAnchor}
+                            >
+                              {point.source.value.toLocaleString("ko-KR")}
+                            </text>
+                          );
+                        })()
                       ) : null}
                     </g>
                   );
@@ -233,7 +251,7 @@ export function LineChart({
           <div
             className={styles.tooltip}
             style={{
-              left: Math.min(chartWidth - 150, Math.max(42, selectedPoint.x + 12)),
+              left: `clamp(42px, calc(${(selectedPoint.x / chartWidth) * 100}% + 12px), calc(100% - 150px))`,
               top: Math.max(0, selectedPoint.y - 48),
             }}
             role="status"
@@ -271,7 +289,7 @@ export function LineChart({
                 xLabels.length > 14 ? styles.xAxisDenseLabel : undefined
               }
               style={{
-                left: xAxisPoints[index]?.x ?? plotLeft,
+                left: `${(((xAxisPoints[index]?.x ?? plotLeft) / chartWidth) * 100).toFixed(3)}%`,
                 top: xAxisTop,
               }}
               key={`${label}-${index}`}

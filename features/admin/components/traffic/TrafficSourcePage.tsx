@@ -12,7 +12,9 @@ function formatCount(value: number) {
 }
 
 function formatPercent(value: number) {
-  return `${value.toFixed(1).replace(/\.0$/, "")}%`;
+  return `${value.toLocaleString("ko-KR", {
+    maximumFractionDigits: 1,
+  })}%`;
 }
 
 function createDonutGradient(channels: Awaited<ReturnType<typeof getTrafficData>>["channels"]) {
@@ -164,7 +166,7 @@ export async function TrafficSourcePage({ filters }: TrafficSourcePageProps) {
         <AdminCard className={styles.dailyDetailCard}>
           <div className={styles.dailyHeader}>
             <h2>날짜별 채널 상세</h2>
-            <p>최근 7일 기준</p>
+            <p>{data.periodValue} 기준</p>
           </div>
           <div className={styles.dailyTable}>
             <div className={styles.dailyTableHeader}>

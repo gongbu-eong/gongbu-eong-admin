@@ -173,7 +173,7 @@
 .trendCard {
   position: relative;
   height: 400px;
-  overflow-x: auto;
+  overflow: hidden;
 }
 
 .cardTitle {
@@ -245,8 +245,9 @@
 .channelBars {
   position: absolute;
   left: 272px;
+  right: 16px;
   top: 96px;
-  width: 514px;
+  min-width: 0;
 }
 
 .channelBar {
@@ -265,15 +266,23 @@
   color: var(--admin-muted);
   font-size: 14px;
   line-height: normal;
+  min-width: 0;
 }
 
 .channelBarHead strong {
+  min-width: 0;
+  overflow: hidden;
   font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .channelBarHead span {
+  flex: 0 0 auto;
+  padding-left: 8px;
   color: var(--admin-muted);
   font-weight: 400;
+  white-space: nowrap;
 }
 
 .channelBarHead b {
@@ -283,7 +292,7 @@
 
 .barTrack {
   position: relative;
-  width: 514px;
+  width: 100%;
   height: 8px;
   margin-top: 8px;
   overflow: hidden;
@@ -431,7 +440,8 @@
   top: 84px;
   bottom: 16px;
   width: calc(100% - 32px);
-  overflow: auto;
+  overflow-x: hidden;
+  overflow-y: auto;
   border-radius: 5px;
   color: var(--admin-muted);
   font-size: 14px;
@@ -442,8 +452,11 @@
 .dailyTableHeader,
 .dailyTableRow {
   display: grid;
-  grid-template-columns: 180px repeat(5, 220px) 308px;
-  min-width: 1588px;
+  grid-template-columns:
+    minmax(74px, 0.8fr)
+    repeat(5, minmax(86px, 1fr))
+    minmax(86px, 1fr);
+  width: 100%;
   align-items: center;
   min-height: 46px;
   text-align: center;
@@ -501,6 +514,11 @@
   align-items: center;
   justify-content: center;
   gap: 6px;
+  min-width: 0;
+  overflow: hidden;
+  padding: 0 6px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .dailyTableHeader i {
@@ -514,6 +532,15 @@
   border-bottom: 1px solid var(--admin-border);
   background: var(--admin-surface);
   color: var(--admin-text);
+}
+
+.dailyTableRow span,
+.dailyTableRow strong {
+  min-width: 0;
+  overflow: hidden;
+  padding: 0 6px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .dailyTableRow strong {

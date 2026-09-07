@@ -3,6 +3,7 @@
   width: 100%;
   height: 100%;
   padding: 24px 16px;
+  overflow: hidden;
 }
 
 .header h2 {
@@ -36,7 +37,7 @@
   color: var(--admin-muted);
   font-size: 14px;
   line-height: normal;
-  white-space: nowrap;
+  min-width: 0;
 }
 
 .step {
@@ -54,22 +55,33 @@
 }
 
 .top strong {
+  min-width: 0;
+  overflow: hidden;
   font-size: 14px;
   font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .top b {
   margin-left: auto;
+  padding-left: 8px;
   color: var(--admin-text);
   font-size: 14px;
   font-weight: 700;
+  white-space: nowrap;
 }
 
 .conversion,
 .drop {
+  flex: 0 1 auto;
+  min-width: 0;
   margin-left: 4px;
+  overflow: hidden;
   font-size: 13px;
   font-weight: 400;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .conversion {
@@ -81,7 +93,7 @@
 }
 
 .track {
-  width: 534px;
+  width: calc(100% - 32px);
   height: 8px;
   margin: 4px 0 0 32px;
   border-radius: 555px;
