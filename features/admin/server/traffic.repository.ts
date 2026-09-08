@@ -1,9 +1,14 @@
 import {
+  BannerClickLogData,
+  BannerClickLogQuery,
   CampaignPerformanceData,
   CampaignPerformanceRow,
   TrafficBannerClick,
   TrafficChannel,
   TrafficData,
+  TrafficLogChannelFilter,
+  TrafficLogData,
+  TrafficLogQuery,
   TrafficPeriodPreset,
   TrafficQuery,
   trafficChannelColors,
@@ -47,6 +52,39 @@ type BannerClickRow = {
   banner_name: string | null;
   clicks: string;
   unique_clicks: string;
+};
+
+type TrafficLogRow = {
+  id: string;
+  visited_at: string;
+  source_value: string | null;
+  user_name: string | null;
+  user_email: string | null;
+  provider: string | null;
+  ip_address: string | null;
+  user_agent: string | null;
+  path: string | null;
+  referrer: string | null;
+};
+
+type BannerClickLogRow = {
+  id: string;
+  clicked_at: string;
+  banner_key: string | null;
+  banner_name: string | null;
+  placement: string | null;
+  target_path: string | null;
+  source_path: string | null;
+  user_name: string | null;
+  user_email: string | null;
+  provider: string | null;
+  anonymous_id: string | null;
+  ip_address: string | null;
+  user_agent: string | null;
+};
+
+type CountRow = {
+  count: string;
 };
 
 const presetLabels: Record<TrafficPeriodPreset, string> = {
@@ -109,6 +147,10 @@ const trafficEventsSql = `
     anonymous_id,
     ip_address,
     id,
+    event_name,
+    title,
+    user_agent,
+    path,
     COALESCE(
       NULLIF(substring(path from '[?&]utm_source=([^&]+)'), ''),
       CASE
@@ -210,6 +252,47 @@ function normalizeDate(value?: string | null) {
   return value;
 }
 
+function normalizeLogChannel(
+  value?: TrafficLogQuery["channel"],
+): TrafficLogChannelFilter {
+  return value === "instagram" ||
+    value === "blog" ||
+    value === "threads" ||
+    value === "search" ||
+    value === "direct"
+    ? value
+    : "all";
+}
+
+function normalizePage(value?: TrafficLogQuery["page"]) {
+  const page = Number(value || 1);
+  if (!Number.isFinite(page)) return 1;
+  return Math.max(1, Math.floor(page));
+}
+
+function normalizeKeyword(value?: string | null) {
+  return (value || "").trim().slice(0, 100);
+}
+
+function toKstDateInput(value: Date) {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Seoul",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(value);
+}
+
+function createDefaultLogDates(args?: TrafficLogQuery) {
+  const now = new Date();
+  const endDate = normalizeDate(args?.endDate) || toKstDateInput(now);
+  const defaultStart = new Date(now);
+  defaultStart.setDate(defaultStart.getDate() - 6);
+  const startDate = normalizeDate(args?.startDate) || toKstDateInput(defaultStart);
+
+  return { startDate, endDate };
+}
+
 function createParams(args?: TrafficQuery) {
   const preset = normalizePreset(args?.preset);
   return [
@@ -257,6 +340,25 @@ function mapChannelLabel(source: string | null) {
   }
 
   return "직접유입";
+}
+
+function mapChannelFilterToLabel(channel: TrafficLogChannelFilter) {
+  if (channel === "instagram") return "인스타그램";
+  if (channel === "blog") return "블로그";
+  if (channel === "threads") return "스레드";
+  if (channel === "search") return "검색";
+  if (channel === "direct") return "직접유입";
+  return "";
+}
+
+function mapProvider(value?: string | null): "kakao" | "naver" | "unknown" {
+  return value === "kakao" || value === "naver" ? value : "unknown";
+}
+
+function mapProviderLabel(value?: string | null) {
+  if (value === "kakao") return "카카오";
+  if (value === "naver") return "네이버";
+  return "익명";
 }
 
 function mapBannerLabel(key: string | null, name: string | null) {
@@ -578,6 +680,267 @@ export async function getTrafficData(args?: TrafficQuery): Promise<TrafficData> 
   };
 }
 
+export async function getTrafficLogData(
+  args?: TrafficLogQuery,
+): Promise<TrafficLogData> {
+  const { startDate, endDate } = createDefaultLogDates(args);
+  const channel = normalizeLogChannel(args?.channel);
+  const channelLabel = mapChannelFilterToLabel(channel);
+  const keyword = normalizeKeyword(args?.keyword);
+  const page = normalizePage(args?.page);
+  const pageSize = 20;
+  const filterParams = [startDate, endDate, channelLabel, keyword];
+  const baseSql = `
+    WITH input AS (
+      SELECT
+        $1::date AS requested_start,
+        $2::date AS requested_end,
+        $3::text AS requested_channel,
+        $4::text AS keyword
+    ),
+    ranges AS (
+      SELECT
+        (LEAST(requested_start, requested_end)::timestamp AT TIME ZONE 'Asia/Seoul') AS current_start,
+        ((GREATEST(requested_start, requested_end) + 1)::timestamp AT TIME ZONE 'Asia/Seoul') AS current_end,
+        requested_channel,
+        keyword
+      FROM input
+    ),
+    normalized_logs AS (
+      SELECT
+        logs.id::text AS id,
+        logs.created_at AS visited_at,
+        logs.ip_address::text AS ip_address,
+        logs.user_agent,
+        logs.path,
+        logs.referrer,
+        CASE
+          WHEN LOWER(source_value) LIKE '%instagram%'
+            OR LOWER(source_value) = 'ig'
+            THEN '인스타그램'
+          WHEN LOWER(source_value) LIKE '%blog%'
+            THEN '블로그'
+          WHEN LOWER(source_value) LIKE '%thread%'
+            THEN '스레드'
+          WHEN LOWER(source_value) LIKE '%naver%'
+            OR LOWER(source_value) LIKE '%google%'
+            OR LOWER(source_value) LIKE '%daum%'
+            OR LOWER(source_value) LIKE '%search%'
+            THEN '검색'
+          ELSE '직접유입'
+        END AS source_value,
+        COALESCE(
+          NULLIF(users.community_nickname, ''),
+          NULLIF(users.nickname, ''),
+          NULLIF(users.display_name, ''),
+          NULLIF(users.email::text, ''),
+          '익명'
+        ) AS user_name,
+        COALESCE(users.email::text, oauth.provider_email::text, '-') AS user_email,
+        oauth.provider::text AS provider
+      FROM (${trafficEventsSql}) logs
+      LEFT JOIN public.users users ON users.id = logs.user_id
+      LEFT JOIN LATERAL (
+        SELECT
+          account.provider,
+          account.provider_email
+        FROM public.user_oauth_accounts account
+        WHERE account.user_id = users.id
+        ORDER BY account.last_used_at DESC NULLS LAST, account.linked_at DESC
+        LIMIT 1
+      ) oauth ON TRUE
+      CROSS JOIN ranges
+      WHERE logs.event_at >= ranges.current_start
+        AND logs.event_at < ranges.current_end
+    ),
+    filtered_logs AS (
+      SELECT normalized_logs.*
+      FROM normalized_logs
+      CROSS JOIN ranges
+      WHERE (ranges.requested_channel = '' OR normalized_logs.source_value = ranges.requested_channel)
+        AND (
+          ranges.keyword = ''
+          OR normalized_logs.path ILIKE '%' || ranges.keyword || '%'
+          OR normalized_logs.referrer ILIKE '%' || ranges.keyword || '%'
+          OR normalized_logs.ip_address ILIKE '%' || ranges.keyword || '%'
+          OR normalized_logs.user_name ILIKE '%' || ranges.keyword || '%'
+          OR normalized_logs.user_email ILIKE '%' || ranges.keyword || '%'
+        )
+    )
+  `;
+  const countResult = await query<CountRow>(
+    `
+      ${baseSql}
+      SELECT COUNT(*) AS count
+      FROM filtered_logs
+    `,
+    filterParams,
+  );
+  const totalCount = numberValue(countResult.rows[0]?.count);
+  const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
+  const effectivePage = Math.min(page, totalPages);
+  const rowsResult = await query<TrafficLogRow>(
+    `
+      ${baseSql}
+      SELECT *
+      FROM filtered_logs
+      ORDER BY visited_at DESC, id DESC
+      LIMIT $5::integer OFFSET $6::integer
+    `,
+    [...filterParams, pageSize, (effectivePage - 1) * pageSize],
+  );
+
+  return {
+    rows: rowsResult.rows.map((row) => ({
+      id: row.id,
+      visitedAt: formatLogDateTime(row.visited_at),
+      channel: mapChannelLabel(row.source_value),
+      userName: row.user_name || "익명",
+      userEmail: row.user_email || "-",
+      provider: mapProvider(row.provider),
+      providerLabel: mapProviderLabel(row.provider),
+      ipAddress: row.ip_address || "-",
+      path: row.path || "-",
+      referrer: row.referrer || "-",
+      device: isMobileUserAgent(row.user_agent) ? "모바일" : "웹",
+    })),
+    totalCount,
+    totalPages,
+    page: effectivePage,
+    pageSize,
+    startDate,
+    endDate,
+    channel,
+    keyword,
+  };
+}
+
+export async function getBannerClickLogData(
+  args?: BannerClickLogQuery,
+): Promise<BannerClickLogData> {
+  const { startDate, endDate } = createDefaultLogDates(args);
+  const keyword = normalizeKeyword(args?.keyword);
+  const page = normalizePage(args?.page);
+  const pageSize = 20;
+  const filterParams = [startDate, endDate, keyword];
+  const baseSql = `
+    WITH input AS (
+      SELECT
+        $1::date AS requested_start,
+        $2::date AS requested_end,
+        $3::text AS keyword
+    ),
+    ranges AS (
+      SELECT
+        (LEAST(requested_start, requested_end)::timestamp AT TIME ZONE 'Asia/Seoul') AS current_start,
+        ((GREATEST(requested_start, requested_end) + 1)::timestamp AT TIME ZONE 'Asia/Seoul') AS current_end,
+        keyword
+      FROM input
+    ),
+    normalized_clicks AS (
+      SELECT
+        events.id::text AS id,
+        events.created_at AS clicked_at,
+        COALESCE(NULLIF(events.properties->>'banner_key', ''), 'unknown') AS banner_key,
+        NULLIF(events.properties->>'banner_name', '') AS banner_name,
+        COALESCE(NULLIF(events.properties->>'placement', ''), '-') AS placement,
+        COALESCE(NULLIF(events.properties->>'target_path', ''), '-') AS target_path,
+        COALESCE(NULLIF(events.properties->>'path', ''), '-') AS source_path,
+        COALESCE(
+          NULLIF(users.community_nickname, ''),
+          NULLIF(users.nickname, ''),
+          NULLIF(users.display_name, ''),
+          NULLIF(users.email::text, ''),
+          '익명'
+        ) AS user_name,
+        COALESCE(users.email::text, oauth.provider_email::text, '-') AS user_email,
+        oauth.provider::text AS provider,
+        events.anonymous_id::text AS anonymous_id,
+        COALESCE(NULLIF(events.properties->>'ip_address', ''), '-') AS ip_address,
+        NULLIF(events.properties->>'user_agent', '') AS user_agent
+      FROM public.product_events events
+      LEFT JOIN public.users users ON users.id = events.user_id
+      LEFT JOIN LATERAL (
+        SELECT
+          account.provider,
+          account.provider_email
+        FROM public.user_oauth_accounts account
+        WHERE account.user_id = users.id
+        ORDER BY account.last_used_at DESC NULLS LAST, account.linked_at DESC
+        LIMIT 1
+      ) oauth ON TRUE
+      CROSS JOIN ranges
+      WHERE events.event_type = 'banner_click'
+        AND events.created_at >= ranges.current_start
+        AND events.created_at < ranges.current_end
+    ),
+    filtered_clicks AS (
+      SELECT normalized_clicks.*
+      FROM normalized_clicks
+      CROSS JOIN ranges
+      WHERE (
+        ranges.keyword = ''
+        OR normalized_clicks.banner_key ILIKE '%' || ranges.keyword || '%'
+        OR normalized_clicks.banner_name ILIKE '%' || ranges.keyword || '%'
+        OR normalized_clicks.placement ILIKE '%' || ranges.keyword || '%'
+        OR normalized_clicks.target_path ILIKE '%' || ranges.keyword || '%'
+        OR normalized_clicks.source_path ILIKE '%' || ranges.keyword || '%'
+        OR normalized_clicks.user_name ILIKE '%' || ranges.keyword || '%'
+        OR normalized_clicks.user_email ILIKE '%' || ranges.keyword || '%'
+        OR normalized_clicks.anonymous_id ILIKE '%' || ranges.keyword || '%'
+        OR normalized_clicks.ip_address ILIKE '%' || ranges.keyword || '%'
+      )
+    )
+  `;
+  const countResult = await query<CountRow>(
+    `
+      ${baseSql}
+      SELECT COUNT(*) AS count
+      FROM filtered_clicks
+    `,
+    filterParams,
+  );
+  const totalCount = numberValue(countResult.rows[0]?.count);
+  const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
+  const effectivePage = Math.min(page, totalPages);
+  const rowsResult = await query<BannerClickLogRow>(
+    `
+      ${baseSql}
+      SELECT *
+      FROM filtered_clicks
+      ORDER BY clicked_at DESC, id DESC
+      LIMIT $4::integer OFFSET $5::integer
+    `,
+    [...filterParams, pageSize, (effectivePage - 1) * pageSize],
+  );
+
+  return {
+    rows: rowsResult.rows.map((row) => ({
+      id: row.id,
+      clickedAt: formatLogDateTime(row.clicked_at),
+      bannerKey: row.banner_key || "unknown",
+      bannerName: mapBannerLabel(row.banner_key, row.banner_name),
+      placement: row.placement || "-",
+      targetPath: row.target_path || "-",
+      sourcePath: row.source_path || "-",
+      userName: row.user_name || "익명",
+      userEmail: row.user_email || "-",
+      provider: mapProvider(row.provider),
+      providerLabel: mapProviderLabel(row.provider),
+      anonymousId: row.anonymous_id ? row.anonymous_id.slice(0, 8) : "-",
+      ipAddress: row.ip_address || "-",
+      device: getDeviceLabel(row.user_agent),
+    })),
+    totalCount,
+    totalPages,
+    page: effectivePage,
+    pageSize,
+    startDate,
+    endDate,
+    keyword,
+  };
+}
+
 export async function getCampaignPerformanceData(
   args?: TrafficQuery,
 ): Promise<CampaignPerformanceData> {
@@ -795,4 +1158,34 @@ function formatDateTime(value?: string | null) {
     .format(date)
     .replace(/\.\s?/g, "/")
     .replace(/\/$/, "");
+}
+
+function formatLogDateTime(value?: string | null) {
+  if (!value) return "-";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "-";
+
+  return new Intl.DateTimeFormat("ko-KR", {
+    timeZone: "Asia/Seoul",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  })
+    .format(date)
+    .replace(/\.\s?/g, ".")
+    .replace(/\.$/, "");
+}
+
+function isMobileUserAgent(value?: string | null) {
+  return /mobile|android|iphone|ipad|ipod|blackberry|iemobile|opera mini/i.test(
+    value || "",
+  );
+}
+
+function getDeviceLabel(value?: string | null): "모바일" | "웹" | "알 수 없음" {
+  if (!value) return "알 수 없음";
+  return isMobileUserAgent(value) ? "모바일" : "웹";
 }

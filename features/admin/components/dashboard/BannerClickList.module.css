@@ -13,12 +13,30 @@
   line-height: normal;
 }
 
+.header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+}
+
 .header p {
   margin: 8px 0 0;
   color: var(--admin-muted);
   font-size: 14px;
   font-weight: 400;
   line-height: normal;
+}
+
+.header a {
+  flex: 0 0 auto;
+  margin-bottom: 1px;
+  color: var(--admin-muted);
+  font-size: 14px;
+  font-weight: 400;
+  line-height: normal;
+  text-decoration: underline;
+  text-underline-position: from-font;
 }
 
 .list {

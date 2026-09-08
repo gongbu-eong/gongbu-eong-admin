@@ -44,12 +44,88 @@ export type TrafficData = {
 };
 
 export type TrafficPeriodPreset = "today" | "7d" | "30d" | "custom";
+export type TrafficLogChannelFilter =
+  | "all"
+  | "instagram"
+  | "blog"
+  | "threads"
+  | "search"
+  | "direct";
 
 export type TrafficQuery = {
   preset?: TrafficPeriodPreset | string | null;
   period?: TrafficPeriodPreset | string | null;
   startDate?: string | null;
   endDate?: string | null;
+};
+
+export type TrafficLogQuery = {
+  startDate?: string | null;
+  endDate?: string | null;
+  channel?: TrafficLogChannelFilter | string | null;
+  keyword?: string | null;
+  page?: string | number | null;
+};
+
+export type TrafficLogItem = {
+  id: string;
+  visitedAt: string;
+  channel: string;
+  userName: string;
+  userEmail: string;
+  provider: "kakao" | "naver" | "unknown";
+  providerLabel: string;
+  ipAddress: string;
+  path: string;
+  referrer: string;
+  device: "모바일" | "웹";
+};
+
+export type TrafficLogData = {
+  rows: TrafficLogItem[];
+  totalCount: number;
+  totalPages: number;
+  page: number;
+  pageSize: number;
+  startDate: string;
+  endDate: string;
+  channel: TrafficLogChannelFilter;
+  keyword: string;
+};
+
+export type BannerClickLogQuery = {
+  startDate?: string | null;
+  endDate?: string | null;
+  keyword?: string | null;
+  page?: string | number | null;
+};
+
+export type BannerClickLogItem = {
+  id: string;
+  clickedAt: string;
+  bannerKey: string;
+  bannerName: string;
+  placement: string;
+  targetPath: string;
+  sourcePath: string;
+  userName: string;
+  userEmail: string;
+  provider: "kakao" | "naver" | "unknown";
+  providerLabel: string;
+  anonymousId: string;
+  ipAddress: string;
+  device: "모바일" | "웹" | "알 수 없음";
+};
+
+export type BannerClickLogData = {
+  rows: BannerClickLogItem[];
+  totalCount: number;
+  totalPages: number;
+  page: number;
+  pageSize: number;
+  startDate: string;
+  endDate: string;
+  keyword: string;
 };
 
 export type CampaignPerformanceRow = {

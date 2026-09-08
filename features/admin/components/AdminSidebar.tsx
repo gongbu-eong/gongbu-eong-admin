@@ -11,7 +11,7 @@ type AdminSidebarProps = {
 export function AdminSidebar({ activeNav, activeSubNav }: AdminSidebarProps) {
   return (
     <aside className={styles.sidebar}>
-      <div className={styles.logo} aria-label="공부엉이 관리자">
+      <Link className={styles.logo} href="/" aria-label="공부엉이 관리자 홈">
         <Image
           src="/admin-assets/main-logo.png"
           width={59}
@@ -20,7 +20,7 @@ export function AdminSidebar({ activeNav, activeSubNav }: AdminSidebarProps) {
           priority
           unoptimized
         />
-      </div>
+      </Link>
       <nav className={styles.nav}>
         {navItems.map((item) => {
           const isActive = item.key === activeNav;

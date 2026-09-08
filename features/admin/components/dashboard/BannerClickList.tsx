@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { BannerClickItem } from "@/features/admin/data/dashboard";
 import styles from "./BannerClickList.module.css";
 
@@ -10,8 +11,11 @@ export function BannerClickList({ items, total }: BannerClickListProps) {
   return (
     <section className={styles.wrap}>
       <header className={styles.header}>
-        <h2>배너 클릭</h2>
-        <p>오늘 클릭 기준 · 총 {total}건</p>
+        <div>
+          <h2>배너 클릭</h2>
+          <p>오늘 클릭 기준 · 총 {total}건</p>
+        </div>
+        <Link href="/traffic/banner-clicks">전체보기 &gt;</Link>
       </header>
 
       {items.length ? (
