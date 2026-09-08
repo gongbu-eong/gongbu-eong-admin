@@ -21,7 +21,7 @@
 
 .lowerGrid {
   display: grid;
-  grid-template-columns: minmax(0, 1.5fr) minmax(0, 1.5fr) minmax(280px, 1fr);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 16px;
   width: 100%;
   margin-top: 16px;
@@ -29,8 +29,10 @@
 
 .funnelCard,
 .channelCard,
-.workCard {
+.workCard,
+.bannerCard {
   height: 410px;
+  overflow: hidden;
 }
 
 @media (max-width: 1280px) {
@@ -52,7 +54,8 @@
   .chartCard,
   .funnelCard,
   .channelCard,
-  .workCard {
+  .workCard,
+  .bannerCard {
     min-height: 360px;
     height: auto;
   }

@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter, useSearchParams } from "next/navigation";
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useState } from "react";
 import { TrafficPeriodPreset } from "@/features/admin/data/traffic";
 import styles from "./TrafficSourcePage.module.css";
 
@@ -29,13 +29,16 @@ export function TrafficFilters({
 }: TrafficFiltersProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [draftStart, setDraftStart] = useState(startDate);
-  const [draftEnd, setDraftEnd] = useState(endDate);
-
-  useEffect(() => {
-    setDraftStart(startDate);
-    setDraftEnd(endDate);
-  }, [startDate, endDate]);
+  const [draftRange, setDraftRange] = useState({
+    sourceStart: startDate,
+    sourceEnd: endDate,
+    start: startDate,
+    end: endDate,
+  });
+  const isCurrentRange =
+    draftRange.sourceStart === startDate && draftRange.sourceEnd === endDate;
+  const draftStart = isCurrentRange ? draftRange.start : startDate;
+  const draftEnd = isCurrentRange ? draftRange.end : endDate;
 
   const replacePeriod = (nextPreset: TrafficPeriodPreset) => {
     const params = new URLSearchParams(searchParams.toString());
@@ -77,7 +80,14 @@ export function TrafficFilters({
           <input
             type="date"
             value={draftStart}
-            onChange={(event) => setDraftStart(event.target.value)}
+            onChange={(event) =>
+              setDraftRange({
+                sourceStart: startDate,
+                sourceEnd: endDate,
+                start: event.target.value,
+                end: draftEnd,
+              })
+            }
           />
         </label>
         <img src="/admin-assets/calendar.svg" alt="" />
@@ -87,7 +97,14 @@ export function TrafficFilters({
           <input
             type="date"
             value={draftEnd}
-            onChange={(event) => setDraftEnd(event.target.value)}
+            onChange={(event) =>
+              setDraftRange({
+                sourceStart: startDate,
+                sourceEnd: endDate,
+                start: draftStart,
+                end: event.target.value,
+              })
+            }
           />
         </label>
         <img src="/admin-assets/calendar.svg" alt="" />

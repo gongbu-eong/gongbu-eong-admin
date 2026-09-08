@@ -1,5 +1,6 @@
 import { AdminLayout } from "@/features/admin/components/AdminLayout";
 import { AdminCard } from "@/features/admin/components/common/AdminCard";
+import { BannerClickList } from "@/features/admin/components/dashboard/BannerClickList";
 import { ChannelList } from "@/features/admin/components/dashboard/ChannelList";
 import { FunnelList } from "@/features/admin/components/dashboard/FunnelList";
 import { LineChart } from "@/features/admin/components/dashboard/LineChart";
@@ -41,6 +42,8 @@ export async function AdminDashboardPage() {
     diagnosisTrend,
     funnelItems,
     metrics,
+    bannerClicks,
+    bannerClickTotal,
     channelTotal,
     signupTrend,
     visitorTrend,
@@ -112,6 +115,9 @@ export async function AdminDashboardPage() {
         </AdminCard>
         <AdminCard className={styles.workCard}>
           <WorkList items={workItems} />
+        </AdminCard>
+        <AdminCard className={styles.bannerCard}>
+          <BannerClickList items={bannerClicks} total={bannerClickTotal} />
         </AdminCard>
       </section>
     </AdminLayout>

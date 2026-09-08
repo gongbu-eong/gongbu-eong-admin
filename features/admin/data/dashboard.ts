@@ -42,6 +42,14 @@ export type ChannelItem = {
   iconClass?: string;
 };
 
+export type BannerClickItem = {
+  key: string;
+  label: string;
+  count: string;
+  uniqueCount: string;
+  fill: number;
+};
+
 export type WorkItem = {
   title: string;
   subtitle: string;

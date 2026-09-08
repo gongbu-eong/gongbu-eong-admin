@@ -1,6 +1,7 @@
 import {
   CampaignPerformanceData,
   CampaignPerformanceRow,
+  TrafficBannerClick,
   TrafficChannel,
   TrafficData,
   TrafficPeriodPreset,
@@ -39,6 +40,13 @@ type CampaignRow = {
   diagnosis_completes: string;
   signups: string;
   last_seen_at: string | null;
+};
+
+type BannerClickRow = {
+  banner_key: string | null;
+  banner_name: string | null;
+  clicks: string;
+  unique_clicks: string;
 };
 
 const presetLabels: Record<TrafficPeriodPreset, string> = {
@@ -173,6 +181,10 @@ const campaignTrafficEventsSql = `
   FROM public.attribution_events
 `;
 
+const bannerLabels: Record<string, string> = {
+  job_detail_resume_coaching: "공고 상세 AI NCS 자소서 코칭 배너",
+};
+
 function numberValue(value: string | number | null | undefined) {
   return Number(value || 0);
 }
@@ -245,6 +257,16 @@ function mapChannelLabel(source: string | null) {
   }
 
   return "직접유입";
+}
+
+function mapBannerLabel(key: string | null, name: string | null) {
+  const trimmedName = name?.trim();
+  if (trimmedName) return trimmedName;
+
+  const trimmedKey = key?.trim();
+  if (!trimmedKey) return "알 수 없는 배너";
+
+  return bannerLabels[trimmedKey] || trimmedKey;
 }
 
 function groupChannelRows(rows: ChannelCountRow[]) {
@@ -408,6 +430,24 @@ export async function getTrafficData(args?: TrafficQuery): Promise<TrafficData> 
     );
   const trendRows = await getDailyChannelTrendRows(trendParams);
   const dailyTrendRows = await getDailyChannelTrendRows(params);
+  const bannerClickResult = await query<BannerClickRow>(
+    `
+      ${periodBoundsSql}
+      SELECT
+        COALESCE(NULLIF(properties->>'banner_key', ''), 'unknown') AS banner_key,
+        NULLIF(properties->>'banner_name', '') AS banner_name,
+        COUNT(*) AS clicks,
+        COUNT(DISTINCT COALESCE(user_id::TEXT, anonymous_id::TEXT, id::TEXT)) AS unique_clicks
+      FROM public.product_events, ranges
+      WHERE event_type = 'banner_click'
+        AND created_at >= current_start
+        AND created_at < current_end
+      GROUP BY 1, 2
+      ORDER BY COUNT(*) DESC
+      LIMIT 20
+    `,
+    params,
+  );
 
   const currentChannels = groupChannelRows(currentResult.rows);
   const previousChannels = groupChannelRows(previousResult.rows);
@@ -476,6 +516,14 @@ export async function getTrafficData(args?: TrafficQuery): Promise<TrafficData> 
   }).reverse();
   const maxValue = getNiceStep(Math.max(1, maxTrendValue * 1.15) / 4) * 4;
   const periodValue = `${period?.start_label || ""}~${period?.end_label || ""}`;
+  const bannerClicks: TrafficBannerClick[] = bannerClickResult.rows.map(
+    (row) => ({
+      key: row.banner_key || "unknown",
+      label: mapBannerLabel(row.banner_key, row.banner_name),
+      clicks: numberValue(row.clicks),
+      uniqueClicks: numberValue(row.unique_clicks),
+    }),
+  );
 
   return {
     metrics: [
@@ -523,6 +571,7 @@ export async function getTrafficData(args?: TrafficQuery): Promise<TrafficData> 
       })),
     })),
     dailyRows,
+    bannerClicks,
     yLabels: createYLabels(maxValue),
     maxValue,
     totalVisitors,

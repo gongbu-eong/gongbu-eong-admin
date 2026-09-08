@@ -20,6 +20,13 @@ export type TrafficDailyChannelRow = {
   total: number;
 };
 
+export type TrafficBannerClick = {
+  key: string;
+  label: string;
+  clicks: number;
+  uniqueClicks: number;
+};
+
 export type TrafficData = {
   metrics: MetricItem[];
   periodLabel: string;
@@ -30,6 +37,7 @@ export type TrafficData = {
   channels: TrafficChannel[];
   trendSeries: TrafficTrendSeries[];
   dailyRows: TrafficDailyChannelRow[];
+  bannerClicks: TrafficBannerClick[];
   yLabels: string[];
   maxValue: number;
   totalVisitors: number;

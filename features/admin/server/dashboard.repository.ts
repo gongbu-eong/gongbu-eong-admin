@@ -1,4 +1,5 @@
 import {
+  BannerClickItem,
   ChannelItem,
   FunnelItem,
   LinePoint,
@@ -15,6 +16,8 @@ type DashboardData = {
   funnelItems: FunnelItem[];
   channels: ChannelItem[];
   channelTotal: string;
+  bannerClicks: BannerClickItem[];
+  bannerClickTotal: string;
   workItems: WorkItem[];
 };
 
@@ -51,12 +54,23 @@ type WorkRow = {
   inquiries: string;
 };
 
+type BannerClickRow = {
+  banner_key: string | null;
+  banner_name: string | null;
+  click_count: string;
+  unique_count: string;
+};
+
 const channelAssets: Record<string, Pick<ChannelItem, "icon" | "iconClass">> = {
   "인스타그램": { icon: "/admin-assets/channel-instagram.svg" },
   "블로그": { icon: "/admin-assets/channel-blog.png", iconClass: "blog" },
   "스레드": { icon: "/admin-assets/channel-threads.png", iconClass: "threads" },
   "검색": { icon: "/admin-assets/channel-search.png", iconClass: "search" },
   "직접유입": { icon: "/admin-assets/channel-direct.png", iconClass: "direct" },
+};
+
+const bannerLabels: Record<string, string> = {
+  job_detail_resume_coaching: "공고 상세 AI NCS 자소서 코칭 배너",
 };
 
 const visitorKeySql =
@@ -214,6 +228,16 @@ function mapChannelLabel(source: string | null) {
   }
 
   return "직접유입";
+}
+
+function mapBannerLabel(key: string | null, name: string | null) {
+  const trimmedName = name?.trim();
+  if (trimmedName) return trimmedName;
+
+  const trimmedKey = key?.trim();
+  if (!trimmedKey) return "알 수 없는 배너";
+
+  return bannerLabels[trimmedKey] || trimmedKey;
 }
 
 export async function getDashboardData(): Promise<DashboardData> {
@@ -439,6 +463,34 @@ export async function getDashboardData(): Promise<DashboardData> {
       ) AS inquiries
   `);
   const workRow = workResult.rows[0];
+  const bannerClickResult = await query<BannerClickRow>(`
+    WITH bounds AS (
+      SELECT
+        date_trunc('day', NOW() AT TIME ZONE 'Asia/Seoul') AT TIME ZONE 'Asia/Seoul' AS today_start,
+        (date_trunc('day', NOW() AT TIME ZONE 'Asia/Seoul') + INTERVAL '1 day') AT TIME ZONE 'Asia/Seoul' AS tomorrow_start
+    )
+    SELECT
+      COALESCE(NULLIF(properties->>'banner_key', ''), 'unknown') AS banner_key,
+      NULLIF(properties->>'banner_name', '') AS banner_name,
+      COUNT(*) AS click_count,
+      COUNT(DISTINCT COALESCE(user_id::TEXT, anonymous_id::TEXT, id::TEXT)) AS unique_count
+    FROM public.product_events, bounds
+    WHERE event_type = 'banner_click'
+      AND created_at >= today_start
+      AND created_at < tomorrow_start
+    GROUP BY 1, 2
+    ORDER BY COUNT(*) DESC
+    LIMIT 5
+  `);
+  const bannerClickRows = bannerClickResult.rows;
+  const maxBannerClickCount = Math.max(
+    ...bannerClickRows.map((row) => numberValue(row.click_count)),
+    1,
+  );
+  const totalBannerClickCount = bannerClickRows.reduce(
+    (sum, row) => sum + numberValue(row.click_count),
+    0,
+  );
 
   return {
     metrics: [
@@ -488,6 +540,14 @@ export async function getDashboardData(): Promise<DashboardData> {
       iconClass: channelAssets[label]?.iconClass || channelAssets["직접유입"].iconClass,
     })),
     channelTotal: formatCount(totalChannelCount),
+    bannerClicks: bannerClickRows.map((row) => ({
+      key: row.banner_key || "unknown",
+      label: mapBannerLabel(row.banner_key, row.banner_name),
+      count: `${formatCount(numberValue(row.click_count))}건`,
+      uniqueCount: `${formatCount(numberValue(row.unique_count))}명`,
+      fill: fillPercent(numberValue(row.click_count), maxBannerClickCount),
+    })),
+    bannerClickTotal: formatCount(totalBannerClickCount),
     workItems: [
       {
         title: "신고접수",

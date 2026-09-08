@@ -320,6 +320,13 @@
   overflow: hidden;
 }
 
+.bannerClickCard {
+  position: relative;
+  width: 100%;
+  min-height: 280px;
+  overflow: hidden;
+}
+
 .detailHeader {
   position: absolute;
   left: 16px;
@@ -340,6 +347,10 @@
   top: 24px;
 }
 
+.bannerClickHeader {
+  padding: 24px 16px 0;
+}
+
 .dailyHeader h2 {
   margin: 0;
   color: var(--admin-muted);
@@ -348,7 +359,23 @@
   line-height: normal;
 }
 
+.bannerClickHeader h2 {
+  margin: 0;
+  color: var(--admin-muted);
+  font-size: 17px;
+  font-weight: 700;
+  line-height: normal;
+}
+
 .dailyHeader p {
+  margin: 8px 0 0;
+  color: var(--admin-muted);
+  font-size: 14px;
+  font-weight: 400;
+  line-height: normal;
+}
+
+.bannerClickHeader p {
   margin: 8px 0 0;
   color: var(--admin-muted);
   font-size: 14px;
@@ -449,6 +476,65 @@
   line-height: normal;
 }
 
+.bannerClickTable {
+  width: calc(100% - 32px);
+  margin: 18px 16px 24px;
+  overflow: hidden;
+  border-radius: 5px;
+  color: var(--admin-muted);
+  font-size: 14px;
+  line-height: normal;
+}
+
+.bannerClickTableHeader,
+.bannerClickTableRow {
+  display: grid;
+  grid-template-columns: minmax(160px, 1fr) minmax(100px, 140px) minmax(100px, 140px);
+  align-items: center;
+  min-height: 46px;
+}
+
+.bannerClickTableHeader {
+  background: var(--admin-bg);
+  text-align: center;
+}
+
+.bannerClickTableRow {
+  border-bottom: 1px solid var(--admin-border);
+  background: var(--admin-surface);
+  color: var(--admin-text);
+  text-align: center;
+}
+
+.bannerClickTableHeader span,
+.bannerClickTableRow span,
+.bannerClickTableRow strong {
+  min-width: 0;
+  overflow: hidden;
+  padding: 0 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bannerClickTableRow span:first-child {
+  text-align: left;
+}
+
+.bannerClickTableRow strong {
+  font-weight: 800;
+}
+
+.emptyBannerClick {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 160px;
+  margin: 18px 16px 24px;
+  color: var(--admin-muted);
+  font-size: 14px;
+  text-align: center;
+}
+
 .dailyTableHeader,
 .dailyTableRow {
   display: grid;
@@ -491,6 +577,7 @@
   .distributionCard,
   .trendCard,
   .detailCard,
+  .bannerClickCard,
   .dailyDetailCard {
     min-height: 360px;
     height: auto;

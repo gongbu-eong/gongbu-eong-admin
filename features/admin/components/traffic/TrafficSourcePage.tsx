@@ -163,6 +163,33 @@ export async function TrafficSourcePage({ filters }: TrafficSourcePageProps) {
           </div>
         </AdminCard>
 
+        <AdminCard className={styles.bannerClickCard}>
+          <div className={styles.bannerClickHeader}>
+            <h2>배너별 클릭</h2>
+            <p>{data.periodValue} 기준</p>
+          </div>
+          {data.bannerClicks.length ? (
+            <div className={styles.bannerClickTable}>
+              <div className={styles.bannerClickTableHeader}>
+                <span>배너</span>
+                <span>클릭</span>
+                <span>고유 클릭</span>
+              </div>
+              {data.bannerClicks.map((banner) => (
+                <div className={styles.bannerClickTableRow} key={banner.key}>
+                  <span>{banner.label}</span>
+                  <strong>{formatCount(banner.clicks)}건</strong>
+                  <span>{formatCount(banner.uniqueClicks)}명</span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className={styles.emptyBannerClick}>
+              조회 기간에 기록된 배너 클릭이 없습니다.
+            </div>
+          )}
+        </AdminCard>
+
         <AdminCard className={styles.dailyDetailCard}>
           <div className={styles.dailyHeader}>
             <h2>날짜별 채널 상세</h2>
