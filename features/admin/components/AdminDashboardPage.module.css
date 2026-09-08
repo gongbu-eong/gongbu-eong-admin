@@ -29,7 +29,7 @@
 
 .funnelCard,
 .channelCard,
-.workCard,
+.screenClickCard,
 .bannerCard {
   height: 410px;
   overflow: hidden;
@@ -54,7 +54,7 @@
   .chartCard,
   .funnelCard,
   .channelCard,
-  .workCard,
+  .screenClickCard,
   .bannerCard {
     min-height: 360px;
     height: auto;

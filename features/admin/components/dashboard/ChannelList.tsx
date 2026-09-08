@@ -16,7 +16,7 @@ export function ChannelList({ items, total }: ChannelListProps) {
           <h2>유입 채널</h2>
           <p>오늘 유입 로그 기준 · 총 {total}건</p>
         </div>
-        <Link href="/traffic/logs">전체보기 &gt;</Link>
+        <Link href="/traffic/logs?from=dashboard">전체보기 &gt;</Link>
       </header>
       <div className={styles.list}>
         {items.map((item) => (

@@ -64,11 +64,12 @@ function deviceClass(device: "모바일" | "웹") {
 export async function TrafficLogsPage({ filters }: TrafficLogsPageProps) {
   const data = await getTrafficLogData(filters);
   const pages = createVisiblePages(data.page, data.totalPages);
+  const fromDashboard = filters?.from === "dashboard";
 
   return (
     <AdminLayout
-      activeNav="traffic"
-      activeSubNav="traffic-logs"
+      activeNav={fromDashboard ? "dashboard" : "traffic"}
+      activeSubNav={fromDashboard ? undefined : "traffic-logs"}
       title="유입 로그 전체보기"
       description="접속 경로, IP, 기기, 회원 정보를 최신순으로 확인해요."
     >
@@ -106,6 +107,9 @@ export async function TrafficLogsPage({ filters }: TrafficLogsPageProps) {
               />
             </label>
             <input type="hidden" name="page" value="1" />
+            {fromDashboard ? (
+              <input type="hidden" name="from" value="dashboard" />
+            ) : null}
             <button type="submit">검색</button>
           </form>
         </AdminCard>
@@ -119,7 +123,9 @@ export async function TrafficLogsPage({ filters }: TrafficLogsPageProps) {
                 {formatCount(data.pageSize)}건
               </p>
             </div>
-            <Link href="/traffic">유입 경로 분석으로 돌아가기</Link>
+            <Link href={fromDashboard ? "/" : "/traffic"}>
+              {fromDashboard ? "대시보드로 돌아가기" : "유입 경로 분석으로 돌아가기"}
+            </Link>
           </div>
 
           <div className={styles.tableWrap}>
@@ -182,14 +188,18 @@ export async function TrafficLogsPage({ filters }: TrafficLogsPageProps) {
           <nav className={styles.pagination} aria-label="유입 로그 페이지">
             <Link
               className={data.page <= 1 ? styles.disabledPage : ""}
-              href={createQuery(data, Math.max(1, data.page - 1))}
+              href={`${createQuery(data, Math.max(1, data.page - 1))}${
+                fromDashboard ? "&from=dashboard" : ""
+              }`}
             >
               &lt;
             </Link>
             {pages.map((page) => (
               <Link
                 className={page === data.page ? styles.activePage : ""}
-                href={createQuery(data, page)}
+                href={`${createQuery(data, page)}${
+                  fromDashboard ? "&from=dashboard" : ""
+                }`}
                 key={page}
               >
                 {page}
@@ -197,7 +207,9 @@ export async function TrafficLogsPage({ filters }: TrafficLogsPageProps) {
             ))}
             <Link
               className={data.page >= data.totalPages ? styles.disabledPage : ""}
-              href={createQuery(data, Math.min(data.totalPages, data.page + 1))}
+              href={`${createQuery(data, Math.min(data.totalPages, data.page + 1))}${
+                fromDashboard ? "&from=dashboard" : ""
+              }`}
             >
               &gt;
             </Link>

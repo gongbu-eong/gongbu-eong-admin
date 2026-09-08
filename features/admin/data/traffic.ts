@@ -65,6 +65,7 @@ export type TrafficLogQuery = {
   channel?: TrafficLogChannelFilter | string | null;
   keyword?: string | null;
   page?: string | number | null;
+  from?: string | null;
 };
 
 export type TrafficLogItem = {
@@ -98,6 +99,7 @@ export type BannerClickLogQuery = {
   endDate?: string | null;
   keyword?: string | null;
   page?: string | number | null;
+  from?: string | null;
 };
 
 export type BannerClickLogItem = {

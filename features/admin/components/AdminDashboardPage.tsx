@@ -5,7 +5,7 @@ import { ChannelList } from "@/features/admin/components/dashboard/ChannelList";
 import { FunnelList } from "@/features/admin/components/dashboard/FunnelList";
 import { LineChart } from "@/features/admin/components/dashboard/LineChart";
 import { MetricCard } from "@/features/admin/components/dashboard/MetricCard";
-import { WorkList } from "@/features/admin/components/dashboard/WorkList";
+import { ScreenClickList } from "@/features/admin/components/dashboard/ScreenClickList";
 import type { LinePoint } from "@/features/admin/data/dashboard";
 import { getDashboardData } from "@/features/admin/server/dashboard.repository";
 import styles from "./AdminDashboardPage.module.css";
@@ -45,9 +45,10 @@ export async function AdminDashboardPage() {
     bannerClicks,
     bannerClickTotal,
     channelTotal,
+    screenClicks,
+    screenClickTotal,
     signupTrend,
     visitorTrend,
-    workItems,
   } = await getDashboardData();
   const visitorScale = createChartScale([visitorTrend]);
   const diagnosisSignupScale = createChartScale([diagnosisTrend, signupTrend]);
@@ -110,11 +111,11 @@ export async function AdminDashboardPage() {
         <AdminCard className={styles.funnelCard}>
           <FunnelList items={funnelItems} />
         </AdminCard>
+        <AdminCard className={styles.screenClickCard}>
+          <ScreenClickList items={screenClicks} total={screenClickTotal} />
+        </AdminCard>
         <AdminCard className={styles.channelCard}>
           <ChannelList items={channels} total={channelTotal} />
-        </AdminCard>
-        <AdminCard className={styles.workCard}>
-          <WorkList items={workItems} />
         </AdminCard>
         <AdminCard className={styles.bannerCard}>
           <BannerClickList items={bannerClicks} total={bannerClickTotal} />

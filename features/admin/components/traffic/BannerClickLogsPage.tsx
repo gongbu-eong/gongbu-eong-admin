@@ -55,11 +55,12 @@ export async function BannerClickLogsPage({
 }: BannerClickLogsPageProps) {
   const data = await getBannerClickLogData(filters);
   const pages = createVisiblePages(data.page, data.totalPages);
+  const fromDashboard = filters?.from === "dashboard";
 
   return (
     <AdminLayout
-      activeNav="traffic"
-      activeSubNav="traffic-banner-clicks"
+      activeNav={fromDashboard ? "dashboard" : "traffic"}
+      activeSubNav={fromDashboard ? undefined : "traffic-banner-clicks"}
       title="배너 클릭 전체보기"
       description="배너별 클릭자와 클릭 위치를 최신순으로 확인해요."
     >
@@ -87,6 +88,9 @@ export async function BannerClickLogsPage({
               />
             </label>
             <input type="hidden" name="page" value="1" />
+            {fromDashboard ? (
+              <input type="hidden" name="from" value="dashboard" />
+            ) : null}
             <button type="submit">검색</button>
           </form>
         </AdminCard>
@@ -100,7 +104,9 @@ export async function BannerClickLogsPage({
                 {formatCount(data.pageSize)}건
               </p>
             </div>
-            <Link href="/">대시보드로 돌아가기</Link>
+            <Link href={fromDashboard ? "/" : "/traffic"}>
+              {fromDashboard ? "대시보드로 돌아가기" : "유입 경로 분석으로 돌아가기"}
+            </Link>
           </div>
 
           <div className={styles.tableWrap}>
@@ -175,14 +181,18 @@ export async function BannerClickLogsPage({
           <nav className={styles.pagination} aria-label="배너 클릭 로그 페이지">
             <Link
               className={data.page <= 1 ? styles.disabledPage : ""}
-              href={createQuery(data, Math.max(1, data.page - 1))}
+              href={`${createQuery(data, Math.max(1, data.page - 1))}${
+                fromDashboard ? "&from=dashboard" : ""
+              }`}
             >
               &lt;
             </Link>
             {pages.map((page) => (
               <Link
                 className={page === data.page ? styles.activePage : ""}
-                href={createQuery(data, page)}
+                href={`${createQuery(data, page)}${
+                  fromDashboard ? "&from=dashboard" : ""
+                }`}
                 key={page}
               >
                 {page}
@@ -190,7 +200,9 @@ export async function BannerClickLogsPage({
             ))}
             <Link
               className={data.page >= data.totalPages ? styles.disabledPage : ""}
-              href={createQuery(data, Math.min(data.totalPages, data.page + 1))}
+              href={`${createQuery(data, Math.min(data.totalPages, data.page + 1))}${
+                fromDashboard ? "&from=dashboard" : ""
+              }`}
             >
               &gt;
             </Link>

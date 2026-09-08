@@ -4,7 +4,7 @@ import {
   FunnelItem,
   LinePoint,
   MetricItem,
-  WorkItem,
+  ScreenClickItem,
 } from "@/features/admin/data/dashboard";
 import { query } from "@/features/admin/server/db";
 
@@ -18,7 +18,8 @@ type DashboardData = {
   channelTotal: string;
   bannerClicks: BannerClickItem[];
   bannerClickTotal: string;
-  workItems: WorkItem[];
+  screenClicks: ScreenClickItem[];
+  screenClickTotal: string;
 };
 
 type MetricsRow = {
@@ -49,16 +50,17 @@ type ChannelRow = {
   count: string;
 };
 
-type WorkRow = {
-  reports: string;
-  inquiries: string;
-};
-
 type BannerClickRow = {
   banner_key: string | null;
   banner_name: string | null;
   click_count: string;
   unique_count: string;
+};
+
+type ScreenClickRow = {
+  screen_key: string;
+  screen_name: string;
+  click_count: string;
 };
 
 const channelAssets: Record<string, Pick<ChannelItem, "icon" | "iconClass">> = {
@@ -70,8 +72,22 @@ const channelAssets: Record<string, Pick<ChannelItem, "icon" | "iconClass">> = {
 };
 
 const bannerLabels: Record<string, string> = {
-  job_detail_resume_coaching: "공고 상세 AI NCS 자소서 코칭 배너",
+  job_detail_resume_a: "자소서 배너 A",
+  job_detail_resume_b: "자소서 배너 B",
+  job_detail_strength_a: "강약점 배너 A",
+  job_detail_strength_b: "강약점 배너 B",
 };
+
+const dashboardScreenKeys = [
+  { key: "home", label: "홈" },
+  { key: "job_detail", label: "공고상세" },
+  { key: "diagnosis", label: "강약점" },
+  { key: "community", label: "커뮤니티" },
+  { key: "my", label: "마이페이지" },
+  { key: "calendar", label: "캘린더" },
+  { key: "login", label: "로그인" },
+  { key: "other", label: "기타" },
+];
 
 const visitorKeySql =
   "COALESCE(user_id::TEXT, anonymous_id::TEXT, ip_address::TEXT, id::TEXT)";
@@ -449,38 +465,77 @@ export async function getDashboardData(): Promise<DashboardData> {
   const maxChannelCount = Math.max(...sortedChannels.map(([, count]) => count), 1);
   const totalChannelCount = sortedChannels.reduce((sum, [, count]) => sum + count, 0);
 
-  const workResult = await query<WorkRow>(`
-    SELECT
-      (
-        SELECT COUNT(*)
-        FROM public.community_reports
-        WHERE status IN ('pending', 'reviewing')
-      ) AS reports,
-      (
-        SELECT COUNT(*)
-        FROM public.support_inquiries
-        WHERE status IN ('open', 'pending')
-      ) AS inquiries
-  `);
-  const workRow = workResult.rows[0];
   const bannerClickResult = await query<BannerClickRow>(`
     WITH bounds AS (
       SELECT
         date_trunc('day', NOW() AT TIME ZONE 'Asia/Seoul') AT TIME ZONE 'Asia/Seoul' AS today_start,
         (date_trunc('day', NOW() AT TIME ZONE 'Asia/Seoul') + INTERVAL '1 day') AT TIME ZONE 'Asia/Seoul' AS tomorrow_start
+    ),
+    banner_keys AS (
+      SELECT *
+      FROM (VALUES
+        ('job_detail_resume_a', '자소서 배너 A', 1),
+        ('job_detail_resume_b', '자소서 배너 B', 2),
+        ('job_detail_strength_a', '강약점 배너 A', 3),
+        ('job_detail_strength_b', '강약점 배너 B', 4)
+      ) AS keys(banner_key, banner_name, sort_order)
+    ),
+    counts AS (
+      SELECT
+        COALESCE(NULLIF(properties->>'banner_key', ''), 'unknown') AS banner_key,
+        COUNT(*) AS click_count,
+        COUNT(DISTINCT COALESCE(user_id::TEXT, anonymous_id::TEXT, id::TEXT)) AS unique_count
+      FROM public.product_events, bounds
+      WHERE event_type = 'banner_click'
+        AND created_at >= today_start
+        AND created_at < tomorrow_start
+      GROUP BY 1
     )
     SELECT
-      COALESCE(NULLIF(properties->>'banner_key', ''), 'unknown') AS banner_key,
-      NULLIF(properties->>'banner_name', '') AS banner_name,
-      COUNT(*) AS click_count,
-      COUNT(DISTINCT COALESCE(user_id::TEXT, anonymous_id::TEXT, id::TEXT)) AS unique_count
-    FROM public.product_events, bounds
-    WHERE event_type = 'banner_click'
-      AND created_at >= today_start
-      AND created_at < tomorrow_start
-    GROUP BY 1, 2
-    ORDER BY COUNT(*) DESC
-    LIMIT 5
+      banner_keys.banner_key,
+      banner_keys.banner_name,
+      COALESCE(counts.click_count, 0)::TEXT AS click_count,
+      COALESCE(counts.unique_count, 0)::TEXT AS unique_count
+    FROM banner_keys
+    LEFT JOIN counts ON counts.banner_key = banner_keys.banner_key
+    ORDER BY banner_keys.sort_order
+  `);
+  const screenClickResult = await query<ScreenClickRow>(`
+    WITH bounds AS (
+      SELECT
+        date_trunc('day', NOW() AT TIME ZONE 'Asia/Seoul') AT TIME ZONE 'Asia/Seoul' AS today_start,
+        (date_trunc('day', NOW() AT TIME ZONE 'Asia/Seoul') + INTERVAL '1 day') AT TIME ZONE 'Asia/Seoul' AS tomorrow_start
+    ),
+    screen_keys AS (
+      SELECT *
+      FROM (VALUES
+        ('home', '홈', 1),
+        ('job_detail', '공고상세', 2),
+        ('diagnosis', '강약점', 3),
+        ('community', '커뮤니티', 4),
+        ('my', '마이페이지', 5),
+        ('calendar', '캘린더', 6),
+        ('login', '로그인', 7),
+        ('other', '기타', 8)
+      ) AS keys(screen_key, screen_name, sort_order)
+    ),
+    counts AS (
+      SELECT
+        COALESCE(NULLIF(properties->>'screen_key', ''), 'other') AS screen_key,
+        COUNT(*) AS click_count
+      FROM public.product_events, bounds
+      WHERE event_type = 'screen_click'
+        AND created_at >= today_start
+        AND created_at < tomorrow_start
+      GROUP BY 1
+    )
+    SELECT
+      screen_keys.screen_key,
+      screen_keys.screen_name,
+      COALESCE(counts.click_count, 0)::TEXT AS click_count
+    FROM screen_keys
+    LEFT JOIN counts ON counts.screen_key = screen_keys.screen_key
+    ORDER BY screen_keys.sort_order
   `);
   const bannerClickRows = bannerClickResult.rows;
   const maxBannerClickCount = Math.max(
@@ -488,6 +543,15 @@ export async function getDashboardData(): Promise<DashboardData> {
     1,
   );
   const totalBannerClickCount = bannerClickRows.reduce(
+    (sum, row) => sum + numberValue(row.click_count),
+    0,
+  );
+  const screenClickRows = screenClickResult.rows;
+  const maxScreenClickCount = Math.max(
+    ...screenClickRows.map((row) => numberValue(row.click_count)),
+    1,
+  );
+  const totalScreenClickCount = screenClickRows.reduce(
     (sum, row) => sum + numberValue(row.click_count),
     0,
   );
@@ -548,20 +612,17 @@ export async function getDashboardData(): Promise<DashboardData> {
       fill: fillPercent(numberValue(row.click_count), maxBannerClickCount),
     })),
     bannerClickTotal: formatCount(totalBannerClickCount),
-    workItems: [
-      {
-        title: "신고접수",
-        subtitle: "커뮤니티 글·댓글",
-        value: formatCount(numberValue(workRow?.reports)),
-        valueTone: "danger",
-        icon: "/admin-assets/task-report.png",
-      },
-      {
-        title: "답변 대기 문의",
-        subtitle: "고객 문의",
-        value: formatCount(numberValue(workRow?.inquiries)),
-        icon: "/admin-assets/task-inquiry.png",
-      },
-    ],
+    screenClicks: dashboardScreenKeys.map((screen) => {
+      const row = screenClickRows.find((item) => item.screen_key === screen.key);
+      const count = numberValue(row?.click_count);
+
+      return {
+        key: screen.key,
+        label: row?.screen_name || screen.label,
+        count: `${formatCount(count)}건`,
+        fill: fillPercent(count, maxScreenClickCount),
+      };
+    }),
+    screenClickTotal: formatCount(totalScreenClickCount),
   };
 }

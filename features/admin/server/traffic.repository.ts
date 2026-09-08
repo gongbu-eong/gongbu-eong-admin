@@ -224,7 +224,10 @@ const campaignTrafficEventsSql = `
 `;
 
 const bannerLabels: Record<string, string> = {
-  job_detail_resume_coaching: "공고 상세 AI NCS 자소서 코칭 배너",
+  job_detail_resume_a: "자소서 배너 A",
+  job_detail_resume_b: "자소서 배너 B",
+  job_detail_strength_a: "강약점 배너 A",
+  job_detail_strength_b: "강약점 배너 B",
 };
 
 function numberValue(value: string | number | null | undefined) {
@@ -535,18 +538,34 @@ export async function getTrafficData(args?: TrafficQuery): Promise<TrafficData> 
   const bannerClickResult = await query<BannerClickRow>(
     `
       ${periodBoundsSql}
+      , banner_keys AS (
+        SELECT *
+        FROM (VALUES
+          ('job_detail_resume_a', '자소서 배너 A', 1),
+          ('job_detail_resume_b', '자소서 배너 B', 2),
+          ('job_detail_strength_a', '강약점 배너 A', 3),
+          ('job_detail_strength_b', '강약점 배너 B', 4)
+        ) AS keys(banner_key, banner_name, sort_order)
+      ),
+      counts AS (
+        SELECT
+          COALESCE(NULLIF(properties->>'banner_key', ''), 'unknown') AS banner_key,
+          COUNT(*) AS clicks,
+          COUNT(DISTINCT COALESCE(user_id::TEXT, anonymous_id::TEXT, id::TEXT)) AS unique_clicks
+        FROM public.product_events, ranges
+        WHERE event_type = 'banner_click'
+          AND created_at >= current_start
+          AND created_at < current_end
+        GROUP BY 1
+      )
       SELECT
-        COALESCE(NULLIF(properties->>'banner_key', ''), 'unknown') AS banner_key,
-        NULLIF(properties->>'banner_name', '') AS banner_name,
-        COUNT(*) AS clicks,
-        COUNT(DISTINCT COALESCE(user_id::TEXT, anonymous_id::TEXT, id::TEXT)) AS unique_clicks
-      FROM public.product_events, ranges
-      WHERE event_type = 'banner_click'
-        AND created_at >= current_start
-        AND created_at < current_end
-      GROUP BY 1, 2
-      ORDER BY COUNT(*) DESC
-      LIMIT 20
+        banner_keys.banner_key,
+        banner_keys.banner_name,
+        COALESCE(counts.clicks, 0)::TEXT AS clicks,
+        COALESCE(counts.unique_clicks, 0)::TEXT AS unique_clicks
+      FROM banner_keys
+      LEFT JOIN counts ON counts.banner_key = banner_keys.banner_key
+      ORDER BY banner_keys.sort_order
     `,
     params,
   );

@@ -9,6 +9,7 @@ type TrafficLogsRouteProps = {
     channel?: string;
     keyword?: string;
     page?: string;
+    from?: string;
   }>;
 };
 

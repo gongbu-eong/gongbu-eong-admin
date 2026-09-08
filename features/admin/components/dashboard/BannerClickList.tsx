@@ -15,7 +15,7 @@ export function BannerClickList({ items, total }: BannerClickListProps) {
           <h2>배너 클릭</h2>
           <p>오늘 클릭 기준 · 총 {total}건</p>
         </div>
-        <Link href="/traffic/banner-clicks">전체보기 &gt;</Link>
+        <Link href="/traffic/banner-clicks?from=dashboard">전체보기 &gt;</Link>
       </header>
 
       {items.length ? (

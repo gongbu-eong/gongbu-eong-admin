@@ -8,6 +8,7 @@ type BannerClickLogsRouteProps = {
     endDate?: string;
     keyword?: string;
     page?: string;
+    from?: string;
   }>;
 };
 

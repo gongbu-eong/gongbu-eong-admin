@@ -50,6 +50,13 @@ export type BannerClickItem = {
   fill: number;
 };
 
+export type ScreenClickItem = {
+  key: string;
+  label: string;
+  count: string;
+  fill: number;
+};
+
 export type WorkItem = {
   title: string;
   subtitle: string;
