@@ -105,6 +105,10 @@
   color: var(--admin-muted);
   pointer-events: none;
   text-align: left;
+  transition:
+    left 120ms ease,
+    top 120ms ease,
+    opacity 120ms ease;
 }
 
 .tooltipDate {

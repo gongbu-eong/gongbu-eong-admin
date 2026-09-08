@@ -4,22 +4,24 @@ import {
   FunnelItem,
   LinePoint,
   MetricItem,
-  ScreenClickItem,
+  ScreenInflowItem,
 } from "@/features/admin/data/dashboard";
 import { query } from "@/features/admin/server/db";
 
 type DashboardData = {
   metrics: MetricItem[];
   visitorTrend: LinePoint[];
-  diagnosisTrend: LinePoint[];
+  coachingTrend: LinePoint[];
   signupTrend: LinePoint[];
   funnelItems: FunnelItem[];
   channels: ChannelItem[];
   channelTotal: string;
   bannerClicks: BannerClickItem[];
   bannerClickTotal: string;
-  screenClicks: ScreenClickItem[];
-  screenClickTotal: string;
+  screenInflows: ScreenInflowItem[];
+  screenInflowTotal: string;
+  selectedChannelKey: string;
+  selectedChannelLabel: string;
 };
 
 type MetricsRow = {
@@ -27,10 +29,10 @@ type MetricsRow = {
   yesterday_visitors: string;
   today_signups: string;
   yesterday_signups: string;
-  today_diagnosis_runs: string;
-  yesterday_diagnosis_runs: string;
-  today_diagnosis_completed: string;
-  yesterday_diagnosis_completed: string;
+  today_coaching_requests: string;
+  yesterday_coaching_requests: string;
+  today_coaching_completed: string;
+  yesterday_coaching_completed: string;
 };
 
 type TrendRow = {
@@ -40,8 +42,8 @@ type TrendRow = {
 
 type FunnelRow = {
   visitors: string;
-  diagnosis_started: string;
-  diagnosis_completed: string;
+  coaching_started: string;
+  coaching_completed: string;
   result_views: string;
 };
 
@@ -57,10 +59,10 @@ type BannerClickRow = {
   unique_count: string;
 };
 
-type ScreenClickRow = {
+type ScreenInflowRow = {
+  channel_source: string | null;
   screen_key: string;
-  screen_name: string;
-  click_count: string;
+  inflow_count: string;
 };
 
 const channelAssets: Record<string, Pick<ChannelItem, "icon" | "iconClass">> = {
@@ -70,6 +72,15 @@ const channelAssets: Record<string, Pick<ChannelItem, "icon" | "iconClass">> = {
   "검색": { icon: "/admin-assets/channel-search.png", iconClass: "search" },
   "직접유입": { icon: "/admin-assets/channel-direct.png", iconClass: "direct" },
 };
+
+const dashboardChannelOptions = [
+  { key: "all", label: "전체" },
+  { key: "instagram", label: "인스타그램" },
+  { key: "blog", label: "블로그" },
+  { key: "threads", label: "스레드" },
+  { key: "search", label: "검색" },
+  { key: "direct", label: "직접유입" },
+];
 
 const bannerLabels: Record<string, string> = {
   job_detail_resume_a: "자소서 배너 A",
@@ -113,46 +124,46 @@ const trafficEventsSql = `
   FROM public.access_logs
 `;
 
-const diagnosisStartEventsSql = `
+const coachingStartEventsSql = `
+  SELECT id::TEXT AS request_key, COALESCE(user_id::TEXT, anonymous_id::TEXT, id::TEXT) AS visitor_key, created_at AS event_at
+  FROM public.resume_coaching_requests
+  UNION
+  SELECT COALESCE(
+    NULLIF(properties->>'request_id', ''),
+    NULLIF(properties->>'coaching_request_id', ''),
+    id::TEXT
+  ) AS request_key, COALESCE(user_id::TEXT, anonymous_id::TEXT, id::TEXT) AS visitor_key, created_at AS event_at
+  FROM public.product_events
+  WHERE event_type IN ('coaching_start', 'resume_coaching_start')
+`;
+
+const coachingCompleteEventsSql = `
+  SELECT results.id::TEXT AS result_key, results.created_at AS event_at
+  FROM public.resume_coaching_results results
+  UNION
+  SELECT COALESCE(
+    NULLIF(properties->>'result_id', ''),
+    NULLIF(properties->>'coaching_result_id', ''),
+    NULLIF(properties->>'request_id', ''),
+    id::TEXT
+  ) AS result_key, created_at AS event_at
+  FROM public.product_events
+  WHERE event_type IN ('coaching_complete', 'resume_coaching_complete')
+`;
+
+const coachingResultViewEventsSql = `
   SELECT ${visitorKeySql} AS visitor_key, created_at AS event_at
   FROM public.access_logs
   WHERE event_name = 'page_view'
     AND (
-      path LIKE '/ai-tools/diagnosis%'
-      OR path LIKE '/events/diagnosis%'
-    )
-    AND path NOT LIKE '%result%'
-  UNION
-  SELECT ${visitorKeySql} AS visitor_key, created_at AS event_at
-  FROM public.diagnosis_runs
-  UNION
-  SELECT COALESCE(user_id::TEXT, anonymous_id::TEXT, id::TEXT) AS visitor_key, created_at AS event_at
-  FROM public.product_events
-  WHERE event_type = 'diagnosis_start'
-`;
-
-const diagnosisCompleteEventsSql = `
-  SELECT id::TEXT AS result_key, created_at AS event_at
-  FROM public.diagnosis_results
-  UNION
-  SELECT COALESCE(diagnosis_result_id::TEXT, diagnosis_run_id::TEXT, id::TEXT) AS result_key, created_at AS event_at
-  FROM public.product_events
-  WHERE event_type = 'diagnosis_complete'
-`;
-
-const diagnosisResultViewEventsSql = `
-  SELECT ${visitorKeySql} AS visitor_key, created_at AS event_at
-  FROM public.access_logs
-  WHERE event_name = 'page_view'
-    AND (
-      path LIKE '%/ai-tools/diagnosis/result%'
-      OR path LIKE '%/events/diagnosis/result%'
-      OR path LIKE '%diagnosis%result%'
+      path LIKE '%/ai-tools/coaching/result%'
+      OR path LIKE '%/my/coaching/%'
+      OR path LIKE '%coaching%result%'
     )
   UNION
   SELECT COALESCE(user_id::TEXT, anonymous_id::TEXT, id::TEXT) AS visitor_key, created_at AS event_at
   FROM public.product_events
-  WHERE event_type IN ('diagnosis_result_view', 'diagnosis_result_open', 'diagnosis_result_check')
+  WHERE event_type IN ('coaching_result_view', 'coaching_result_open', 'resume_coaching_result_view')
 `;
 
 function numberValue(value: string | number | null | undefined) {
@@ -246,6 +257,12 @@ function mapChannelLabel(source: string | null) {
   return "직접유입";
 }
 
+function normalizeDashboardChannel(value: string | null | undefined) {
+  const key = (value || "all").trim().toLowerCase();
+
+  return dashboardChannelOptions.some((item) => item.key === key) ? key : "all";
+}
+
 function mapBannerLabel(key: string | null, name: string | null) {
   const trimmedName = name?.trim();
   if (trimmedName) return trimmedName;
@@ -256,7 +273,16 @@ function mapBannerLabel(key: string | null, name: string | null) {
   return bannerLabels[trimmedKey] || trimmedKey;
 }
 
-export async function getDashboardData(): Promise<DashboardData> {
+export async function getDashboardData({
+  selectedChannel,
+}: {
+  selectedChannel?: string | null;
+} = {}): Promise<DashboardData> {
+  const selectedChannelKey = normalizeDashboardChannel(selectedChannel);
+  const selectedChannelLabel =
+    dashboardChannelOptions.find((item) => item.key === selectedChannelKey)
+      ?.label || "전체";
+
   const metricsResult = await query<MetricsRow>(`
     WITH bounds AS (
       SELECT date_trunc('day', NOW() AT TIME ZONE 'Asia/Seoul') AS today_kst
@@ -294,25 +320,25 @@ export async function getDashboardData(): Promise<DashboardData> {
           AND COALESCE(signup_completed_at, created_at) < today_start
       ) AS yesterday_signups,
       (
-        SELECT COUNT(DISTINCT visitor_key)
-        FROM (${diagnosisStartEventsSql}) starts, ranges
+        SELECT COUNT(DISTINCT request_key)
+        FROM (${coachingStartEventsSql}) starts, ranges
         WHERE event_at >= today_start AND event_at < tomorrow_start
-      ) AS today_diagnosis_runs,
+      ) AS today_coaching_requests,
       (
-        SELECT COUNT(DISTINCT visitor_key)
-        FROM (${diagnosisStartEventsSql}) starts, ranges
+        SELECT COUNT(DISTINCT request_key)
+        FROM (${coachingStartEventsSql}) starts, ranges
         WHERE event_at >= yesterday_start AND event_at < today_start
-      ) AS yesterday_diagnosis_runs,
+      ) AS yesterday_coaching_requests,
       (
         SELECT COUNT(DISTINCT result_key)
-        FROM (${diagnosisCompleteEventsSql}) completes, ranges
+        FROM (${coachingCompleteEventsSql}) completes, ranges
         WHERE event_at >= today_start AND event_at < tomorrow_start
-      ) AS today_diagnosis_completed,
+      ) AS today_coaching_completed,
       (
         SELECT COUNT(DISTINCT result_key)
-        FROM (${diagnosisCompleteEventsSql}) completes, ranges
+        FROM (${coachingCompleteEventsSql}) completes, ranges
         WHERE event_at >= yesterday_start AND event_at < today_start
-      ) AS yesterday_diagnosis_completed
+      ) AS yesterday_coaching_completed
     FROM ranges
   `);
 
@@ -321,30 +347,34 @@ export async function getDashboardData(): Promise<DashboardData> {
   const yesterdayVisitors = numberValue(metricsRow?.yesterday_visitors);
   const todaySignups = numberValue(metricsRow?.today_signups);
   const yesterdaySignups = numberValue(metricsRow?.yesterday_signups);
-  const todayDiagnosisRuns = numberValue(metricsRow?.today_diagnosis_runs);
-  const yesterdayDiagnosisRuns = numberValue(metricsRow?.yesterday_diagnosis_runs);
-  const todayDiagnosisCompleted = numberValue(
-    metricsRow?.today_diagnosis_completed,
+  const todayCoachingRequests = numberValue(metricsRow?.today_coaching_requests);
+  const yesterdayCoachingRequests = numberValue(
+    metricsRow?.yesterday_coaching_requests,
   );
-  const yesterdayDiagnosisCompleted = numberValue(
-    metricsRow?.yesterday_diagnosis_completed,
+  const todayCoachingCompleted = numberValue(
+    metricsRow?.today_coaching_completed,
+  );
+  const yesterdayCoachingCompleted = numberValue(
+    metricsRow?.yesterday_coaching_completed,
   );
   const todayCompletionRate =
-    todayDiagnosisRuns > 0 ? (todayDiagnosisCompleted / todayDiagnosisRuns) * 100 : 0;
+    todayCoachingRequests > 0
+      ? (todayCoachingCompleted / todayCoachingRequests) * 100
+      : 0;
   const yesterdayCompletionRate =
-    yesterdayDiagnosisRuns > 0
-      ? (yesterdayDiagnosisCompleted / yesterdayDiagnosisRuns) * 100
+    yesterdayCoachingRequests > 0
+      ? (yesterdayCoachingCompleted / yesterdayCoachingRequests) * 100
       : 0;
 
   const visitorDelta = createDelta(todayVisitors, yesterdayVisitors);
   const signupDelta = createDelta(todaySignups, yesterdaySignups);
-  const diagnosisDelta = createDelta(
-    todayDiagnosisCompleted,
-    yesterdayDiagnosisCompleted,
+  const coachingDelta = createDelta(
+    todayCoachingRequests,
+    yesterdayCoachingRequests,
   );
   const completionDelta = createDelta(todayCompletionRate, yesterdayCompletionRate);
 
-  const [visitorTrendResult, diagnosisTrendResult, signupTrendResult] =
+  const [visitorTrendResult, coachingTrendResult, signupTrendResult] =
     await Promise.all([
       query<TrendRow>(`
         WITH days AS (
@@ -372,11 +402,11 @@ export async function getDashboardData(): Promise<DashboardData> {
             INTERVAL '1 day'
           ) AS day_kst
         )
-        SELECT to_char(days.day_kst, 'MM/DD') AS label, COUNT(DISTINCT completes.result_key) AS value
+        SELECT to_char(days.day_kst, 'MM/DD') AS label, COUNT(DISTINCT starts.request_key) AS value
         FROM days
-        LEFT JOIN (${diagnosisCompleteEventsSql}) completes
-          ON completes.event_at >= days.day_kst AT TIME ZONE 'Asia/Seoul'
-         AND completes.event_at < (days.day_kst + INTERVAL '1 day') AT TIME ZONE 'Asia/Seoul'
+        LEFT JOIN (${coachingStartEventsSql}) starts
+          ON starts.event_at >= days.day_kst AT TIME ZONE 'Asia/Seoul'
+         AND starts.event_at < (days.day_kst + INTERVAL '1 day') AT TIME ZONE 'Asia/Seoul'
         GROUP BY days.day_kst
         ORDER BY days.day_kst
       `),
@@ -412,18 +442,18 @@ export async function getDashboardData(): Promise<DashboardData> {
         WHERE event_at >= today_start AND event_at < tomorrow_start
       ) AS visitors,
       (
-        SELECT COUNT(DISTINCT visitor_key)
-        FROM (${diagnosisStartEventsSql}) starts, bounds
+        SELECT COUNT(DISTINCT request_key)
+        FROM (${coachingStartEventsSql}) starts, bounds
         WHERE event_at >= today_start AND event_at < tomorrow_start
-      ) AS diagnosis_started,
+      ) AS coaching_started,
       (
         SELECT COUNT(DISTINCT result_key)
-        FROM (${diagnosisCompleteEventsSql}) completes, bounds
+        FROM (${coachingCompleteEventsSql}) completes, bounds
         WHERE event_at >= today_start AND event_at < tomorrow_start
-      ) AS diagnosis_completed,
+      ) AS coaching_completed,
       (
         SELECT COUNT(DISTINCT visitor_key)
-        FROM (${diagnosisResultViewEventsSql}) result_views, bounds
+        FROM (${coachingResultViewEventsSql}) result_views, bounds
         WHERE event_at >= today_start AND event_at < tomorrow_start
       ) AS result_views,
       0 AS unused
@@ -431,8 +461,8 @@ export async function getDashboardData(): Promise<DashboardData> {
 
   const funnelRow = funnelResult.rows[0];
   const visitors = numberValue(funnelRow?.visitors);
-  const rawStarted = numberValue(funnelRow?.diagnosis_started);
-  const rawCompleted = numberValue(funnelRow?.diagnosis_completed);
+  const rawStarted = numberValue(funnelRow?.coaching_started);
+  const rawCompleted = numberValue(funnelRow?.coaching_completed);
   const rawResultViews = numberValue(funnelRow?.result_views);
   const started = Math.max(rawStarted, rawCompleted, rawResultViews);
   const completed = Math.min(started, Math.max(rawCompleted, rawResultViews));
@@ -459,11 +489,18 @@ export async function getDashboardData(): Promise<DashboardData> {
     groupedChannels.set(label, (groupedChannels.get(label) || 0) + numberValue(row.count));
   }
 
-  const sortedChannels = Array.from(groupedChannels.entries())
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 5);
-  const maxChannelCount = Math.max(...sortedChannels.map(([, count]) => count), 1);
-  const totalChannelCount = sortedChannels.reduce((sum, [, count]) => sum + count, 0);
+  const sortedChannels = dashboardChannelOptions
+    .slice(1)
+    .map((item) => [item.label, groupedChannels.get(item.label) || 0] as const)
+    .sort((a, b) => b[1] - a[1]);
+  const maxChannelCount = Math.max(
+    ...sortedChannels.map(([, count]) => count),
+    1,
+  );
+  const totalChannelCount = sortedChannels.reduce(
+    (sum, [, count]) => sum + count,
+    0,
+  );
 
   const bannerClickResult = await query<BannerClickRow>(`
     WITH bounds AS (
@@ -500,42 +537,28 @@ export async function getDashboardData(): Promise<DashboardData> {
     LEFT JOIN counts ON counts.banner_key = banner_keys.banner_key
     ORDER BY banner_keys.sort_order
   `);
-  const screenClickResult = await query<ScreenClickRow>(`
+  const screenInflowResult = await query<ScreenInflowRow>(`
     WITH bounds AS (
       SELECT
         date_trunc('day', NOW() AT TIME ZONE 'Asia/Seoul') AT TIME ZONE 'Asia/Seoul' AS today_start,
         (date_trunc('day', NOW() AT TIME ZONE 'Asia/Seoul') + INTERVAL '1 day') AT TIME ZONE 'Asia/Seoul' AS tomorrow_start
-    ),
-    screen_keys AS (
-      SELECT *
-      FROM (VALUES
-        ('home', '홈', 1),
-        ('job_detail', '공고상세', 2),
-        ('diagnosis', '강약점', 3),
-        ('community', '커뮤니티', 4),
-        ('my', '마이페이지', 5),
-        ('calendar', '캘린더', 6),
-        ('login', '로그인', 7),
-        ('other', '기타', 8)
-      ) AS keys(screen_key, screen_name, sort_order)
-    ),
-    counts AS (
-      SELECT
-        COALESCE(NULLIF(properties->>'screen_key', ''), 'other') AS screen_key,
-        COUNT(*) AS click_count
-      FROM public.product_events, bounds
-      WHERE event_type = 'screen_click'
-        AND created_at >= today_start
-        AND created_at < tomorrow_start
-      GROUP BY 1
     )
     SELECT
-      screen_keys.screen_key,
-      screen_keys.screen_name,
-      COALESCE(counts.click_count, 0)::TEXT AS click_count
-    FROM screen_keys
-    LEFT JOIN counts ON counts.screen_key = screen_keys.screen_key
-    ORDER BY screen_keys.sort_order
+      source_value AS channel_source,
+      CASE
+        WHEN landing_path = '/' OR landing_path LIKE '/?%' THEN 'home'
+        WHEN landing_path ~ '^/jobs/[^/?#]+' OR landing_path LIKE '%/jobs/%' THEN 'job_detail'
+        WHEN landing_path LIKE '/ai-tools/diagnosis%' OR landing_path LIKE '/events/diagnosis%' OR landing_path LIKE '%/ai-tools/diagnosis%' OR landing_path LIKE '%/events/diagnosis%' THEN 'diagnosis'
+        WHEN landing_path LIKE '/community%' OR landing_path LIKE '%/community%' THEN 'community'
+        WHEN landing_path LIKE '/my%' OR landing_path LIKE '%/my%' THEN 'my'
+        WHEN landing_path LIKE '/calendar%' OR landing_path LIKE '%/calendar%' THEN 'calendar'
+        WHEN landing_path LIKE '/login%' OR landing_path LIKE '%/login%' OR landing_path LIKE '/auth%' OR landing_path LIKE '%/auth%' THEN 'login'
+        ELSE 'other'
+      END AS screen_key,
+      COUNT(*) AS inflow_count
+    FROM (${trafficEventsSql}) traffic_events, bounds
+    WHERE event_at >= today_start AND event_at < tomorrow_start
+    GROUP BY source_value, screen_key
   `);
   const bannerClickRows = bannerClickResult.rows;
   const maxBannerClickCount = Math.max(
@@ -546,13 +569,28 @@ export async function getDashboardData(): Promise<DashboardData> {
     (sum, row) => sum + numberValue(row.click_count),
     0,
   );
-  const screenClickRows = screenClickResult.rows;
-  const maxScreenClickCount = Math.max(
-    ...screenClickRows.map((row) => numberValue(row.click_count)),
+  const groupedScreenInflows = new Map<string, number>();
+  for (const row of screenInflowResult.rows) {
+    const channelLabel = mapChannelLabel(row.channel_source);
+    if (
+      selectedChannelKey !== "all" &&
+      channelLabel !== selectedChannelLabel
+    ) {
+      continue;
+    }
+
+    groupedScreenInflows.set(
+      row.screen_key,
+      (groupedScreenInflows.get(row.screen_key) || 0) +
+        numberValue(row.inflow_count),
+    );
+  }
+  const maxScreenInflowCount = Math.max(
+    ...dashboardScreenKeys.map((screen) => groupedScreenInflows.get(screen.key) || 0),
     1,
   );
-  const totalScreenClickCount = screenClickRows.reduce(
-    (sum, row) => sum + numberValue(row.click_count),
+  const totalScreenInflowCount = dashboardScreenKeys.reduce(
+    (sum, screen) => sum + (groupedScreenInflows.get(screen.key) || 0),
     0,
   );
 
@@ -572,37 +610,58 @@ export async function getDashboardData(): Promise<DashboardData> {
         trend: signupDelta.trend,
       },
       {
-        label: "진단 수행",
-        value: formatCount(todayDiagnosisCompleted),
-        delta: diagnosisDelta.text,
-        trend: diagnosisDelta.trend,
+        label: "AI 자소서 코칭",
+        value: formatCount(todayCoachingRequests),
+        delta: coachingDelta.text,
+        trend: coachingDelta.trend,
       },
       {
-        label: "진단 완료율",
+        label: "코칭 완료율",
         value: formatPercent(todayCompletionRate),
         delta: completionDelta.text,
         trend: completionDelta.trend,
       },
     ],
     visitorTrend: toLinePoints(visitorTrendResult.rows),
-    diagnosisTrend: toLinePoints(diagnosisTrendResult.rows),
+    coachingTrend: toLinePoints(coachingTrendResult.rows),
     signupTrend: toLinePoints(signupTrendResult.rows),
     funnelItems: [
       createFunnel(1, "방문", visitors, null, base),
-      createFunnel(2, "진단 시작", started, visitors, base),
-      createFunnel(3, "진단 완료", completed, started, base),
+      createFunnel(2, "코칭 시작", started, visitors, base),
+      createFunnel(3, "코칭 완료", completed, started, base),
       createFunnel(4, "결과 확인", resultViews, completed, base),
     ],
-    channels: sortedChannels.map(([label, count]) => ({
-      label,
-      value: formatPercent(
-        totalChannelCount > 0 ? (count / totalChannelCount) * 100 : 0,
-      ),
-      count: `(${formatCount(count)}건)`,
-      fill: fillPercent(count, maxChannelCount),
-      icon: channelAssets[label]?.icon || channelAssets["직접유입"].icon,
-      iconClass: channelAssets[label]?.iconClass || channelAssets["직접유입"].iconClass,
-    })),
+    channels: [
+      {
+        key: "all",
+        label: "전체",
+        value: "100%",
+        count: `(${formatCount(totalChannelCount)}건)`,
+        fill: 100,
+        emoji: "🌐",
+        href: "/",
+      },
+      ...sortedChannels.map(([label, count]) => {
+        const optionKey =
+          dashboardChannelOptions.find((item) => item.label === label)?.key ||
+          "direct";
+
+        return {
+          key: optionKey,
+          label,
+          value: formatPercent(
+            totalChannelCount > 0 ? (count / totalChannelCount) * 100 : 0,
+          ),
+          count: `(${formatCount(count)}건)`,
+          fill: fillPercent(count, maxChannelCount),
+          icon: channelAssets[label]?.icon || channelAssets["직접유입"].icon,
+          iconClass:
+            channelAssets[label]?.iconClass ||
+            channelAssets["직접유입"].iconClass,
+          href: optionKey === "all" ? "/" : `/?channel=${optionKey}`,
+        };
+      }),
+    ],
     channelTotal: formatCount(totalChannelCount),
     bannerClicks: bannerClickRows.map((row) => ({
       key: row.banner_key || "unknown",
@@ -612,17 +671,18 @@ export async function getDashboardData(): Promise<DashboardData> {
       fill: fillPercent(numberValue(row.click_count), maxBannerClickCount),
     })),
     bannerClickTotal: formatCount(totalBannerClickCount),
-    screenClicks: dashboardScreenKeys.map((screen) => {
-      const row = screenClickRows.find((item) => item.screen_key === screen.key);
-      const count = numberValue(row?.click_count);
+    screenInflows: dashboardScreenKeys.map((screen) => {
+      const count = groupedScreenInflows.get(screen.key) || 0;
 
       return {
         key: screen.key,
-        label: row?.screen_name || screen.label,
+        label: screen.label,
         count: `${formatCount(count)}건`,
-        fill: fillPercent(count, maxScreenClickCount),
+        fill: fillPercent(count, maxScreenInflowCount),
       };
     }),
-    screenClickTotal: formatCount(totalScreenClickCount),
+    screenInflowTotal: formatCount(totalScreenInflowCount),
+    selectedChannelKey,
+    selectedChannelLabel,
   };
 }

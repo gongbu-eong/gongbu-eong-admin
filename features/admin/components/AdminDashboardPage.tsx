@@ -36,22 +36,30 @@ function getNiceStep(value: number) {
   return niceNormalized * magnitude;
 }
 
-export async function AdminDashboardPage() {
+type AdminDashboardPageProps = {
+  selectedChannel?: string | null;
+};
+
+export async function AdminDashboardPage({
+  selectedChannel,
+}: AdminDashboardPageProps = {}) {
   const {
     channels,
-    diagnosisTrend,
+    coachingTrend,
     funnelItems,
     metrics,
     bannerClicks,
     bannerClickTotal,
     channelTotal,
-    screenClicks,
-    screenClickTotal,
+    screenInflows,
+    screenInflowTotal,
+    selectedChannelKey,
+    selectedChannelLabel,
     signupTrend,
     visitorTrend,
-  } = await getDashboardData();
+  } = await getDashboardData({ selectedChannel });
   const visitorScale = createChartScale([visitorTrend]);
-  const diagnosisSignupScale = createChartScale([diagnosisTrend, signupTrend]);
+  const coachingSignupScale = createChartScale([coachingTrend, signupTrend]);
 
   return (
     <AdminLayout
@@ -83,18 +91,18 @@ export async function AdminDashboardPage() {
         </AdminCard>
         <AdminCard className={styles.chartCard}>
           <LineChart
-            title="진단 수행 · 신규 가입"
+            title="AI 자소서 코칭 · 신규 가입"
             subtitle="최근 7일"
-            yLabels={diagnosisSignupScale.yLabels}
+            yLabels={coachingSignupScale.yLabels}
             legends={[
-              { label: "진단 수행", color: "#20bf7a" },
+              { label: "AI 자소서 코칭", color: "#20bf7a" },
               { label: "신규 가입", color: "#ffb000" },
             ]}
             series={[
               {
-                label: "진단 수행",
+                label: "AI 자소서 코칭",
                 color: "#20bf7a",
-                data: diagnosisTrend,
+                data: coachingTrend,
               },
               {
                 label: "신규 가입",
@@ -102,7 +110,7 @@ export async function AdminDashboardPage() {
                 data: signupTrend,
               },
             ]}
-            maxValue={diagnosisSignupScale.maxValue}
+            maxValue={coachingSignupScale.maxValue}
           />
         </AdminCard>
       </section>
@@ -111,14 +119,22 @@ export async function AdminDashboardPage() {
         <AdminCard className={styles.funnelCard}>
           <FunnelList items={funnelItems} />
         </AdminCard>
-        <AdminCard className={styles.screenClickCard}>
-          <ScreenClickList items={screenClicks} total={screenClickTotal} />
-        </AdminCard>
-        <AdminCard className={styles.channelCard}>
-          <ChannelList items={channels} total={channelTotal} />
-        </AdminCard>
         <AdminCard className={styles.bannerCard}>
           <BannerClickList items={bannerClicks} total={bannerClickTotal} />
+        </AdminCard>
+        <AdminCard className={styles.channelCard}>
+          <ChannelList
+            items={channels}
+            total={channelTotal}
+            selectedChannel={selectedChannelKey}
+          />
+        </AdminCard>
+        <AdminCard className={styles.screenClickCard}>
+          <ScreenClickList
+            items={screenInflows}
+            total={screenInflowTotal}
+            channelLabel={selectedChannelLabel}
+          />
         </AdminCard>
       </section>
     </AdminLayout>

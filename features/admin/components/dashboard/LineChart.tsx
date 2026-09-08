@@ -1,6 +1,11 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import {
+  useMemo,
+  useRef,
+  useState,
+  type MouseEvent,
+} from "react";
 import { LinePoint } from "@/features/admin/data/dashboard";
 import styles from "./LineChart.module.css";
 
@@ -25,6 +30,7 @@ const plotLeft = 86;
 const plotTop = 8;
 const plotWidth = 620;
 const plotHeight = 188;
+const pointInset = 44;
 const xAxisTop = plotTop + plotHeight + 26;
 
 function toPoint(
@@ -33,8 +39,9 @@ function toPoint(
   maxValue: number,
   pointCount: number,
 ) {
-  const step = pointCount > 1 ? plotWidth / (pointCount - 1) : 0;
-  const x = plotLeft + index * step;
+  const effectiveWidth = Math.max(0, plotWidth - pointInset * 2);
+  const step = pointCount > 1 ? effectiveWidth / (pointCount - 1) : 0;
+  const x = plotLeft + pointInset + index * step;
   const y = plotTop + plotHeight - (point.value / maxValue) * plotHeight;
 
   return { x, y };
@@ -61,6 +68,7 @@ export function LineChart({
   maxValue,
   legends,
 }: LineChartProps) {
+  const svgRef = useRef<SVGSVGElement | null>(null);
   const [selectedPoint, setSelectedPoint] = useState<SelectedPointGroup | null>(
     null,
   );
@@ -90,18 +98,70 @@ export function LineChart({
     y: number,
     activeSeriesIndex: number,
   ) => {
-    setSelectedPoint({
-      pointLabel: xLabels[index] || "",
-      activeSeriesIndex,
-      x,
-      y,
-      items: series.map((item, seriesIndex) => ({
-        label: item.label || legends?.[seriesIndex]?.label || title,
-        value: item.data[index]?.value || 0,
-        color: item.color,
-        seriesIndex,
-      })),
+    setSelectedPoint((previous) => {
+      const next = {
+        pointLabel: xLabels[index] || "",
+        activeSeriesIndex,
+        x,
+        y,
+        items: series.map((item, seriesIndex) => ({
+          label: item.label || legends?.[seriesIndex]?.label || title,
+          value: item.data[index]?.value || 0,
+          color: item.color,
+          seriesIndex,
+        })),
+      };
+
+      if (
+        previous?.pointLabel === next.pointLabel &&
+        previous.activeSeriesIndex === next.activeSeriesIndex
+      ) {
+        return previous;
+      }
+
+      return next;
     });
+  };
+  const selectNearestPointGroup = (event: MouseEvent<SVGSVGElement>) => {
+    const svg = svgRef.current;
+    if (!svg || !xAxisPoints.length) return;
+
+    const bounds = svg.getBoundingClientRect();
+    const pointerX = ((event.clientX - bounds.left) / bounds.width) * chartWidth;
+    const pointerY =
+      ((event.clientY - bounds.top) / bounds.height) * chartHeight;
+    const nearestPointIndex = xAxisPoints.reduce((nearestIndex, point, index) => {
+      const nearestDistance = Math.abs(
+        xAxisPoints[nearestIndex].x - pointerX,
+      );
+      const currentDistance = Math.abs(point.x - pointerX);
+
+      return currentDistance < nearestDistance ? index : nearestIndex;
+    }, 0);
+    const nearestSeriesIndex = plottedSeries.reduce(
+      (nearestIndex, item, index) => {
+        const nearestDistance = Math.abs(
+          (plottedSeries[nearestIndex]?.points[nearestPointIndex]?.y ??
+            pointerY) - pointerY,
+        );
+        const currentDistance = Math.abs(
+          (item.points[nearestPointIndex]?.y ?? pointerY) - pointerY,
+        );
+
+        return currentDistance < nearestDistance ? index : nearestIndex;
+      },
+      0,
+    );
+    const activePoint =
+      plottedSeries[nearestSeriesIndex]?.points[nearestPointIndex] ||
+      xAxisPoints[nearestPointIndex];
+
+    selectPointGroup(
+      nearestPointIndex,
+      activePoint.x,
+      activePoint.y,
+      nearestSeriesIndex,
+    );
   };
   const shouldShowXAxisLabel = (index: number) =>
     xLabels.length <= 14 ||
@@ -115,15 +175,7 @@ export function LineChart({
       (yLabels.length > 1 ? (plotHeight / (yLabels.length - 1)) * index : 0),
   }));
   const xAxisPoints = plottedSeries[0]?.points ?? [];
-  const getValueLabelProps = (index: number) => {
-    if (index === 0) {
-      return { xOffset: 12, textAnchor: "start" as const };
-    }
-
-    if (index === xLabels.length - 1) {
-      return { xOffset: -12, textAnchor: "end" as const };
-    }
-
+  const getValueLabelProps = () => {
     return { xOffset: 0, textAnchor: "middle" as const };
   };
 
@@ -149,12 +201,14 @@ export function LineChart({
         onMouseLeave={() => setSelectedPoint(null)}
       >
         <svg
+          ref={svgRef}
           className={styles.svg}
           width="100%"
           height={chartHeight}
           viewBox={`0 0 ${chartWidth} ${chartHeight}`}
           preserveAspectRatio="none"
           aria-label={title}
+          onMouseMove={selectNearestPointGroup}
         >
           <g className={styles.gridLayer}>
             {yAxisLines.map((line) => (
@@ -209,9 +263,6 @@ export function LineChart({
                         cy={point.y}
                         r="14"
                         fill="transparent"
-                        onMouseEnter={() =>
-                          selectPointGroup(index, point.x, point.y, seriesIndex)
-                        }
                         onFocus={() =>
                           selectPointGroup(index, point.x, point.y, seriesIndex)
                         }
@@ -224,7 +275,7 @@ export function LineChart({
                       </circle>
                       {showStaticLabels ? (
                         (() => {
-                          const labelProps = getValueLabelProps(index);
+                          const labelProps = getValueLabelProps();
 
                           return (
                             <text

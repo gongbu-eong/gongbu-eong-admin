@@ -34,12 +34,15 @@ export type FunnelItem = {
 };
 
 export type ChannelItem = {
+  key: string;
   label: string;
   value: string;
   count: string;
   fill: number;
-  icon: string;
+  icon?: string;
+  emoji?: string;
   iconClass?: string;
+  href: string;
 };
 
 export type BannerClickItem = {
@@ -50,7 +53,7 @@ export type BannerClickItem = {
   fill: number;
 };
 
-export type ScreenClickItem = {
+export type ScreenInflowItem = {
   key: string;
   label: string;
   count: string;

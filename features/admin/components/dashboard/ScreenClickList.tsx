@@ -1,18 +1,23 @@
-import { ScreenClickItem } from "@/features/admin/data/dashboard";
+import { ScreenInflowItem } from "@/features/admin/data/dashboard";
 import styles from "./ScreenClickList.module.css";
 
 type ScreenClickListProps = {
-  items: ScreenClickItem[];
+  items: ScreenInflowItem[];
   total: string;
+  channelLabel: string;
 };
 
-export function ScreenClickList({ items, total }: ScreenClickListProps) {
+export function ScreenClickList({
+  items,
+  total,
+  channelLabel,
+}: ScreenClickListProps) {
   return (
     <section className={styles.wrap}>
       <header className={styles.header}>
         <div>
-          <h2>화면별 클릭</h2>
-          <p>오늘 클릭 기준 · 총 {total}건</p>
+          <h2>화면별 유입</h2>
+          <p>{channelLabel} 기준 · 총 {total}건</p>
         </div>
       </header>
       <div className={styles.list}>
