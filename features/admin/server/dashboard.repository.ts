@@ -87,11 +87,14 @@ const bannerLabels: Record<string, string> = {
   job_detail_resume_b: "자소서 배너 B",
   job_detail_strength_a: "강약점 배너 A",
   job_detail_strength_b: "강약점 배너 B",
+  job_detail_bookmark_click: "공고 찜하고 준비하기",
+  job_detail_apply_click: "지원하기/이메일 지원하기",
 };
 
 const dashboardScreenKeys = [
   { key: "home", label: "홈" },
   { key: "job_detail", label: "공고상세" },
+  { key: "coaching", label: "AI NCS 자소서 코칭" },
   { key: "diagnosis", label: "강약점" },
   { key: "community", label: "커뮤니티" },
   { key: "my", label: "마이페이지" },
@@ -508,34 +511,51 @@ export async function getDashboardData({
         date_trunc('day', NOW() AT TIME ZONE 'Asia/Seoul') AT TIME ZONE 'Asia/Seoul' AS today_start,
         (date_trunc('day', NOW() AT TIME ZONE 'Asia/Seoul') + INTERVAL '1 day') AT TIME ZONE 'Asia/Seoul' AS tomorrow_start
     ),
-    banner_keys AS (
+    click_items AS (
       SELECT *
       FROM (VALUES
-        ('job_detail_resume_a', '자소서 배너 A', 1),
-        ('job_detail_resume_b', '자소서 배너 B', 2),
-        ('job_detail_strength_a', '강약점 배너 A', 3),
-        ('job_detail_strength_b', '강약점 배너 B', 4)
-      ) AS keys(banner_key, banner_name, sort_order)
+        ('job_detail_resume_a', '자소서 배너 A', 'banner_click', 'job_detail_resume_a', 1),
+        ('job_detail_resume_b', '자소서 배너 B', 'banner_click', 'job_detail_resume_b', 2),
+        ('job_detail_strength_a', '강약점 배너 A', 'banner_click', 'job_detail_strength_a', 3),
+        ('job_detail_strength_b', '강약점 배너 B', 'banner_click', 'job_detail_strength_b', 4),
+        ('job_detail_bookmark_click', '공고 찜하고 준비하기', 'job_detail_bookmark_click', NULL::TEXT, 5),
+        ('job_detail_apply_click', '지원하기/이메일 지원하기', 'job_detail_apply_click', NULL::TEXT, 6)
+      ) AS items(item_key, item_name, event_type, banner_key, sort_order)
     ),
     counts AS (
       SELECT
-        COALESCE(NULLIF(properties->>'banner_key', ''), 'unknown') AS banner_key,
+        CASE
+          WHEN event_type = 'banner_click'
+          THEN COALESCE(NULLIF(properties->>'banner_key', ''), 'unknown')
+          ELSE event_type
+        END AS item_key,
         COUNT(*) AS click_count,
         COUNT(DISTINCT COALESCE(user_id::TEXT, anonymous_id::TEXT, id::TEXT)) AS unique_count
       FROM public.product_events, bounds
-      WHERE event_type = 'banner_click'
-        AND created_at >= today_start
+      WHERE created_at >= today_start
         AND created_at < tomorrow_start
+        AND (
+          event_type IN ('job_detail_bookmark_click', 'job_detail_apply_click')
+          OR (
+            event_type = 'banner_click'
+            AND COALESCE(NULLIF(properties->>'banner_key', ''), 'unknown') IN (
+              'job_detail_resume_a',
+              'job_detail_resume_b',
+              'job_detail_strength_a',
+              'job_detail_strength_b'
+            )
+          )
+        )
       GROUP BY 1
     )
     SELECT
-      banner_keys.banner_key,
-      banner_keys.banner_name,
+      click_items.item_key AS banner_key,
+      click_items.item_name AS banner_name,
       COALESCE(counts.click_count, 0)::TEXT AS click_count,
       COALESCE(counts.unique_count, 0)::TEXT AS unique_count
-    FROM banner_keys
-    LEFT JOIN counts ON counts.banner_key = banner_keys.banner_key
-    ORDER BY banner_keys.sort_order
+    FROM click_items
+    LEFT JOIN counts ON counts.item_key = click_items.item_key
+    ORDER BY click_items.sort_order
   `);
   const screenInflowResult = await query<ScreenInflowRow>(`
     WITH bounds AS (
@@ -548,6 +568,7 @@ export async function getDashboardData({
       CASE
         WHEN landing_path = '/' OR landing_path LIKE '/?%' THEN 'home'
         WHEN landing_path ~ '^/jobs/[^/?#]+' OR landing_path LIKE '%/jobs/%' THEN 'job_detail'
+        WHEN landing_path LIKE '/ai-tools/coaching%' OR landing_path LIKE '%/ai-tools/coaching%' THEN 'coaching'
         WHEN landing_path LIKE '/ai-tools/diagnosis%' OR landing_path LIKE '/events/diagnosis%' OR landing_path LIKE '%/ai-tools/diagnosis%' OR landing_path LIKE '%/events/diagnosis%' THEN 'diagnosis'
         WHEN landing_path LIKE '/community%' OR landing_path LIKE '%/community%' THEN 'community'
         WHEN landing_path LIKE '/my%' OR landing_path LIKE '%/my%' THEN 'my'
@@ -610,7 +631,7 @@ export async function getDashboardData({
         trend: signupDelta.trend,
       },
       {
-        label: "AI 자소서 코칭",
+        label: "AI NCS 자소서 코칭",
         value: formatCount(todayCoachingRequests),
         delta: coachingDelta.text,
         trend: coachingDelta.trend,

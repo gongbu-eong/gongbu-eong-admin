@@ -165,13 +165,13 @@ export async function TrafficSourcePage({ filters }: TrafficSourcePageProps) {
 
         <AdminCard className={styles.bannerClickCard}>
           <div className={styles.bannerClickHeader}>
-            <h2>배너별 클릭</h2>
+            <h2>배너/버튼 클릭</h2>
             <p>{data.periodValue} 기준</p>
           </div>
           {data.bannerClicks.length ? (
             <div className={styles.bannerClickTable}>
               <div className={styles.bannerClickTableHeader}>
-                <span>배너</span>
+                <span>항목</span>
                 <span>클릭</span>
                 <span>고유 클릭</span>
               </div>
@@ -185,7 +185,7 @@ export async function TrafficSourcePage({ filters }: TrafficSourcePageProps) {
             </div>
           ) : (
             <div className={styles.emptyBannerClick}>
-              조회 기간에 기록된 배너 클릭이 없습니다.
+              조회 기간에 기록된 클릭이 없습니다.
             </div>
           )}
         </AdminCard>

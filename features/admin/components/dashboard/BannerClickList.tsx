@@ -12,7 +12,7 @@ export function BannerClickList({ items, total }: BannerClickListProps) {
     <section className={styles.wrap}>
       <header className={styles.header}>
         <div>
-          <h2>배너 클릭</h2>
+          <h2>배너/버튼 클릭</h2>
           <p>오늘 클릭 기준 · 총 {total}건</p>
         </div>
         <Link href="/traffic/banner-clicks?from=dashboard">전체보기 &gt;</Link>
@@ -34,7 +34,7 @@ export function BannerClickList({ items, total }: BannerClickListProps) {
           ))}
         </div>
       ) : (
-        <div className={styles.empty}>오늘 기록된 배너 클릭이 없습니다.</div>
+        <div className={styles.empty}>오늘 기록된 클릭이 없습니다.</div>
       )}
     </section>
   );

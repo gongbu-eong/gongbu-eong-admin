@@ -228,6 +228,8 @@ const bannerLabels: Record<string, string> = {
   job_detail_resume_b: "자소서 배너 B",
   job_detail_strength_a: "강약점 배너 A",
   job_detail_strength_b: "강약점 배너 B",
+  job_detail_bookmark_click: "공고 찜하고 준비하기",
+  job_detail_apply_click: "지원하기/이메일 지원하기",
 };
 
 function numberValue(value: string | number | null | undefined) {
@@ -538,34 +540,51 @@ export async function getTrafficData(args?: TrafficQuery): Promise<TrafficData> 
   const bannerClickResult = await query<BannerClickRow>(
     `
       ${periodBoundsSql}
-      , banner_keys AS (
+      , click_items AS (
         SELECT *
         FROM (VALUES
-          ('job_detail_resume_a', '자소서 배너 A', 1),
-          ('job_detail_resume_b', '자소서 배너 B', 2),
-          ('job_detail_strength_a', '강약점 배너 A', 3),
-          ('job_detail_strength_b', '강약점 배너 B', 4)
-        ) AS keys(banner_key, banner_name, sort_order)
+          ('job_detail_resume_a', '자소서 배너 A', 'banner_click', 'job_detail_resume_a', 1),
+          ('job_detail_resume_b', '자소서 배너 B', 'banner_click', 'job_detail_resume_b', 2),
+          ('job_detail_strength_a', '강약점 배너 A', 'banner_click', 'job_detail_strength_a', 3),
+          ('job_detail_strength_b', '강약점 배너 B', 'banner_click', 'job_detail_strength_b', 4),
+          ('job_detail_bookmark_click', '공고 찜하고 준비하기', 'job_detail_bookmark_click', NULL::TEXT, 5),
+          ('job_detail_apply_click', '지원하기/이메일 지원하기', 'job_detail_apply_click', NULL::TEXT, 6)
+        ) AS items(item_key, item_name, event_type, banner_key, sort_order)
       ),
       counts AS (
         SELECT
-          COALESCE(NULLIF(properties->>'banner_key', ''), 'unknown') AS banner_key,
+          CASE
+            WHEN event_type = 'banner_click'
+            THEN COALESCE(NULLIF(properties->>'banner_key', ''), 'unknown')
+            ELSE event_type
+          END AS item_key,
           COUNT(*) AS clicks,
           COUNT(DISTINCT COALESCE(user_id::TEXT, anonymous_id::TEXT, id::TEXT)) AS unique_clicks
         FROM public.product_events, ranges
-        WHERE event_type = 'banner_click'
-          AND created_at >= current_start
+        WHERE created_at >= current_start
           AND created_at < current_end
+          AND (
+            event_type IN ('job_detail_bookmark_click', 'job_detail_apply_click')
+            OR (
+              event_type = 'banner_click'
+              AND COALESCE(NULLIF(properties->>'banner_key', ''), 'unknown') IN (
+                'job_detail_resume_a',
+                'job_detail_resume_b',
+                'job_detail_strength_a',
+                'job_detail_strength_b'
+              )
+            )
+          )
         GROUP BY 1
       )
       SELECT
-        banner_keys.banner_key,
-        banner_keys.banner_name,
+        click_items.item_key AS banner_key,
+        click_items.item_name AS banner_name,
         COALESCE(counts.clicks, 0)::TEXT AS clicks,
         COALESCE(counts.unique_clicks, 0)::TEXT AS unique_clicks
-      FROM banner_keys
-      LEFT JOIN counts ON counts.banner_key = banner_keys.banner_key
-      ORDER BY banner_keys.sort_order
+      FROM click_items
+      LEFT JOIN counts ON counts.item_key = click_items.item_key
+      ORDER BY click_items.sort_order
     `,
     params,
   );
@@ -860,9 +879,23 @@ export async function getBannerClickLogData(
       SELECT
         events.id::text AS id,
         events.created_at AS clicked_at,
-        COALESCE(NULLIF(events.properties->>'banner_key', ''), 'unknown') AS banner_key,
-        NULLIF(events.properties->>'banner_name', '') AS banner_name,
-        COALESCE(NULLIF(events.properties->>'placement', ''), '-') AS placement,
+        CASE
+          WHEN events.event_type = 'banner_click'
+          THEN COALESCE(NULLIF(events.properties->>'banner_key', ''), 'unknown')
+          ELSE events.event_type
+        END AS banner_key,
+        CASE
+          WHEN events.event_type = 'job_detail_bookmark_click' THEN '공고 찜하고 준비하기'
+          WHEN events.event_type = 'job_detail_apply_click' THEN '지원하기/이메일 지원하기'
+          ELSE NULLIF(events.properties->>'banner_name', '')
+        END AS banner_name,
+        COALESCE(
+          NULLIF(events.properties->>'placement', ''),
+          CASE
+            WHEN events.event_type = 'banner_click' THEN '-'
+            ELSE 'job_detail_action'
+          END
+        ) AS placement,
         COALESCE(NULLIF(events.properties->>'target_path', ''), '-') AS target_path,
         COALESCE(NULLIF(events.properties->>'path', ''), '-') AS source_path,
         COALESCE(
@@ -889,7 +922,18 @@ export async function getBannerClickLogData(
         LIMIT 1
       ) oauth ON TRUE
       CROSS JOIN ranges
-      WHERE events.event_type = 'banner_click'
+      WHERE (
+          events.event_type IN ('job_detail_bookmark_click', 'job_detail_apply_click')
+          OR (
+            events.event_type = 'banner_click'
+            AND COALESCE(NULLIF(events.properties->>'banner_key', ''), 'unknown') IN (
+              'job_detail_resume_a',
+              'job_detail_resume_b',
+              'job_detail_strength_a',
+              'job_detail_strength_b'
+            )
+          )
+        )
         AND events.created_at >= ranges.current_start
         AND events.created_at < ranges.current_end
     ),

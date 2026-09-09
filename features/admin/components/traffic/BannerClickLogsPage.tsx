@@ -61,10 +61,10 @@ export async function BannerClickLogsPage({
     <AdminLayout
       activeNav={fromDashboard ? "dashboard" : "traffic"}
       activeSubNav={fromDashboard ? undefined : "traffic-banner-clicks"}
-      title="배너 클릭 전체보기"
-      description="배너별 클릭자와 클릭 위치를 최신순으로 확인해요."
+      title="배너/버튼 클릭 전체보기"
+      description="배너와 공고상세 버튼 클릭자, 클릭 위치를 최신순으로 확인해요."
     >
-      <section className={styles.page} aria-label="배너 클릭 전체보기">
+      <section className={styles.page} aria-label="배너/버튼 클릭 전체보기">
         <AdminCard className={styles.searchCard}>
           <form className={styles.filters} action="/traffic/banner-clicks">
             <label className={styles.dateField}>
@@ -83,7 +83,7 @@ export async function BannerClickLogsPage({
               <span>검색어</span>
               <input
                 name="keyword"
-                placeholder="배너명 · 유저명 · 이메일 · 경로 · IP"
+                placeholder="항목명 · 유저명 · 이메일 · 경로 · IP"
                 defaultValue={data.keyword}
               />
             </label>
@@ -98,7 +98,7 @@ export async function BannerClickLogsPage({
         <AdminCard className={styles.tableCard}>
           <div className={styles.tableTop}>
             <div>
-              <h2>배너 클릭 로그</h2>
+              <h2>배너/버튼 클릭 로그</h2>
               <p>
                 총 <strong>{formatCount(data.totalCount)}</strong>건 · 페이지당{" "}
                 {formatCount(data.pageSize)}건
@@ -114,7 +114,7 @@ export async function BannerClickLogsPage({
               <thead>
                 <tr>
                   <th>클릭일시</th>
-                  <th>배너</th>
+                  <th>항목</th>
                   <th>클릭자</th>
                   <th>IP</th>
                   <th>기기</th>

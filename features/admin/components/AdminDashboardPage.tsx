@@ -91,16 +91,16 @@ export async function AdminDashboardPage({
         </AdminCard>
         <AdminCard className={styles.chartCard}>
           <LineChart
-            title="AI 자소서 코칭 · 신규 가입"
+            title="AI NCS 자소서 코칭 · 신규 가입"
             subtitle="최근 7일"
             yLabels={coachingSignupScale.yLabels}
             legends={[
-              { label: "AI 자소서 코칭", color: "#20bf7a" },
+              { label: "AI NCS 자소서 코칭", color: "#20bf7a" },
               { label: "신규 가입", color: "#ffb000" },
             ]}
             series={[
               {
-                label: "AI 자소서 코칭",
+                label: "AI NCS 자소서 코칭",
                 color: "#20bf7a",
                 data: coachingTrend,
               },

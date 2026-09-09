@@ -369,7 +369,7 @@ function formatTarget(value: string | null) {
   if (!value) return "-";
   if (value.includes("diagnosis/result")) return "강점·성향 진단 결과";
   if (value.includes("diagnosis")) return "강점·성향 진단";
-  if (value.includes("coaching")) return "AI 자소서 코칭";
+  if (value.includes("coaching")) return "AI NCS 자소서 코칭";
   if (value.includes("community")) return "커뮤니티";
   if (value.includes("jobs")) return "채용공고";
   if (value === "/") return "메인";
