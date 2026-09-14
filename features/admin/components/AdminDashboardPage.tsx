@@ -37,11 +37,6 @@ function getNiceStep(value: number) {
   return niceNormalized * magnitude;
 }
 
-const percentScale = {
-  maxValue: 100,
-  yLabels: ["100%", "75%", "50%", "25%", "0%"],
-};
-
 type AdminDashboardPageProps = {
   selectedChannel?: string | null;
   selectedProduct?: string | null;
@@ -73,6 +68,7 @@ export async function AdminDashboardPage({
     visitorTrend,
   } = await getDashboardData({ selectedChannel, selectedProduct });
   const visitorSignupScale = createChartScale([visitorTrend, signupTrend]);
+  const productTrendScale = createChartScale([productRateTrend]);
 
   return (
     <AdminLayout
@@ -122,7 +118,7 @@ export async function AdminDashboardPage({
           <LineChart
             title={productRateTrendTitle}
             subtitle="최근 7일"
-            yLabels={percentScale.yLabels}
+            yLabels={productTrendScale.yLabels}
             series={[
               {
                 label: productRateTrendTitle.replace(" 추이", ""),
@@ -130,8 +126,7 @@ export async function AdminDashboardPage({
                 data: productRateTrend,
               },
             ]}
-            maxValue={percentScale.maxValue}
-            valueSuffix="%"
+            maxValue={productTrendScale.maxValue}
           />
         </AdminCard>
       </section>

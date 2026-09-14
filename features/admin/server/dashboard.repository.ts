@@ -234,7 +234,7 @@ const productAnalyticsConfigs: Record<string, DashboardProductConfig> = {
     completeStepLabel: "진단 완료",
     funnelTitle: "강점·성향 유형 전환 퍼널",
     funnelDescription: "방문부터 결과 확인까지 유저의 이탈률을 봅니다.",
-    rateTrendTitle: "강점·성향 진단률 추이",
+    rateTrendTitle: "강점·성향 진단 완료 추이",
     pageVisitEventsSql: diagnosisPageVisitEventsSql,
     startEventsSql: diagnosisStartEventsSql,
     completeEventsSql: diagnosisCompleteEventsSql,
@@ -248,7 +248,7 @@ const productAnalyticsConfigs: Record<string, DashboardProductConfig> = {
     completeStepLabel: "코칭 완료",
     funnelTitle: "AI NCS 자소서 코칭 전환 퍼널",
     funnelDescription: "방문부터 결과 확인까지 유저의 이탈률을 봅니다.",
-    rateTrendTitle: "AI NCS 자소서 코칭 완료율 추이",
+    rateTrendTitle: "AI NCS 자소서 코칭 완료 추이",
     pageVisitEventsSql: coachingPageVisitEventsSql,
     startEventsSql: coachingStartEventsSql,
     completeEventsSql: coachingCompleteEventsSql,
@@ -262,7 +262,7 @@ const productAnalyticsConfigs: Record<string, DashboardProductConfig> = {
     completeStepLabel: "코칭 완료",
     funnelTitle: "AI NCS 면접 코칭 전환 퍼널",
     funnelDescription: "방문부터 결과 확인까지 유저의 이탈률을 봅니다.",
-    rateTrendTitle: "AI NCS 면접 코칭 완료율 추이",
+    rateTrendTitle: "AI NCS 면접 코칭 완료 추이",
     pageVisitEventsSql: interviewPageVisitEventsSql,
     startEventsSql: interviewStartEventsSql,
     completeEventsSql: interviewCompleteEventsSql,
@@ -553,29 +553,15 @@ export async function getDashboardData({
             INTERVAL '1 day'
           ) AS day_kst
         ),
-        daily AS (
-          SELECT
-            days.day_kst,
-            COUNT(DISTINCT starts.request_key) AS started_count,
-            COUNT(DISTINCT completes.result_key) AS completed_count
-          FROM days
-          LEFT JOIN (${selectedProductConfig.startEventsSql}) starts
-            ON starts.event_at >= days.day_kst AT TIME ZONE 'Asia/Seoul'
-           AND starts.event_at < (days.day_kst + INTERVAL '1 day') AT TIME ZONE 'Asia/Seoul'
-          LEFT JOIN (${selectedProductConfig.completeEventsSql}) completes
+        SELECT
+          to_char(days.day_kst, 'MM/DD') AS label,
+          COUNT(DISTINCT completes.result_key) AS value
+        FROM days
+        LEFT JOIN (${selectedProductConfig.completeEventsSql}) completes
             ON completes.event_at >= days.day_kst AT TIME ZONE 'Asia/Seoul'
            AND completes.event_at < (days.day_kst + INTERVAL '1 day') AT TIME ZONE 'Asia/Seoul'
-          GROUP BY days.day_kst
-        )
-        SELECT
-          to_char(day_kst, 'MM/DD') AS label,
-          CASE
-            WHEN GREATEST(started_count, completed_count) > 0
-            THEN ROUND((completed_count::numeric / GREATEST(started_count, completed_count)) * 100, 1)
-            ELSE 0
-          END AS value
-        FROM daily
-        ORDER BY day_kst
+        GROUP BY days.day_kst
+        ORDER BY days.day_kst
       `),
     ]);
 
