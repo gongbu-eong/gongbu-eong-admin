@@ -552,7 +552,7 @@ export async function getDashboardData({
             date_trunc('day', NOW() AT TIME ZONE 'Asia/Seoul'),
             INTERVAL '1 day'
           ) AS day_kst
-        ),
+        )
         SELECT
           to_char(days.day_kst, 'MM/DD') AS label,
           COUNT(DISTINCT completes.result_key) AS value
