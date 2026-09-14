@@ -61,10 +61,10 @@ export async function BannerClickLogsPage({
     <AdminLayout
       activeNav={fromDashboard ? "dashboard" : "traffic"}
       activeSubNav={fromDashboard ? undefined : "traffic-banner-clicks"}
-      title="배너/버튼 클릭 전체보기"
+      title="배너/버튼 클릭 로그 전체보기"
       description="배너와 공고상세 버튼 클릭자, 클릭 위치를 최신순으로 확인해요."
     >
-      <section className={styles.page} aria-label="배너/버튼 클릭 전체보기">
+      <section className={styles.page} aria-label="배너/버튼 클릭 로그 전체보기">
         <AdminCard className={styles.searchCard}>
           <form className={styles.filters} action="/traffic/banner-clicks">
             <label className={styles.dateField}>
