@@ -17,22 +17,18 @@ const funnelHelpTemplates: Record<
 > = {
   1: {
     title: "방문",
-    description: () => "모든 페이지에 방문한 횟수를 나타냅니다.",
+    description: (productLabel) =>
+      `${productLabel} 페이지에 방문한 사용자 수를 나타냅니다.`,
   },
   2: {
     title: "시작",
     description: (productLabel) =>
-      `${productLabel}을 실제로 시작한 횟수를 나타냅니다.`,
+      `${productLabel}의 시작 버튼이나 요청 버튼을 눌러 실제 사용을 시작한 횟수를 나타냅니다.`,
   },
   3: {
     title: "완료",
     description: (productLabel) =>
       `${productLabel} 결과가 생성된 횟수를 나타냅니다.`,
-  },
-  4: {
-    title: "결과 확인",
-    description: (productLabel) =>
-      `사용자가 ${productLabel} 결과 화면을 확인한 횟수를 나타냅니다.`,
   },
 };
 

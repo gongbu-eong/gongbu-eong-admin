@@ -49,10 +49,9 @@ type TrendRow = {
 };
 
 type FunnelRow = {
-  visitors: string;
+  page_visits: string;
   coaching_started: string;
   coaching_completed: string;
-  result_views: string;
 };
 
 type ChannelRow = {
@@ -146,58 +145,28 @@ const trafficEventsSql = `
 const coachingStartEventsSql = `
   SELECT id::TEXT AS request_key, COALESCE(user_id::TEXT, anonymous_id::TEXT, id::TEXT) AS visitor_key, created_at AS event_at
   FROM public.resume_coaching_requests
-  UNION
-  SELECT COALESCE(
-    NULLIF(properties->>'request_id', ''),
-    NULLIF(properties->>'coaching_request_id', ''),
-    id::TEXT
-  ) AS request_key, COALESCE(user_id::TEXT, anonymous_id::TEXT, id::TEXT) AS visitor_key, created_at AS event_at
-  FROM public.product_events
-  WHERE event_type IN ('coaching_start', 'resume_coaching_start')
 `;
 
 const coachingCompleteEventsSql = `
   SELECT results.id::TEXT AS result_key, results.created_at AS event_at
   FROM public.resume_coaching_results results
-  UNION
-  SELECT COALESCE(
-    NULLIF(properties->>'result_id', ''),
-    NULLIF(properties->>'coaching_result_id', ''),
-    NULLIF(properties->>'request_id', ''),
-    id::TEXT
-  ) AS result_key, created_at AS event_at
-  FROM public.product_events
-  WHERE event_type IN ('coaching_complete', 'resume_coaching_complete')
 `;
 
-const coachingResultViewEventsSql = `
+const coachingPageVisitEventsSql = `
   SELECT ${visitorKeySql} AS visitor_key, created_at AS event_at
   FROM public.access_logs
   WHERE event_name = 'page_view'
-    AND (
-      path LIKE '%/ai-tools/coaching/result%'
-      OR path LIKE '%/my/coaching/%'
-      OR path LIKE '%coaching%result%'
-    )
-  UNION
-  SELECT COALESCE(user_id::TEXT, anonymous_id::TEXT, id::TEXT) AS visitor_key, created_at AS event_at
-  FROM public.product_events
-  WHERE event_type IN ('coaching_result_view', 'coaching_result_open', 'resume_coaching_result_view')
+    AND split_part(path, '?', 1) = '/ai-tools/coaching'
 `;
 
 const diagnosisStartEventsSql = `
   SELECT
-    runs.id::TEXT AS request_key,
-    COALESCE(runs.user_id::TEXT, runs.id::TEXT) AS visitor_key,
-    runs.started_at AS event_at
-  FROM public.diagnosis_runs runs
-  UNION
-  SELECT
-    COALESCE(diagnosis_run_id::TEXT, id::TEXT) AS request_key,
+    id::TEXT AS request_key,
     COALESCE(user_id::TEXT, anonymous_id::TEXT, id::TEXT) AS visitor_key,
     created_at AS event_at
   FROM public.product_events
   WHERE event_type = 'diagnosis_start'
+    AND properties->>'action' = 'start_button_click'
 `;
 
 const diagnosisCompleteEventsSql = `
@@ -209,19 +178,11 @@ const diagnosisCompleteEventsSql = `
   JOIN public.diagnosis_runs runs ON runs.id = results.diagnosis_run_id
 `;
 
-const diagnosisResultViewEventsSql = `
+const diagnosisPageVisitEventsSql = `
   SELECT ${visitorKeySql} AS visitor_key, created_at AS event_at
   FROM public.access_logs
   WHERE event_name = 'page_view'
-    AND (
-      path LIKE '%/ai-tools/diagnosis/result%'
-      OR path LIKE '%/events/diagnosis/result%'
-      OR path LIKE '%/my/diagnosis-results%'
-    )
-  UNION
-  SELECT COALESCE(user_id::TEXT, anonymous_id::TEXT, id::TEXT) AS visitor_key, created_at AS event_at
-  FROM public.product_events
-  WHERE event_type IN ('diagnosis_result_view', 'diagnosis_result_open')
+    AND split_part(path, '?', 1) IN ('/ai-tools/diagnosis', '/events/diagnosis')
 `;
 
 const interviewStartEventsSql = `
@@ -230,13 +191,6 @@ const interviewStartEventsSql = `
     COALESCE(sessions.user_id::TEXT, sessions.anonymous_id::TEXT, sessions.id::TEXT) AS visitor_key,
     sessions.started_at AS event_at
   FROM public.interview_coaching_sessions sessions
-  UNION
-  SELECT
-    COALESCE(NULLIF(properties->>'session_id', ''), id::TEXT) AS request_key,
-    COALESCE(user_id::TEXT, anonymous_id::TEXT, id::TEXT) AS visitor_key,
-    created_at AS event_at
-  FROM public.product_events
-  WHERE event_type IN ('interview_coaching_start', 'interview_coaching_session_start')
 `;
 
 const interviewCompleteEventsSql = `
@@ -246,27 +200,13 @@ const interviewCompleteEventsSql = `
     COALESCE(sessions.completed_at, sessions.updated_at, sessions.started_at) AS event_at
   FROM public.interview_coaching_sessions sessions
   WHERE sessions.completed_at IS NOT NULL OR sessions.result IS NOT NULL
-  UNION
-  SELECT
-    COALESCE(NULLIF(properties->>'session_id', ''), id::TEXT) AS result_key,
-    COALESCE(user_id::TEXT, anonymous_id::TEXT, id::TEXT) AS visitor_key,
-    created_at AS event_at
-  FROM public.product_events
-  WHERE event_type IN ('interview_coaching_complete', 'interview_coaching_result')
 `;
 
-const interviewResultViewEventsSql = `
+const interviewPageVisitEventsSql = `
   SELECT ${visitorKeySql} AS visitor_key, created_at AS event_at
   FROM public.access_logs
   WHERE event_name = 'page_view'
-    AND (
-      path LIKE '%/ai-tools/interview-coaching/result%'
-      OR path LIKE '%/my/interview-coaching%'
-    )
-  UNION
-  SELECT COALESCE(user_id::TEXT, anonymous_id::TEXT, id::TEXT) AS visitor_key, created_at AS event_at
-  FROM public.product_events
-  WHERE event_type IN ('interview_coaching_result_view', 'interview_coaching_result_open')
+    AND split_part(path, '?', 1) = '/ai-tools/interview-coaching'
 `;
 
 type DashboardProductConfig = {
@@ -279,9 +219,9 @@ type DashboardProductConfig = {
   funnelTitle: string;
   funnelDescription: string;
   rateTrendTitle: string;
+  pageVisitEventsSql: string;
   startEventsSql: string;
   completeEventsSql: string;
-  resultViewEventsSql: string;
 };
 
 const productAnalyticsConfigs: Record<string, DashboardProductConfig> = {
@@ -295,9 +235,9 @@ const productAnalyticsConfigs: Record<string, DashboardProductConfig> = {
     funnelTitle: "강점·성향 유형 전환 퍼널",
     funnelDescription: "방문부터 결과 확인까지 유저의 이탈률을 봅니다.",
     rateTrendTitle: "강점·성향 진단률 추이",
+    pageVisitEventsSql: diagnosisPageVisitEventsSql,
     startEventsSql: diagnosisStartEventsSql,
     completeEventsSql: diagnosisCompleteEventsSql,
-    resultViewEventsSql: diagnosisResultViewEventsSql,
   },
   resume_coaching: {
     key: "resume_coaching",
@@ -309,9 +249,9 @@ const productAnalyticsConfigs: Record<string, DashboardProductConfig> = {
     funnelTitle: "AI NCS 자소서 코칭 전환 퍼널",
     funnelDescription: "방문부터 결과 확인까지 유저의 이탈률을 봅니다.",
     rateTrendTitle: "AI NCS 자소서 코칭 완료율 추이",
+    pageVisitEventsSql: coachingPageVisitEventsSql,
     startEventsSql: coachingStartEventsSql,
     completeEventsSql: coachingCompleteEventsSql,
-    resultViewEventsSql: coachingResultViewEventsSql,
   },
   interview_coaching: {
     key: "interview_coaching",
@@ -323,9 +263,9 @@ const productAnalyticsConfigs: Record<string, DashboardProductConfig> = {
     funnelTitle: "AI NCS 면접 코칭 전환 퍼널",
     funnelDescription: "방문부터 결과 확인까지 유저의 이탈률을 봅니다.",
     rateTrendTitle: "AI NCS 면접 코칭 완료율 추이",
+    pageVisitEventsSql: interviewPageVisitEventsSql,
     startEventsSql: interviewStartEventsSql,
     completeEventsSql: interviewCompleteEventsSql,
-    resultViewEventsSql: interviewResultViewEventsSql,
   },
 };
 
@@ -647,10 +587,10 @@ export async function getDashboardData({
     )
     SELECT
       (
-        SELECT COUNT(*)
-        FROM (${trafficEventsSql}) traffic_events, bounds
+        SELECT COUNT(DISTINCT visitor_key)
+        FROM (${selectedProductConfig.pageVisitEventsSql}) page_visits, bounds
         WHERE event_at >= today_start AND event_at < tomorrow_start
-      ) AS visitors,
+      ) AS page_visits,
       (
         SELECT COUNT(DISTINCT request_key)
         FROM (${selectedProductConfig.startEventsSql}) starts, bounds
@@ -660,24 +600,14 @@ export async function getDashboardData({
         SELECT COUNT(DISTINCT result_key)
         FROM (${selectedProductConfig.completeEventsSql}) completes, bounds
         WHERE event_at >= today_start AND event_at < tomorrow_start
-      ) AS coaching_completed,
-      (
-        SELECT COUNT(DISTINCT visitor_key)
-        FROM (${selectedProductConfig.resultViewEventsSql}) result_views, bounds
-        WHERE event_at >= today_start AND event_at < tomorrow_start
-      ) AS result_views,
-      0 AS unused
+      ) AS coaching_completed
   `);
 
   const funnelRow = funnelResult.rows[0];
-  const visitors = numberValue(funnelRow?.visitors);
-  const rawStarted = numberValue(funnelRow?.coaching_started);
-  const rawCompleted = numberValue(funnelRow?.coaching_completed);
-  const rawResultViews = numberValue(funnelRow?.result_views);
-  const started = Math.max(rawStarted, rawCompleted, rawResultViews);
-  const completed = Math.min(started, Math.max(rawCompleted, rawResultViews));
-  const resultViews = Math.min(completed, rawResultViews);
-  const base = Math.max(visitors, started, completed, resultViews, 1);
+  const pageVisits = numberValue(funnelRow?.page_visits);
+  const started = numberValue(funnelRow?.coaching_started);
+  const completed = numberValue(funnelRow?.coaching_completed);
+  const base = Math.max(pageVisits, started, completed, 1);
 
   const channelResult = await query<ChannelRow>(`
     WITH bounds AS (
@@ -880,10 +810,9 @@ export async function getDashboardData({
     signupTrend: toLinePoints(signupTrendResult.rows),
     productRateTrend: toLinePoints(productRateTrendResult.rows),
     funnelItems: [
-      createFunnel(1, "방문", visitors, null, base),
-      createFunnel(2, selectedProductConfig.startStepLabel, started, visitors, base),
+      createFunnel(1, "방문", pageVisits, null, base),
+      createFunnel(2, selectedProductConfig.startStepLabel, started, pageVisits, base),
       createFunnel(3, selectedProductConfig.completeStepLabel, completed, started, base),
-      createFunnel(4, "결과 확인", resultViews, completed, base),
     ],
     channels: [
       {
