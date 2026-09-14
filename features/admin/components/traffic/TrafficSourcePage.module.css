@@ -540,12 +540,17 @@
   display: grid;
   grid-template-columns:
     minmax(74px, 0.8fr)
-    repeat(var(--metric-columns), minmax(104px, 1fr))
+    repeat(var(--metric-columns), minmax(var(--metric-column-width, 104px), 1fr))
     minmax(86px, 1fr);
-  min-width: calc(178px + (var(--metric-columns) * 104px));
+  min-width: calc(178px + (var(--metric-columns) * var(--metric-column-width, 104px)));
   align-items: center;
   min-height: 46px;
   text-align: center;
+}
+
+.screenDailyTable .dailyTableHeader,
+.screenDailyTable .dailyTableRow {
+  min-width: calc(178px + (var(--metric-columns) * var(--metric-column-width, 148px)));
 }
 
 @media (max-width: 1280px) {

@@ -38,6 +38,13 @@ function createDailyGridStyle(metricCount: number) {
   return { "--metric-columns": metricCount } as CSSProperties;
 }
 
+function createScreenGridStyle(metricCount: number) {
+  return {
+    "--metric-columns": metricCount,
+    "--metric-column-width": "148px",
+  } as CSSProperties;
+}
+
 type TrafficSourcePageProps = {
   filters?: TrafficQuery;
 };
@@ -210,10 +217,10 @@ export async function TrafficSourcePage({ filters }: TrafficSourcePageProps) {
             <h2>화면별 유입</h2>
             <p>{data.periodValue} 기준</p>
           </div>
-          <div className={styles.dailyTable}>
+          <div className={`${styles.dailyTable} ${styles.screenDailyTable}`}>
             <div
               className={styles.dailyTableHeader}
-              style={createDailyGridStyle(data.screenInflows.length)}
+              style={createScreenGridStyle(data.screenInflows.length)}
             >
               <span>날짜</span>
               {data.screenInflows.map((screen) => (
@@ -225,7 +232,7 @@ export async function TrafficSourcePage({ filters }: TrafficSourcePageProps) {
               <div
                 className={styles.dailyTableRow}
                 key={row.date}
-                style={createDailyGridStyle(data.screenInflows.length)}
+                style={createScreenGridStyle(data.screenInflows.length)}
               >
                 <span>{row.date}</span>
                 {data.screenInflows.map((screen) => (
