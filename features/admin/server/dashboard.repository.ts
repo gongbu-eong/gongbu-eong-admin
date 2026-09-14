@@ -1,6 +1,7 @@
 import {
   BannerClickItem,
   ChannelItem,
+  DashboardProductOption,
   FunnelItem,
   LinePoint,
   MetricItem,
@@ -13,6 +14,7 @@ type DashboardData = {
   visitorTrend: LinePoint[];
   coachingTrend: LinePoint[];
   signupTrend: LinePoint[];
+  productRateTrend: LinePoint[];
   funnelItems: FunnelItem[];
   channels: ChannelItem[];
   channelTotal: string;
@@ -22,6 +24,12 @@ type DashboardData = {
   screenInflowTotal: string;
   selectedChannelKey: string;
   selectedChannelLabel: string;
+  selectedProductKey: string;
+  selectedProductLabel: string;
+  productOptions: DashboardProductOption[];
+  productFunnelTitle: string;
+  productFunnelDescription: string;
+  productRateTrendTitle: string;
 };
 
 type MetricsRow = {
@@ -82,6 +90,12 @@ const dashboardChannelOptions = [
   { key: "direct", label: "직접유입" },
 ];
 
+const dashboardProductOptions = [
+  { key: "diagnosis", label: "강점·성향 유형" },
+  { key: "resume_coaching", label: "AI NCS 자소서" },
+  { key: "interview_coaching", label: "AI NCS 면접" },
+] satisfies DashboardProductOption[];
+
 const bannerLabels: Record<string, string> = {
   job_detail_resume_a: "자소서 배너 A",
   job_detail_resume_b: "자소서 배너 B",
@@ -94,7 +108,9 @@ const bannerLabels: Record<string, string> = {
 const dashboardScreenKeys = [
   { key: "home", label: "홈" },
   { key: "job_detail", label: "공고상세" },
+  { key: "ai_tools", label: "AI 도구" },
   { key: "coaching", label: "AI NCS 자소서 코칭" },
+  { key: "interview_coaching", label: "AI NCS 면접 코칭" },
   { key: "diagnosis", label: "강약점" },
   { key: "community", label: "커뮤니티" },
   { key: "my", label: "마이페이지" },
@@ -168,6 +184,150 @@ const coachingResultViewEventsSql = `
   FROM public.product_events
   WHERE event_type IN ('coaching_result_view', 'coaching_result_open', 'resume_coaching_result_view')
 `;
+
+const diagnosisStartEventsSql = `
+  SELECT
+    runs.id::TEXT AS request_key,
+    COALESCE(runs.user_id::TEXT, runs.id::TEXT) AS visitor_key,
+    runs.started_at AS event_at
+  FROM public.diagnosis_runs runs
+  UNION
+  SELECT
+    COALESCE(diagnosis_run_id::TEXT, id::TEXT) AS request_key,
+    COALESCE(user_id::TEXT, anonymous_id::TEXT, id::TEXT) AS visitor_key,
+    created_at AS event_at
+  FROM public.product_events
+  WHERE event_type = 'diagnosis_start'
+`;
+
+const diagnosisCompleteEventsSql = `
+  SELECT
+    results.id::TEXT AS result_key,
+    COALESCE(results.user_id::TEXT, results.id::TEXT) AS visitor_key,
+    COALESCE(runs.completed_at, results.created_at) AS event_at
+  FROM public.diagnosis_results results
+  JOIN public.diagnosis_runs runs ON runs.id = results.diagnosis_run_id
+`;
+
+const diagnosisResultViewEventsSql = `
+  SELECT ${visitorKeySql} AS visitor_key, created_at AS event_at
+  FROM public.access_logs
+  WHERE event_name = 'page_view'
+    AND (
+      path LIKE '%/ai-tools/diagnosis/result%'
+      OR path LIKE '%/events/diagnosis/result%'
+      OR path LIKE '%/my/diagnosis-results%'
+    )
+  UNION
+  SELECT COALESCE(user_id::TEXT, anonymous_id::TEXT, id::TEXT) AS visitor_key, created_at AS event_at
+  FROM public.product_events
+  WHERE event_type IN ('diagnosis_result_view', 'diagnosis_result_open')
+`;
+
+const interviewStartEventsSql = `
+  SELECT
+    sessions.id::TEXT AS request_key,
+    COALESCE(sessions.user_id::TEXT, sessions.anonymous_id::TEXT, sessions.id::TEXT) AS visitor_key,
+    sessions.started_at AS event_at
+  FROM public.interview_coaching_sessions sessions
+  UNION
+  SELECT
+    COALESCE(NULLIF(properties->>'session_id', ''), id::TEXT) AS request_key,
+    COALESCE(user_id::TEXT, anonymous_id::TEXT, id::TEXT) AS visitor_key,
+    created_at AS event_at
+  FROM public.product_events
+  WHERE event_type IN ('interview_coaching_start', 'interview_coaching_session_start')
+`;
+
+const interviewCompleteEventsSql = `
+  SELECT
+    sessions.id::TEXT AS result_key,
+    COALESCE(sessions.user_id::TEXT, sessions.anonymous_id::TEXT, sessions.id::TEXT) AS visitor_key,
+    COALESCE(sessions.completed_at, sessions.updated_at, sessions.started_at) AS event_at
+  FROM public.interview_coaching_sessions sessions
+  WHERE sessions.completed_at IS NOT NULL OR sessions.result IS NOT NULL
+  UNION
+  SELECT
+    COALESCE(NULLIF(properties->>'session_id', ''), id::TEXT) AS result_key,
+    COALESCE(user_id::TEXT, anonymous_id::TEXT, id::TEXT) AS visitor_key,
+    created_at AS event_at
+  FROM public.product_events
+  WHERE event_type IN ('interview_coaching_complete', 'interview_coaching_result')
+`;
+
+const interviewResultViewEventsSql = `
+  SELECT ${visitorKeySql} AS visitor_key, created_at AS event_at
+  FROM public.access_logs
+  WHERE event_name = 'page_view'
+    AND (
+      path LIKE '%/ai-tools/interview-coaching/result%'
+      OR path LIKE '%/my/interview-coaching%'
+    )
+  UNION
+  SELECT COALESCE(user_id::TEXT, anonymous_id::TEXT, id::TEXT) AS visitor_key, created_at AS event_at
+  FROM public.product_events
+  WHERE event_type IN ('interview_coaching_result_view', 'interview_coaching_result_open')
+`;
+
+type DashboardProductConfig = {
+  key: string;
+  label: string;
+  metricLabel: string;
+  completionRateLabel: string;
+  startStepLabel: string;
+  completeStepLabel: string;
+  funnelTitle: string;
+  funnelDescription: string;
+  rateTrendTitle: string;
+  startEventsSql: string;
+  completeEventsSql: string;
+  resultViewEventsSql: string;
+};
+
+const productAnalyticsConfigs: Record<string, DashboardProductConfig> = {
+  diagnosis: {
+    key: "diagnosis",
+    label: "강점·성향 유형",
+    metricLabel: "강점·성향 유형",
+    completionRateLabel: "진단 완료율",
+    startStepLabel: "진단 시작",
+    completeStepLabel: "진단 완료",
+    funnelTitle: "강점·성향 유형 전환 퍼널",
+    funnelDescription: "방문부터 결과 확인까지 유저의 이탈률을 봅니다.",
+    rateTrendTitle: "강점·성향 진단률 추이",
+    startEventsSql: diagnosisStartEventsSql,
+    completeEventsSql: diagnosisCompleteEventsSql,
+    resultViewEventsSql: diagnosisResultViewEventsSql,
+  },
+  resume_coaching: {
+    key: "resume_coaching",
+    label: "AI NCS 자소서 코칭",
+    metricLabel: "AI NCS 자소서 코칭",
+    completionRateLabel: "코칭 완료율",
+    startStepLabel: "코칭 시작",
+    completeStepLabel: "코칭 완료",
+    funnelTitle: "AI NCS 자소서 코칭 전환 퍼널",
+    funnelDescription: "방문부터 결과 확인까지 유저의 이탈률을 봅니다.",
+    rateTrendTitle: "AI NCS 자소서 코칭 완료율 추이",
+    startEventsSql: coachingStartEventsSql,
+    completeEventsSql: coachingCompleteEventsSql,
+    resultViewEventsSql: coachingResultViewEventsSql,
+  },
+  interview_coaching: {
+    key: "interview_coaching",
+    label: "AI NCS 면접 코칭",
+    metricLabel: "AI NCS 면접 코칭",
+    completionRateLabel: "코칭 완료율",
+    startStepLabel: "코칭 시작",
+    completeStepLabel: "코칭 완료",
+    funnelTitle: "AI NCS 면접 코칭 전환 퍼널",
+    funnelDescription: "방문부터 결과 확인까지 유저의 이탈률을 봅니다.",
+    rateTrendTitle: "AI NCS 면접 코칭 완료율 추이",
+    startEventsSql: interviewStartEventsSql,
+    completeEventsSql: interviewCompleteEventsSql,
+    resultViewEventsSql: interviewResultViewEventsSql,
+  },
+};
 
 function numberValue(value: string | number | null | undefined) {
   return Number(value || 0);
@@ -266,6 +426,12 @@ function normalizeDashboardChannel(value: string | null | undefined) {
   return dashboardChannelOptions.some((item) => item.key === key) ? key : "all";
 }
 
+function normalizeDashboardProduct(value: string | null | undefined) {
+  const key = (value || "diagnosis").trim().toLowerCase();
+
+  return productAnalyticsConfigs[key]?.key || "diagnosis";
+}
+
 function mapBannerLabel(key: string | null, name: string | null) {
   const trimmedName = name?.trim();
   if (trimmedName) return trimmedName;
@@ -278,13 +444,17 @@ function mapBannerLabel(key: string | null, name: string | null) {
 
 export async function getDashboardData({
   selectedChannel,
+  selectedProduct,
 }: {
   selectedChannel?: string | null;
+  selectedProduct?: string | null;
 } = {}): Promise<DashboardData> {
   const selectedChannelKey = normalizeDashboardChannel(selectedChannel);
   const selectedChannelLabel =
     dashboardChannelOptions.find((item) => item.key === selectedChannelKey)
       ?.label || "전체";
+  const selectedProductKey = normalizeDashboardProduct(selectedProduct);
+  const selectedProductConfig = productAnalyticsConfigs[selectedProductKey];
 
   const metricsResult = await query<MetricsRow>(`
     WITH bounds AS (
@@ -324,22 +494,22 @@ export async function getDashboardData({
       ) AS yesterday_signups,
       (
         SELECT COUNT(DISTINCT request_key)
-        FROM (${coachingStartEventsSql}) starts, ranges
+        FROM (${selectedProductConfig.startEventsSql}) starts, ranges
         WHERE event_at >= today_start AND event_at < tomorrow_start
       ) AS today_coaching_requests,
       (
         SELECT COUNT(DISTINCT request_key)
-        FROM (${coachingStartEventsSql}) starts, ranges
+        FROM (${selectedProductConfig.startEventsSql}) starts, ranges
         WHERE event_at >= yesterday_start AND event_at < today_start
       ) AS yesterday_coaching_requests,
       (
         SELECT COUNT(DISTINCT result_key)
-        FROM (${coachingCompleteEventsSql}) completes, ranges
+        FROM (${selectedProductConfig.completeEventsSql}) completes, ranges
         WHERE event_at >= today_start AND event_at < tomorrow_start
       ) AS today_coaching_completed,
       (
         SELECT COUNT(DISTINCT result_key)
-        FROM (${coachingCompleteEventsSql}) completes, ranges
+        FROM (${selectedProductConfig.completeEventsSql}) completes, ranges
         WHERE event_at >= yesterday_start AND event_at < today_start
       ) AS yesterday_coaching_completed
     FROM ranges
@@ -377,7 +547,12 @@ export async function getDashboardData({
   );
   const completionDelta = createDelta(todayCompletionRate, yesterdayCompletionRate);
 
-  const [visitorTrendResult, coachingTrendResult, signupTrendResult] =
+  const [
+    visitorTrendResult,
+    coachingTrendResult,
+    signupTrendResult,
+    productRateTrendResult,
+  ] =
     await Promise.all([
       query<TrendRow>(`
         WITH days AS (
@@ -407,7 +582,7 @@ export async function getDashboardData({
         )
         SELECT to_char(days.day_kst, 'MM/DD') AS label, COUNT(DISTINCT starts.request_key) AS value
         FROM days
-        LEFT JOIN (${coachingStartEventsSql}) starts
+        LEFT JOIN (${selectedProductConfig.startEventsSql}) starts
           ON starts.event_at >= days.day_kst AT TIME ZONE 'Asia/Seoul'
          AND starts.event_at < (days.day_kst + INTERVAL '1 day') AT TIME ZONE 'Asia/Seoul'
         GROUP BY days.day_kst
@@ -430,6 +605,38 @@ export async function getDashboardData({
         GROUP BY days.day_kst
         ORDER BY days.day_kst
       `),
+      query<TrendRow>(`
+        WITH days AS (
+          SELECT generate_series(
+            date_trunc('day', NOW() AT TIME ZONE 'Asia/Seoul') - INTERVAL '6 days',
+            date_trunc('day', NOW() AT TIME ZONE 'Asia/Seoul'),
+            INTERVAL '1 day'
+          ) AS day_kst
+        ),
+        daily AS (
+          SELECT
+            days.day_kst,
+            COUNT(DISTINCT starts.request_key) AS started_count,
+            COUNT(DISTINCT completes.result_key) AS completed_count
+          FROM days
+          LEFT JOIN (${selectedProductConfig.startEventsSql}) starts
+            ON starts.event_at >= days.day_kst AT TIME ZONE 'Asia/Seoul'
+           AND starts.event_at < (days.day_kst + INTERVAL '1 day') AT TIME ZONE 'Asia/Seoul'
+          LEFT JOIN (${selectedProductConfig.completeEventsSql}) completes
+            ON completes.event_at >= days.day_kst AT TIME ZONE 'Asia/Seoul'
+           AND completes.event_at < (days.day_kst + INTERVAL '1 day') AT TIME ZONE 'Asia/Seoul'
+          GROUP BY days.day_kst
+        )
+        SELECT
+          to_char(day_kst, 'MM/DD') AS label,
+          CASE
+            WHEN GREATEST(started_count, completed_count) > 0
+            THEN ROUND((completed_count::numeric / GREATEST(started_count, completed_count)) * 100, 1)
+            ELSE 0
+          END AS value
+        FROM daily
+        ORDER BY day_kst
+      `),
     ]);
 
   const funnelResult = await query<FunnelRow>(`
@@ -446,17 +653,17 @@ export async function getDashboardData({
       ) AS visitors,
       (
         SELECT COUNT(DISTINCT request_key)
-        FROM (${coachingStartEventsSql}) starts, bounds
+        FROM (${selectedProductConfig.startEventsSql}) starts, bounds
         WHERE event_at >= today_start AND event_at < tomorrow_start
       ) AS coaching_started,
       (
         SELECT COUNT(DISTINCT result_key)
-        FROM (${coachingCompleteEventsSql}) completes, bounds
+        FROM (${selectedProductConfig.completeEventsSql}) completes, bounds
         WHERE event_at >= today_start AND event_at < tomorrow_start
       ) AS coaching_completed,
       (
         SELECT COUNT(DISTINCT visitor_key)
-        FROM (${coachingResultViewEventsSql}) result_views, bounds
+        FROM (${selectedProductConfig.resultViewEventsSql}) result_views, bounds
         WHERE event_at >= today_start AND event_at < tomorrow_start
       ) AS result_views,
       0 AS unused
@@ -566,14 +773,24 @@ export async function getDashboardData({
     SELECT
       source_value AS channel_source,
       CASE
-        WHEN landing_path = '/' OR landing_path LIKE '/?%' THEN 'home'
-        WHEN landing_path ~ '^/jobs/[^/?#]+' OR landing_path LIKE '%/jobs/%' THEN 'job_detail'
-        WHEN landing_path LIKE '/ai-tools/coaching%' OR landing_path LIKE '%/ai-tools/coaching%' THEN 'coaching'
-        WHEN landing_path LIKE '/ai-tools/diagnosis%' OR landing_path LIKE '/events/diagnosis%' OR landing_path LIKE '%/ai-tools/diagnosis%' OR landing_path LIKE '%/events/diagnosis%' THEN 'diagnosis'
-        WHEN landing_path LIKE '/community%' OR landing_path LIKE '%/community%' THEN 'community'
-        WHEN landing_path LIKE '/my%' OR landing_path LIKE '%/my%' THEN 'my'
-        WHEN landing_path LIKE '/calendar%' OR landing_path LIKE '%/calendar%' THEN 'calendar'
-        WHEN landing_path LIKE '/login%' OR landing_path LIKE '%/login%' OR landing_path LIKE '/auth%' OR landing_path LIKE '%/auth%' THEN 'login'
+        WHEN split_part(landing_path, '?', 1) = '/' THEN 'home'
+        WHEN split_part(landing_path, '?', 1) = '/jobs'
+          OR split_part(landing_path, '?', 1) ~ '^/jobs/[^/]+$'
+          THEN 'job_detail'
+        WHEN split_part(landing_path, '?', 1) LIKE '/ai-tools/interview-coaching%' THEN 'interview_coaching'
+        WHEN split_part(landing_path, '?', 1) LIKE '/ai-tools/coaching%' THEN 'coaching'
+        WHEN split_part(landing_path, '?', 1) LIKE '/ai-tools/diagnosis%'
+          OR split_part(landing_path, '?', 1) LIKE '/events/diagnosis%'
+          THEN 'diagnosis'
+        WHEN split_part(landing_path, '?', 1) = '/ai-tools'
+          OR split_part(landing_path, '?', 1) LIKE '/ai-tools/job-tools%'
+          THEN 'ai_tools'
+        WHEN split_part(landing_path, '?', 1) LIKE '/community%' THEN 'community'
+        WHEN split_part(landing_path, '?', 1) LIKE '/my%' THEN 'my'
+        WHEN split_part(landing_path, '?', 1) LIKE '/calendar%' THEN 'calendar'
+        WHEN split_part(landing_path, '?', 1) LIKE '/login%'
+          OR split_part(landing_path, '?', 1) LIKE '/auth%'
+          THEN 'login'
         ELSE 'other'
       END AS screen_key,
       COUNT(*) AS inflow_count
@@ -614,6 +831,21 @@ export async function getDashboardData({
     (sum, screen) => sum + (groupedScreenInflows.get(screen.key) || 0),
     0,
   );
+  const createDashboardHref = (channelKey: string) => {
+    const params = new URLSearchParams();
+
+    if (channelKey !== "all") {
+      params.set("channel", channelKey);
+    }
+
+    if (selectedProductKey !== "diagnosis") {
+      params.set("product", selectedProductKey);
+    }
+
+    const queryString = params.toString();
+
+    return queryString ? `/?${queryString}` : "/";
+  };
 
   return {
     metrics: [
@@ -631,13 +863,13 @@ export async function getDashboardData({
         trend: signupDelta.trend,
       },
       {
-        label: "AI NCS 자소서 코칭",
+        label: selectedProductConfig.metricLabel,
         value: formatCount(todayCoachingRequests),
         delta: coachingDelta.text,
         trend: coachingDelta.trend,
       },
       {
-        label: "코칭 완료율",
+        label: selectedProductConfig.completionRateLabel,
         value: formatPercent(todayCompletionRate),
         delta: completionDelta.text,
         trend: completionDelta.trend,
@@ -646,10 +878,11 @@ export async function getDashboardData({
     visitorTrend: toLinePoints(visitorTrendResult.rows),
     coachingTrend: toLinePoints(coachingTrendResult.rows),
     signupTrend: toLinePoints(signupTrendResult.rows),
+    productRateTrend: toLinePoints(productRateTrendResult.rows),
     funnelItems: [
       createFunnel(1, "방문", visitors, null, base),
-      createFunnel(2, "코칭 시작", started, visitors, base),
-      createFunnel(3, "코칭 완료", completed, started, base),
+      createFunnel(2, selectedProductConfig.startStepLabel, started, visitors, base),
+      createFunnel(3, selectedProductConfig.completeStepLabel, completed, started, base),
       createFunnel(4, "결과 확인", resultViews, completed, base),
     ],
     channels: [
@@ -660,7 +893,7 @@ export async function getDashboardData({
         count: `(${formatCount(totalChannelCount)}건)`,
         fill: 100,
         emoji: "🌐",
-        href: "/",
+        href: createDashboardHref("all"),
       },
       ...sortedChannels.map(([label, count]) => {
         const optionKey =
@@ -679,7 +912,7 @@ export async function getDashboardData({
           iconClass:
             channelAssets[label]?.iconClass ||
             channelAssets["직접유입"].iconClass,
-          href: optionKey === "all" ? "/" : `/?channel=${optionKey}`,
+          href: createDashboardHref(optionKey),
         };
       }),
     ],
@@ -705,5 +938,11 @@ export async function getDashboardData({
     screenInflowTotal: formatCount(totalScreenInflowCount),
     selectedChannelKey,
     selectedChannelLabel,
+    selectedProductKey,
+    selectedProductLabel: selectedProductConfig.label,
+    productOptions: dashboardProductOptions,
+    productFunnelTitle: selectedProductConfig.funnelTitle,
+    productFunnelDescription: selectedProductConfig.funnelDescription,
+    productRateTrendTitle: selectedProductConfig.rateTrendTitle,
   };
 }

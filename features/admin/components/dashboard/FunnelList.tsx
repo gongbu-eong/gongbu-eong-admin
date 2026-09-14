@@ -3,43 +3,50 @@ import styles from "./FunnelList.module.css";
 
 type FunnelListProps = {
   items: FunnelItem[];
+  title: string;
+  description: string;
+  productLabel: string;
 };
 
-const funnelHelps: Record<
+const funnelHelpTemplates: Record<
   number,
   {
     title: string;
-    description: string;
+    description: (productLabel: string) => string;
   }
 > = {
   1: {
     title: "방문",
-    description:
-      "모든 페이지에 방문한 횟수를 나타냅니다.",
+    description: () => "모든 페이지에 방문한 횟수를 나타냅니다.",
   },
   2: {
-    title: "코칭 시작",
-    description:
-      "AI NCS 자소서 코칭을 실제로 시작한 횟수를 나타냅니다.",
+    title: "시작",
+    description: (productLabel) =>
+      `${productLabel}을 실제로 시작한 횟수를 나타냅니다.`,
   },
   3: {
-    title: "코칭 완료",
-    description:
-      "AI NCS 자소서 코칭 결과가 생성된 횟수를 나타냅니다.",
+    title: "완료",
+    description: (productLabel) =>
+      `${productLabel} 결과가 생성된 횟수를 나타냅니다.`,
   },
   4: {
     title: "결과 확인",
-    description:
-      "사용자가 AI NCS 자소서 코칭 결과 화면을 확인한 횟수를 나타냅니다.",
+    description: (productLabel) =>
+      `사용자가 ${productLabel} 결과 화면을 확인한 횟수를 나타냅니다.`,
   },
 };
 
-export function FunnelList({ items }: FunnelListProps) {
+export function FunnelList({
+  items,
+  title,
+  description,
+  productLabel,
+}: FunnelListProps) {
   return (
     <section className={styles.wrap}>
       <header className={styles.header}>
-        <h2>AI NCS 자소서 코칭 전환 퍼널</h2>
-        <p>방문부터 결과 확인까지 유저의 이탈률을 봅니다.</p>
+        <h2>{title}</h2>
+        <p>{description}</p>
       </header>
       <div className={styles.list}>
         {items.map((item) => (
@@ -48,7 +55,7 @@ export function FunnelList({ items }: FunnelListProps) {
               <span className={styles.step}>{item.step}</span>
               <span className={styles.labelCell}>
                 <strong>{item.label}</strong>
-                {funnelHelps[item.step] ? (
+                {funnelHelpTemplates[item.step] ? (
                   <span className={styles.helpWrap}>
                     <button
                       type="button"
@@ -63,8 +70,12 @@ export function FunnelList({ items }: FunnelListProps) {
                       id={`funnel-help-${item.step}`}
                       role="tooltip"
                     >
-                      <b>{funnelHelps[item.step].title}</b>
-                      <span>{funnelHelps[item.step].description}</span>
+                      <b>{funnelHelpTemplates[item.step].title}</b>
+                      <span>
+                        {funnelHelpTemplates[item.step].description(
+                          productLabel,
+                        )}
+                      </span>
                     </span>
                   </span>
                 ) : null}

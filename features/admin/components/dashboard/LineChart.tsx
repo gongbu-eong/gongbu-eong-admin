@@ -22,6 +22,7 @@ type LineChartProps = {
   series: Series[];
   maxValue: number;
   legends?: Array<{ label: string; color: string }>;
+  valueSuffix?: string;
 };
 
 const chartWidth = 754;
@@ -47,6 +48,15 @@ function toPoint(
   return { x, y };
 }
 
+function formatChartValue(value: number, suffix: string) {
+  const formatted =
+    suffix === "%"
+      ? value.toFixed(1).replace(/\.0$/, "")
+      : value.toLocaleString("ko-KR");
+
+  return `${formatted}${suffix}`;
+}
+
 type SelectedPointGroup = {
   pointLabel: string;
   activeSeriesIndex: number;
@@ -67,6 +77,7 @@ export function LineChart({
   series,
   maxValue,
   legends,
+  valueSuffix = "건",
 }: LineChartProps) {
   const svgRef = useRef<SVGSVGElement | null>(null);
   const [selectedPoint, setSelectedPoint] = useState<SelectedPointGroup | null>(
@@ -270,7 +281,10 @@ export function LineChart({
                         tabIndex={0}
                       >
                         <title>
-                          {`${seriesLabel} ${point.source.label}: ${point.source.value.toLocaleString("ko-KR")}건`}
+                          {`${seriesLabel} ${point.source.label}: ${formatChartValue(
+                            point.source.value,
+                            valueSuffix,
+                          )}`}
                         </title>
                       </circle>
                       {showStaticLabels ? (
@@ -286,7 +300,7 @@ export function LineChart({
                               fontWeight="400"
                               textAnchor={labelProps.textAnchor}
                             >
-                              {point.source.value.toLocaleString("ko-KR")}
+                              {formatChartValue(point.source.value, valueSuffix)}
                             </text>
                           );
                         })()
@@ -324,7 +338,7 @@ export function LineChart({
                     {item.label}
                   </span>
                   <span className={styles.tooltipValue}>
-                    {item.value.toLocaleString("ko-KR")}건
+                    {formatChartValue(item.value, valueSuffix)}
                   </span>
                 </span>
               ))}

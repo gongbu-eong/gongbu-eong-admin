@@ -2,6 +2,7 @@ import { AdminLayout } from "@/features/admin/components/AdminLayout";
 import { AdminCard } from "@/features/admin/components/common/AdminCard";
 import { BannerClickList } from "@/features/admin/components/dashboard/BannerClickList";
 import { ChannelList } from "@/features/admin/components/dashboard/ChannelList";
+import { DashboardProductSelect } from "@/features/admin/components/dashboard/DashboardProductSelect";
 import { FunnelList } from "@/features/admin/components/dashboard/FunnelList";
 import { LineChart } from "@/features/admin/components/dashboard/LineChart";
 import { MetricCard } from "@/features/admin/components/dashboard/MetricCard";
@@ -36,16 +37,22 @@ function getNiceStep(value: number) {
   return niceNormalized * magnitude;
 }
 
+const percentScale = {
+  maxValue: 100,
+  yLabels: ["100%", "75%", "50%", "25%", "0%"],
+};
+
 type AdminDashboardPageProps = {
   selectedChannel?: string | null;
+  selectedProduct?: string | null;
 };
 
 export async function AdminDashboardPage({
   selectedChannel,
+  selectedProduct,
 }: AdminDashboardPageProps = {}) {
   const {
     channels,
-    coachingTrend,
     funnelItems,
     metrics,
     bannerClicks,
@@ -55,11 +62,17 @@ export async function AdminDashboardPage({
     screenInflowTotal,
     selectedChannelKey,
     selectedChannelLabel,
+    selectedProductKey,
+    selectedProductLabel,
+    productOptions,
+    productFunnelTitle,
+    productFunnelDescription,
+    productRateTrend,
+    productRateTrendTitle,
     signupTrend,
     visitorTrend,
-  } = await getDashboardData({ selectedChannel });
-  const visitorScale = createChartScale([visitorTrend]);
-  const coachingSignupScale = createChartScale([coachingTrend, signupTrend]);
+  } = await getDashboardData({ selectedChannel, selectedProduct });
+  const visitorSignupScale = createChartScale([visitorTrend, signupTrend]);
 
   return (
     <AdminLayout
@@ -67,6 +80,13 @@ export async function AdminDashboardPage({
       title="대시보드"
       description="오늘의 주요 지표를 확인해보세요."
     >
+      <div className={styles.dashboardToolbar}>
+        <DashboardProductSelect
+          options={productOptions}
+          selectedProduct={selectedProductKey}
+        />
+      </div>
+
       <section className={styles.metrics} aria-label="주요 지표">
         {metrics.map((metric) => (
           <MetricCard key={metric.label} metric={metric} />
@@ -76,48 +96,54 @@ export async function AdminDashboardPage({
       <section className={styles.chartGrid}>
         <AdminCard className={styles.chartCard}>
           <LineChart
-            title="방문자 추이"
+            title="방문자 및 신규 가입 추이"
             subtitle="최근 7일"
-            yLabels={visitorScale.yLabels}
+            yLabels={visitorSignupScale.yLabels}
+            legends={[
+              { label: "방문자", color: "#2f7ff0" },
+              { label: "전체 신규 가입", color: "#ffb000" },
+            ]}
             series={[
               {
                 label: "방문자",
                 color: "#2f7ff0",
                 data: visitorTrend,
               },
-            ]}
-            maxValue={visitorScale.maxValue}
-          />
-        </AdminCard>
-        <AdminCard className={styles.chartCard}>
-          <LineChart
-            title="AI NCS 자소서 코칭 · 신규 가입"
-            subtitle="최근 7일"
-            yLabels={coachingSignupScale.yLabels}
-            legends={[
-              { label: "AI NCS 자소서 코칭", color: "#20bf7a" },
-              { label: "신규 가입", color: "#ffb000" },
-            ]}
-            series={[
               {
-                label: "AI NCS 자소서 코칭",
-                color: "#20bf7a",
-                data: coachingTrend,
-              },
-              {
-                label: "신규 가입",
+                label: "전체 신규 가입",
                 color: "#ffb000",
                 data: signupTrend,
               },
             ]}
-            maxValue={coachingSignupScale.maxValue}
+            maxValue={visitorSignupScale.maxValue}
+          />
+        </AdminCard>
+        <AdminCard className={styles.chartCard}>
+          <LineChart
+            title={productRateTrendTitle}
+            subtitle="최근 7일"
+            yLabels={percentScale.yLabels}
+            series={[
+              {
+                label: productRateTrendTitle.replace(" 추이", ""),
+                color: "#20bf7a",
+                data: productRateTrend,
+              },
+            ]}
+            maxValue={percentScale.maxValue}
+            valueSuffix="%"
           />
         </AdminCard>
       </section>
 
       <section className={styles.lowerGrid}>
         <AdminCard className={styles.funnelCard}>
-          <FunnelList items={funnelItems} />
+          <FunnelList
+            items={funnelItems}
+            title={productFunnelTitle}
+            description={productFunnelDescription}
+            productLabel={selectedProductLabel}
+          />
         </AdminCard>
         <AdminCard className={styles.bannerCard}>
           <BannerClickList items={bannerClicks} total={bannerClickTotal} />

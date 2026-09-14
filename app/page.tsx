@@ -3,11 +3,16 @@ import { AdminDashboardPage } from "@/features/admin/components/AdminDashboardPa
 export const dynamic = "force-dynamic";
 
 type PageProps = {
-  searchParams?: Promise<{ channel?: string }>;
+  searchParams?: Promise<{ channel?: string; product?: string }>;
 };
 
 export default async function Page({ searchParams }: PageProps) {
   const params = await searchParams;
 
-  return <AdminDashboardPage selectedChannel={params?.channel} />;
+  return (
+    <AdminDashboardPage
+      selectedChannel={params?.channel}
+      selectedProduct={params?.product}
+    />
+  );
 }

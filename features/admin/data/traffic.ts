@@ -20,11 +20,28 @@ export type TrafficDailyChannelRow = {
   total: number;
 };
 
+export type TrafficScreenInflow = {
+  key: string;
+  label: string;
+};
+
+export type TrafficDailyScreenInflowRow = {
+  date: string;
+  counts: Record<string, number>;
+  total: number;
+};
+
 export type TrafficBannerClick = {
   key: string;
   label: string;
   clicks: number;
   uniqueClicks: number;
+};
+
+export type TrafficDailyBannerClickRow = {
+  date: string;
+  counts: Record<string, number>;
+  total: number;
 };
 
 export type TrafficData = {
@@ -37,7 +54,10 @@ export type TrafficData = {
   channels: TrafficChannel[];
   trendSeries: TrafficTrendSeries[];
   dailyRows: TrafficDailyChannelRow[];
+  screenInflows: TrafficScreenInflow[];
+  dailyScreenRows: TrafficDailyScreenInflowRow[];
   bannerClicks: TrafficBannerClick[];
+  dailyBannerClickRows: TrafficDailyBannerClickRow[];
   yLabels: string[];
   maxValue: number;
   totalVisitors: number;

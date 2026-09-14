@@ -467,7 +467,7 @@
   top: 84px;
   bottom: 16px;
   width: calc(100% - 32px);
-  overflow-x: hidden;
+  overflow-x: auto;
   overflow-y: auto;
   border-radius: 5px;
   color: var(--admin-muted);
@@ -540,9 +540,9 @@
   display: grid;
   grid-template-columns:
     minmax(74px, 0.8fr)
-    repeat(5, minmax(86px, 1fr))
+    repeat(var(--metric-columns), minmax(104px, 1fr))
     minmax(86px, 1fr);
-  width: 100%;
+  min-width: calc(178px + (var(--metric-columns) * 104px));
   align-items: center;
   min-height: 46px;
   text-align: center;

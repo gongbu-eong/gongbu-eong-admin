@@ -60,6 +60,11 @@ export type ScreenInflowItem = {
   fill: number;
 };
 
+export type DashboardProductOption = {
+  key: string;
+  label: string;
+};
+
 export type WorkItem = {
   title: string;
   subtitle: string;
