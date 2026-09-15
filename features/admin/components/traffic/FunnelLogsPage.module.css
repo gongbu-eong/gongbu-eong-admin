@@ -14,10 +14,10 @@
 .filters {
   display: grid;
   grid-template-columns:
-    minmax(140px, 170px)
-    minmax(140px, 170px)
     minmax(150px, 180px)
     minmax(150px, 180px)
+    minmax(140px, 170px)
+    minmax(140px, 170px)
     minmax(220px, 1fr)
     96px;
   gap: 12px;
@@ -223,6 +223,11 @@
 .deviceMobile {
   background: #e9f8f1;
   color: #159463;
+}
+
+.deviceUnknown {
+  background: var(--admin-surface-soft);
+  color: var(--admin-muted);
 }
 
 .emptyCell {

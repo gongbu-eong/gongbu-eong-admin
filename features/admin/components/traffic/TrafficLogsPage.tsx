@@ -14,7 +14,24 @@ const channelOptions: Array<{ label: string; value: TrafficLogChannelFilter }> =
   { label: "블로그", value: "blog" },
   { label: "스레드", value: "threads" },
   { label: "검색", value: "search" },
+  { label: "페이지 이동", value: "page_move" },
   { label: "직접유입", value: "direct" },
+];
+
+const screenOptions = [
+  { label: "전체 화면", value: "all" },
+  { label: "홈", value: "home" },
+  { label: "공고 목록", value: "jobs" },
+  { label: "공고 상세", value: "job_detail" },
+  { label: "AI 도구", value: "ai_tools" },
+  { label: "AI NCS 자소서 코칭", value: "coaching" },
+  { label: "AI NCS 면접 코칭", value: "interview_coaching" },
+  { label: "강약점", value: "diagnosis" },
+  { label: "커뮤니티", value: "community" },
+  { label: "캘린더", value: "calendar" },
+  { label: "마이페이지", value: "my" },
+  { label: "로그인", value: "login" },
+  { label: "기타", value: "other" },
 ];
 
 type TrafficLogsPageProps = {
@@ -34,6 +51,7 @@ function createQuery(
   params.set("startDate", data.startDate);
   params.set("endDate", data.endDate);
   if (data.channel !== "all") params.set("channel", data.channel);
+  if (data.screen !== "all") params.set("screen", data.screen);
   if (data.keyword) params.set("keyword", data.keyword);
   if (page > 1) params.set("page", String(page));
 
@@ -92,6 +110,16 @@ export async function TrafficLogsPage({ filters }: TrafficLogsPageProps) {
               <span>채널</span>
               <select name="channel" defaultValue={data.channel}>
                 {channelOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className={styles.selectField}>
+              <span>화면</span>
+              <select name="screen" defaultValue={data.screen}>
+                {screenOptions.map((option) => (
                   <option key={option.value} value={option.value}>
                     {option.label}
                   </option>

@@ -38,13 +38,6 @@ function createDailyGridStyle(metricCount: number) {
   return { "--metric-columns": metricCount } as CSSProperties;
 }
 
-function createScreenGridStyle(metricCount: number) {
-  return {
-    "--metric-columns": metricCount,
-    "--metric-column-width": "148px",
-  } as CSSProperties;
-}
-
 type TrafficSourcePageProps = {
   filters?: TrafficQuery;
 };
@@ -204,74 +197,6 @@ export async function TrafficSourcePage({ filters }: TrafficSourcePageProps) {
                 {data.trendSeries.map((series) => (
                   <span key={series.label}>
                     {formatCount(row.counts[series.label] || 0)}건
-                  </span>
-                ))}
-                <strong>{formatCount(row.total)}건</strong>
-              </div>
-            ))}
-          </div>
-        </AdminCard>
-
-        <AdminCard className={styles.dailyDetailCard}>
-          <div className={styles.dailyHeader}>
-            <h2>화면별 유입</h2>
-            <p>{data.periodValue} 기준</p>
-          </div>
-          <div className={`${styles.dailyTable} ${styles.screenDailyTable}`}>
-            <div
-              className={styles.dailyTableHeader}
-              style={createScreenGridStyle(data.screenInflows.length)}
-            >
-              <span>날짜</span>
-              {data.screenInflows.map((screen) => (
-                <span key={screen.key}>{screen.label}</span>
-              ))}
-              <span>합계</span>
-            </div>
-            {data.dailyScreenRows.map((row) => (
-              <div
-                className={styles.dailyTableRow}
-                key={row.date}
-                style={createScreenGridStyle(data.screenInflows.length)}
-              >
-                <span>{row.date}</span>
-                {data.screenInflows.map((screen) => (
-                  <span key={screen.key}>
-                    {formatCount(row.counts[screen.key] || 0)}건
-                  </span>
-                ))}
-                <strong>{formatCount(row.total)}건</strong>
-              </div>
-            ))}
-          </div>
-        </AdminCard>
-
-        <AdminCard className={styles.dailyDetailCard}>
-          <div className={styles.dailyHeader}>
-            <h2>배너/버튼 클릭</h2>
-            <p>{data.periodValue} 기준</p>
-          </div>
-          <div className={styles.dailyTable}>
-            <div
-              className={styles.dailyTableHeader}
-              style={createDailyGridStyle(data.bannerClicks.length)}
-            >
-              <span>날짜</span>
-              {data.bannerClicks.map((banner) => (
-                <span key={banner.key}>{banner.label}</span>
-              ))}
-              <span>합계</span>
-            </div>
-            {data.dailyBannerClickRows.map((row) => (
-              <div
-                className={styles.dailyTableRow}
-                key={row.date}
-                style={createDailyGridStyle(data.bannerClicks.length)}
-              >
-                <span>{row.date}</span>
-                {data.bannerClicks.map((banner) => (
-                  <span key={banner.key}>
-                    {formatCount(row.counts[banner.key] || 0)}건
                   </span>
                 ))}
                 <strong>{formatCount(row.total)}건</strong>

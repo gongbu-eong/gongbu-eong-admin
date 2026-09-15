@@ -15,6 +15,9 @@ type DashboardData = {
   coachingTrend: LinePoint[];
   signupTrend: LinePoint[];
   productRateTrend: LinePoint[];
+  productVisitTrend: LinePoint[];
+  productStartTrend: LinePoint[];
+  productCompleteTrend: LinePoint[];
   funnelItems: FunnelItem[];
   channels: ChannelItem[];
   channelTotal: string;
@@ -26,6 +29,9 @@ type DashboardData = {
   selectedChannelLabel: string;
   selectedProductKey: string;
   selectedProductLabel: string;
+  dashboardStartDate: string;
+  dashboardEndDate: string;
+  dashboardPeriodLabel: string;
   productOptions: DashboardProductOption[];
   productFunnelTitle: string;
   productFunnelDescription: string;
@@ -37,15 +43,25 @@ type MetricsRow = {
   yesterday_visitors: string;
   today_signups: string;
   yesterday_signups: string;
-  today_coaching_requests: string;
-  yesterday_coaching_requests: string;
-  today_coaching_completed: string;
-  yesterday_coaching_completed: string;
+};
+
+type ProductRangeMetricsRow = {
+  current_starts: string;
+  previous_starts: string;
+  current_completes: string;
+  previous_completes: string;
 };
 
 type TrendRow = {
   label: string;
   value: string;
+};
+
+type ConversionTrendRow = {
+  label: string;
+  visits: string;
+  starts: string;
+  completes: string;
 };
 
 type FunnelRow = {
@@ -77,6 +93,7 @@ const channelAssets: Record<string, Pick<ChannelItem, "icon" | "iconClass">> = {
   "블로그": { icon: "/admin-assets/channel-blog.png", iconClass: "blog" },
   "스레드": { icon: "/admin-assets/channel-threads.png", iconClass: "threads" },
   "검색": { icon: "/admin-assets/channel-search.png", iconClass: "search" },
+  "페이지 이동": { icon: "/admin-assets/channel-direct.png", iconClass: "direct" },
   "직접유입": { icon: "/admin-assets/channel-direct.png", iconClass: "direct" },
 };
 
@@ -86,6 +103,7 @@ const dashboardChannelOptions = [
   { key: "blog", label: "블로그" },
   { key: "threads", label: "스레드" },
   { key: "search", label: "검색" },
+  { key: "page_move", label: "페이지 이동" },
   { key: "direct", label: "직접유입" },
 ];
 
@@ -107,9 +125,6 @@ const bannerLabels: Record<string, string> = {
 const dashboardScreenKeys = [
   { key: "home", label: "홈" },
   { key: "job_detail", label: "공고상세" },
-  { key: "ai_tools", label: "AI 도구" },
-  { key: "coaching", label: "AI NCS 자소서 코칭" },
-  { key: "interview_coaching", label: "AI NCS 면접 코칭" },
   { key: "diagnosis", label: "강약점" },
   { key: "community", label: "커뮤니티" },
   { key: "my", label: "마이페이지" },
@@ -119,15 +134,19 @@ const dashboardScreenKeys = [
 ];
 
 const visitorKeySql =
-  "COALESCE(user_id::TEXT, anonymous_id::TEXT, ip_address::TEXT, id::TEXT)";
+  "COALESCE(user_id::TEXT, session_id::TEXT, anonymous_id::TEXT, ip_address::TEXT, id::TEXT)";
 
 const trafficEventsSql = `
   SELECT
     user_id,
     anonymous_id,
+    session_id,
     ip_address,
     id,
+    event_name,
     COALESCE(
+      NULLIF(traffic_channel, ''),
+      NULLIF(metadata->>'trafficChannel', ''),
       NULLIF(substring(path from '[?&]utm_source=([^&]+)'), ''),
       CASE
         WHEN referrer ILIKE '%gongbueong.career.co.kr%' OR referrer ILIKE '%localhost%' THEN NULL
@@ -136,10 +155,15 @@ const trafficEventsSql = `
       'direct'
     ) AS source_value,
     path AS landing_path,
+    COALESCE(NULLIF(screen_key, ''), NULLIF(metadata->>'screenKey', '')) AS screen_key,
+    COALESCE(NULLIF(canonical_path, ''), NULLIF(metadata->>'canonicalPath', '')) AS canonical_path,
+    COALESCE(NULLIF(previous_path, ''), NULLIF(metadata->>'previousPath', '')) AS previous_path,
+    ${visitorKeySql} AS visitor_key,
     referrer,
     created_at AS event_at,
     created_at
   FROM public.access_logs
+  WHERE event_name = 'page_view'
 `;
 
 const coachingStartEventsSql = `
@@ -298,6 +322,15 @@ function createDelta(current: number, previous: number) {
   };
 }
 
+function createPeriodDelta(current: number, previous: number) {
+  const delta = createDelta(current, previous);
+
+  return {
+    ...delta,
+    text: delta.text.replace("어제보다", "이전 기간 대비"),
+  };
+}
+
 function toLinePoints(rows: TrendRow[]) {
   return rows.map((row) => ({
     label: row.label,
@@ -316,6 +349,8 @@ function createFunnel(
   value: number,
   previousValue: number | null,
   baseValue: number,
+  href?: string,
+  dropHref?: string,
 ): FunnelItem {
   if (!previousValue) {
     return {
@@ -323,6 +358,7 @@ function createFunnel(
       label,
       value: `${formatCount(value)}명`,
       fill: fillPercent(value, baseValue),
+      href,
     };
   }
 
@@ -334,8 +370,10 @@ function createFunnel(
     label,
     value: `${formatCount(value)}명`,
     fill: fillPercent(value, baseValue),
+    href,
     conversion: `(전환 ${formatPercent(conversion)})`,
     drop: `(이탈 ${formatCount(dropped)}명)`,
+    dropHref,
   };
 }
 
@@ -348,6 +386,14 @@ function mapChannelLabel(source: string | null) {
   if (value.includes("instagram") || value === "ig") return "인스타그램";
   if (value.includes("blog")) return "블로그";
   if (value.includes("thread")) return "스레드";
+  if (
+    trimmed === "페이지 이동" ||
+    value.includes("page_move") ||
+    value.includes("page move") ||
+    value.includes("internal")
+  ) {
+    return "페이지 이동";
+  }
   if (
     value.includes("naver") ||
     value.includes("google") ||
@@ -372,6 +418,65 @@ function normalizeDashboardProduct(value: string | null | undefined) {
   return productAnalyticsConfigs[key]?.key || "diagnosis";
 }
 
+function toKstDateInput(date = new Date()) {
+  const formatter = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Seoul",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  });
+
+  return formatter.format(date);
+}
+
+function normalizeDateInput(value: string | null | undefined) {
+  const trimmed = (value || "").trim();
+
+  return /^\d{4}-\d{2}-\d{2}$/.test(trimmed) ? trimmed : null;
+}
+
+function createDashboardDateRange({
+  startDate,
+  endDate,
+}: {
+  startDate?: string | null;
+  endDate?: string | null;
+} = {}) {
+  const today = toKstDateInput();
+  const normalizedStartDate = normalizeDateInput(startDate) || today;
+  const normalizedEndDate = normalizeDateInput(endDate) || today;
+  const [rangeStartDate, rangeEndDate] =
+    normalizedStartDate <= normalizedEndDate
+      ? [normalizedStartDate, normalizedEndDate]
+      : [normalizedEndDate, normalizedStartDate];
+
+  return {
+    startDate: rangeStartDate,
+    endDate: rangeEndDate,
+    label:
+      rangeStartDate === rangeEndDate
+        ? rangeStartDate
+        : `${rangeStartDate} ~ ${rangeEndDate}`,
+  };
+}
+
+const dashboardRangeSql = `
+  WITH input_range AS (
+    SELECT $1::date AS requested_start, $2::date AS requested_end
+  ),
+  ranges AS (
+    SELECT
+      LEAST(requested_start, requested_end)::timestamp AT TIME ZONE 'Asia/Seoul' AS range_start,
+      (GREATEST(requested_start, requested_end)::timestamp + INTERVAL '1 day') AT TIME ZONE 'Asia/Seoul' AS range_end,
+      (
+        LEAST(requested_start, requested_end)::timestamp
+        - ((GREATEST(requested_start, requested_end) - LEAST(requested_start, requested_end) + 1) * INTERVAL '1 day')
+      ) AT TIME ZONE 'Asia/Seoul' AS previous_start,
+      LEAST(requested_start, requested_end)::timestamp AT TIME ZONE 'Asia/Seoul' AS previous_end
+    FROM input_range
+  )
+`;
+
 function mapBannerLabel(key: string | null, name: string | null) {
   const trimmedName = name?.trim();
   if (trimmedName) return trimmedName;
@@ -385,9 +490,13 @@ function mapBannerLabel(key: string | null, name: string | null) {
 export async function getDashboardData({
   selectedChannel,
   selectedProduct,
+  startDate,
+  endDate,
 }: {
   selectedChannel?: string | null;
   selectedProduct?: string | null;
+  startDate?: string | null;
+  endDate?: string | null;
 } = {}): Promise<DashboardData> {
   const selectedChannelKey = normalizeDashboardChannel(selectedChannel);
   const selectedChannelLabel =
@@ -395,6 +504,11 @@ export async function getDashboardData({
       ?.label || "전체";
   const selectedProductKey = normalizeDashboardProduct(selectedProduct);
   const selectedProductConfig = productAnalyticsConfigs[selectedProductKey];
+  const dashboardDateRange = createDashboardDateRange({ startDate, endDate });
+  const dashboardDateParams = [
+    dashboardDateRange.startDate,
+    dashboardDateRange.endDate,
+  ];
 
   const metricsResult = await query<MetricsRow>(`
     WITH bounds AS (
@@ -409,12 +523,12 @@ export async function getDashboardData({
     )
     SELECT
       (
-        SELECT COUNT(*)
+        SELECT COUNT(DISTINCT visitor_key)
         FROM (${trafficEventsSql}) traffic_events, ranges
         WHERE event_at >= today_start AND event_at < tomorrow_start
       ) AS today_visitors,
       (
-        SELECT COUNT(*)
+        SELECT COUNT(DISTINCT visitor_key)
         FROM (${trafficEventsSql}) traffic_events, ranges
         WHERE event_at >= yesterday_start AND event_at < today_start
       ) AS yesterday_visitors,
@@ -431,27 +545,7 @@ export async function getDashboardData({
         WHERE status = 'active'
           AND COALESCE(signup_completed_at, created_at) >= yesterday_start
           AND COALESCE(signup_completed_at, created_at) < today_start
-      ) AS yesterday_signups,
-      (
-        SELECT COUNT(DISTINCT request_key)
-        FROM (${selectedProductConfig.startEventsSql}) starts, ranges
-        WHERE event_at >= today_start AND event_at < tomorrow_start
-      ) AS today_coaching_requests,
-      (
-        SELECT COUNT(DISTINCT request_key)
-        FROM (${selectedProductConfig.startEventsSql}) starts, ranges
-        WHERE event_at >= yesterday_start AND event_at < today_start
-      ) AS yesterday_coaching_requests,
-      (
-        SELECT COUNT(DISTINCT result_key)
-        FROM (${selectedProductConfig.completeEventsSql}) completes, ranges
-        WHERE event_at >= today_start AND event_at < tomorrow_start
-      ) AS today_coaching_completed,
-      (
-        SELECT COUNT(DISTINCT result_key)
-        FROM (${selectedProductConfig.completeEventsSql}) completes, ranges
-        WHERE event_at >= yesterday_start AND event_at < today_start
-      ) AS yesterday_coaching_completed
+      ) AS yesterday_signups
     FROM ranges
   `);
 
@@ -460,38 +554,73 @@ export async function getDashboardData({
   const yesterdayVisitors = numberValue(metricsRow?.yesterday_visitors);
   const todaySignups = numberValue(metricsRow?.today_signups);
   const yesterdaySignups = numberValue(metricsRow?.yesterday_signups);
-  const todayCoachingRequests = numberValue(metricsRow?.today_coaching_requests);
-  const yesterdayCoachingRequests = numberValue(
-    metricsRow?.yesterday_coaching_requests,
+  const productRangeMetricsResult = await query<ProductRangeMetricsRow>(
+    `
+      ${dashboardRangeSql}
+      SELECT
+        (
+          SELECT COUNT(DISTINCT request_key)
+          FROM (${selectedProductConfig.startEventsSql}) starts, ranges
+          WHERE event_at >= range_start AND event_at < range_end
+        ) AS current_starts,
+        (
+          SELECT COUNT(DISTINCT request_key)
+          FROM (${selectedProductConfig.startEventsSql}) starts, ranges
+          WHERE event_at >= previous_start AND event_at < previous_end
+        ) AS previous_starts,
+        (
+          SELECT COUNT(DISTINCT result_key)
+          FROM (${selectedProductConfig.completeEventsSql}) completes, ranges
+          WHERE event_at >= range_start AND event_at < range_end
+        ) AS current_completes,
+        (
+          SELECT COUNT(DISTINCT result_key)
+          FROM (${selectedProductConfig.completeEventsSql}) completes, ranges
+          WHERE event_at >= previous_start AND event_at < previous_end
+        ) AS previous_completes
+      FROM ranges
+    `,
+    dashboardDateParams,
   );
-  const todayCoachingCompleted = numberValue(
-    metricsRow?.today_coaching_completed,
+  const productRangeMetricsRow = productRangeMetricsResult.rows[0];
+  const rangeCoachingRequests = numberValue(
+    productRangeMetricsRow?.current_starts,
   );
-  const yesterdayCoachingCompleted = numberValue(
-    metricsRow?.yesterday_coaching_completed,
+  const previousRangeCoachingRequests = numberValue(
+    productRangeMetricsRow?.previous_starts,
+  );
+  const rangeCoachingCompleted = numberValue(
+    productRangeMetricsRow?.current_completes,
+  );
+  const previousRangeCoachingCompleted = numberValue(
+    productRangeMetricsRow?.previous_completes,
   );
   const todayCompletionRate =
-    todayCoachingRequests > 0
-      ? (todayCoachingCompleted / todayCoachingRequests) * 100
+    rangeCoachingRequests > 0
+      ? (rangeCoachingCompleted / rangeCoachingRequests) * 100
       : 0;
   const yesterdayCompletionRate =
-    yesterdayCoachingRequests > 0
-      ? (yesterdayCoachingCompleted / yesterdayCoachingRequests) * 100
+    previousRangeCoachingRequests > 0
+      ? (previousRangeCoachingCompleted / previousRangeCoachingRequests) * 100
       : 0;
 
   const visitorDelta = createDelta(todayVisitors, yesterdayVisitors);
   const signupDelta = createDelta(todaySignups, yesterdaySignups);
-  const coachingDelta = createDelta(
-    todayCoachingRequests,
-    yesterdayCoachingRequests,
+  const coachingDelta = createPeriodDelta(
+    rangeCoachingRequests,
+    previousRangeCoachingRequests,
   );
-  const completionDelta = createDelta(todayCompletionRate, yesterdayCompletionRate);
+  const completionDelta = createPeriodDelta(
+    todayCompletionRate,
+    yesterdayCompletionRate,
+  );
 
   const [
     visitorTrendResult,
     coachingTrendResult,
     signupTrendResult,
     productRateTrendResult,
+    productConversionTrendResult,
   ] =
     await Promise.all([
       query<TrendRow>(`
@@ -504,7 +633,7 @@ export async function getDashboardData({
         )
         SELECT
           to_char(days.day_kst, 'MM/DD') AS label,
-          COUNT(traffic_events.id) AS value
+          COUNT(DISTINCT traffic_events.visitor_key) AS value
         FROM days
         LEFT JOIN (${trafficEventsSql}) traffic_events
           ON traffic_events.event_at >= days.day_kst AT TIME ZONE 'Asia/Seoul'
@@ -563,51 +692,109 @@ export async function getDashboardData({
         GROUP BY days.day_kst
         ORDER BY days.day_kst
       `),
+      query<ConversionTrendRow>(`
+        WITH days AS (
+          SELECT generate_series(
+            date_trunc('day', NOW() AT TIME ZONE 'Asia/Seoul') - INTERVAL '6 days',
+            date_trunc('day', NOW() AT TIME ZONE 'Asia/Seoul'),
+            INTERVAL '1 day'
+          ) AS day_kst
+        ),
+        visits AS (
+          SELECT
+            days.day_kst,
+            COUNT(DISTINCT page_visits.visitor_key) AS value
+          FROM days
+          LEFT JOIN (${selectedProductConfig.pageVisitEventsSql}) page_visits
+            ON page_visits.event_at >= days.day_kst AT TIME ZONE 'Asia/Seoul'
+           AND page_visits.event_at < (days.day_kst + INTERVAL '1 day') AT TIME ZONE 'Asia/Seoul'
+          GROUP BY days.day_kst
+        ),
+        starts AS (
+          SELECT
+            days.day_kst,
+            COUNT(DISTINCT starts.request_key) AS value
+          FROM days
+          LEFT JOIN (${selectedProductConfig.startEventsSql}) starts
+            ON starts.event_at >= days.day_kst AT TIME ZONE 'Asia/Seoul'
+           AND starts.event_at < (days.day_kst + INTERVAL '1 day') AT TIME ZONE 'Asia/Seoul'
+          GROUP BY days.day_kst
+        ),
+        completes AS (
+          SELECT
+            days.day_kst,
+            COUNT(DISTINCT completes.result_key) AS value
+          FROM days
+          LEFT JOIN (${selectedProductConfig.completeEventsSql}) completes
+            ON completes.event_at >= days.day_kst AT TIME ZONE 'Asia/Seoul'
+           AND completes.event_at < (days.day_kst + INTERVAL '1 day') AT TIME ZONE 'Asia/Seoul'
+          GROUP BY days.day_kst
+        )
+        SELECT
+          to_char(days.day_kst, 'MM/DD') AS label,
+          COALESCE(visits.value, 0)::TEXT AS visits,
+          COALESCE(starts.value, 0)::TEXT AS starts,
+          COALESCE(completes.value, 0)::TEXT AS completes
+        FROM days
+        LEFT JOIN visits ON visits.day_kst = days.day_kst
+        LEFT JOIN starts ON starts.day_kst = days.day_kst
+        LEFT JOIN completes ON completes.day_kst = days.day_kst
+        ORDER BY days.day_kst
+      `),
     ]);
 
-  const funnelResult = await query<FunnelRow>(`
-    WITH bounds AS (
+  const funnelResult = await query<FunnelRow>(
+    `
+      ${dashboardRangeSql}
       SELECT
-        date_trunc('day', NOW() AT TIME ZONE 'Asia/Seoul') AT TIME ZONE 'Asia/Seoul' AS today_start,
-        (date_trunc('day', NOW() AT TIME ZONE 'Asia/Seoul') + INTERVAL '1 day') AT TIME ZONE 'Asia/Seoul' AS tomorrow_start
-    )
-    SELECT
-      (
-        SELECT COUNT(DISTINCT visitor_key)
-        FROM (${selectedProductConfig.pageVisitEventsSql}) page_visits, bounds
-        WHERE event_at >= today_start AND event_at < tomorrow_start
-      ) AS page_visits,
-      (
-        SELECT COUNT(DISTINCT request_key)
-        FROM (${selectedProductConfig.startEventsSql}) starts, bounds
-        WHERE event_at >= today_start AND event_at < tomorrow_start
-      ) AS coaching_started,
-      (
-        SELECT COUNT(DISTINCT result_key)
-        FROM (${selectedProductConfig.completeEventsSql}) completes, bounds
-        WHERE event_at >= today_start AND event_at < tomorrow_start
-      ) AS coaching_completed
-  `);
+        (
+          SELECT COUNT(DISTINCT visitor_key)
+          FROM (${selectedProductConfig.pageVisitEventsSql}) page_visits, ranges
+          WHERE event_at >= range_start AND event_at < range_end
+        ) AS page_visits,
+        (
+          SELECT COUNT(DISTINCT request_key)
+          FROM (${selectedProductConfig.startEventsSql}) starts, ranges
+          WHERE event_at >= range_start AND event_at < range_end
+        ) AS coaching_started,
+        (
+          SELECT COUNT(DISTINCT result_key)
+          FROM (${selectedProductConfig.completeEventsSql}) completes, ranges
+          WHERE event_at >= range_start AND event_at < range_end
+        ) AS coaching_completed
+    `,
+    dashboardDateParams,
+  );
 
   const funnelRow = funnelResult.rows[0];
   const pageVisits = numberValue(funnelRow?.page_visits);
   const started = numberValue(funnelRow?.coaching_started);
   const completed = numberValue(funnelRow?.coaching_completed);
   const base = Math.max(pageVisits, started, completed, 1);
+  const createFunnelHref = (step: string) => {
+    const params = new URLSearchParams({
+      product: selectedProductKey,
+      step,
+      startDate: dashboardDateRange.startDate,
+      endDate: dashboardDateRange.endDate,
+      from: "dashboard",
+    });
 
-  const channelResult = await query<ChannelRow>(`
-    WITH bounds AS (
-      SELECT
-        date_trunc('day', NOW() AT TIME ZONE 'Asia/Seoul') AT TIME ZONE 'Asia/Seoul' AS today_start,
-        (date_trunc('day', NOW() AT TIME ZONE 'Asia/Seoul') + INTERVAL '1 day') AT TIME ZONE 'Asia/Seoul' AS tomorrow_start
-    )
+    return `/traffic/funnel?${params.toString()}`;
+  };
+
+  const channelResult = await query<ChannelRow>(
+    `
+      ${dashboardRangeSql}
       SELECT
         source_value AS label,
-        COUNT(*) AS count
-      FROM (${trafficEventsSql}) traffic_events, bounds
-      WHERE event_at >= today_start AND event_at < tomorrow_start
+        COUNT(DISTINCT visitor_key) AS count
+      FROM (${trafficEventsSql}) traffic_events, ranges
+      WHERE event_at >= range_start AND event_at < range_end
       GROUP BY source_value
-  `);
+    `,
+    dashboardDateParams,
+  );
 
   const groupedChannels = new Map<string, number>();
   for (const row of channelResult.rows) {
@@ -628,12 +815,9 @@ export async function getDashboardData({
     0,
   );
 
-  const bannerClickResult = await query<BannerClickRow>(`
-    WITH bounds AS (
-      SELECT
-        date_trunc('day', NOW() AT TIME ZONE 'Asia/Seoul') AT TIME ZONE 'Asia/Seoul' AS today_start,
-        (date_trunc('day', NOW() AT TIME ZONE 'Asia/Seoul') + INTERVAL '1 day') AT TIME ZONE 'Asia/Seoul' AS tomorrow_start
-    ),
+  const bannerClickResult = await query<BannerClickRow>(
+    `
+    ${dashboardRangeSql},
     click_items AS (
       SELECT *
       FROM (VALUES
@@ -654,9 +838,9 @@ export async function getDashboardData({
         END AS item_key,
         COUNT(*) AS click_count,
         COUNT(DISTINCT COALESCE(user_id::TEXT, anonymous_id::TEXT, id::TEXT)) AS unique_count
-      FROM public.product_events, bounds
-      WHERE created_at >= today_start
-        AND created_at < tomorrow_start
+      FROM public.product_events, ranges
+      WHERE created_at >= range_start
+        AND created_at < range_end
         AND (
           event_type IN ('job_detail_bookmark_click', 'job_detail_apply_click')
           OR (
@@ -679,41 +863,43 @@ export async function getDashboardData({
     FROM click_items
     LEFT JOIN counts ON counts.item_key = click_items.item_key
     ORDER BY click_items.sort_order
-  `);
-  const screenInflowResult = await query<ScreenInflowRow>(`
-    WITH bounds AS (
+    `,
+    dashboardDateParams,
+  );
+  const screenInflowResult = await query<ScreenInflowRow>(
+    `
+    ${dashboardRangeSql},
+    normalized_events AS (
       SELECT
-        date_trunc('day', NOW() AT TIME ZONE 'Asia/Seoul') AT TIME ZONE 'Asia/Seoul' AS today_start,
-        (date_trunc('day', NOW() AT TIME ZONE 'Asia/Seoul') + INTERVAL '1 day') AT TIME ZONE 'Asia/Seoul' AS tomorrow_start
+        source_value,
+        CASE
+          WHEN screen_key IN ('home', 'job_detail', 'diagnosis', 'community', 'my', 'calendar', 'login')
+            THEN screen_key
+          WHEN split_part(landing_path, '?', 1) = '/' THEN 'home'
+          WHEN split_part(landing_path, '?', 1) ~ '^/jobs/[^/]+$' THEN 'job_detail'
+          WHEN split_part(landing_path, '?', 1) LIKE '/ai-tools/diagnosis%'
+            OR split_part(landing_path, '?', 1) LIKE '/events/diagnosis%'
+            THEN 'diagnosis'
+          WHEN split_part(landing_path, '?', 1) LIKE '/community%' THEN 'community'
+          WHEN split_part(landing_path, '?', 1) LIKE '/my%' THEN 'my'
+          WHEN split_part(landing_path, '?', 1) LIKE '/calendar%' THEN 'calendar'
+          WHEN split_part(landing_path, '?', 1) LIKE '/login%'
+            OR split_part(landing_path, '?', 1) LIKE '/auth%'
+            THEN 'login'
+          ELSE 'other'
+        END AS normalized_screen_key
+      FROM (${trafficEventsSql}) traffic_events, ranges
+      WHERE event_at >= range_start AND event_at < range_end
     )
     SELECT
       source_value AS channel_source,
-      CASE
-        WHEN split_part(landing_path, '?', 1) = '/' THEN 'home'
-        WHEN split_part(landing_path, '?', 1) = '/jobs'
-          OR split_part(landing_path, '?', 1) ~ '^/jobs/[^/]+$'
-          THEN 'job_detail'
-        WHEN split_part(landing_path, '?', 1) LIKE '/ai-tools/interview-coaching%' THEN 'interview_coaching'
-        WHEN split_part(landing_path, '?', 1) LIKE '/ai-tools/coaching%' THEN 'coaching'
-        WHEN split_part(landing_path, '?', 1) LIKE '/ai-tools/diagnosis%'
-          OR split_part(landing_path, '?', 1) LIKE '/events/diagnosis%'
-          THEN 'diagnosis'
-        WHEN split_part(landing_path, '?', 1) = '/ai-tools'
-          OR split_part(landing_path, '?', 1) LIKE '/ai-tools/job-tools%'
-          THEN 'ai_tools'
-        WHEN split_part(landing_path, '?', 1) LIKE '/community%' THEN 'community'
-        WHEN split_part(landing_path, '?', 1) LIKE '/my%' THEN 'my'
-        WHEN split_part(landing_path, '?', 1) LIKE '/calendar%' THEN 'calendar'
-        WHEN split_part(landing_path, '?', 1) LIKE '/login%'
-          OR split_part(landing_path, '?', 1) LIKE '/auth%'
-          THEN 'login'
-        ELSE 'other'
-      END AS screen_key,
+      normalized_screen_key AS screen_key,
       COUNT(*) AS inflow_count
-    FROM (${trafficEventsSql}) traffic_events, bounds
-    WHERE event_at >= today_start AND event_at < tomorrow_start
-    GROUP BY source_value, screen_key
-  `);
+    FROM normalized_events
+    GROUP BY source_value, normalized_screen_key
+    `,
+    dashboardDateParams,
+  );
   const bannerClickRows = bannerClickResult.rows;
   const maxBannerClickCount = Math.max(
     ...bannerClickRows.map((row) => numberValue(row.click_count)),
@@ -750,6 +936,9 @@ export async function getDashboardData({
   const createDashboardHref = (channelKey: string) => {
     const params = new URLSearchParams();
 
+    params.set("startDate", dashboardDateRange.startDate);
+    params.set("endDate", dashboardDateRange.endDate);
+
     if (channelKey !== "all") {
       params.set("channel", channelKey);
     }
@@ -761,6 +950,19 @@ export async function getDashboardData({
     const queryString = params.toString();
 
     return queryString ? `/?${queryString}` : "/";
+  };
+  const createDatedLogHref = (
+    path: string,
+    params: Record<string, string>,
+  ) => {
+    const searchParams = new URLSearchParams({
+      ...params,
+      startDate: dashboardDateRange.startDate,
+      endDate: dashboardDateRange.endDate,
+      from: "dashboard",
+    });
+
+    return `${path}?${searchParams.toString()}`;
   };
 
   return {
@@ -780,7 +982,7 @@ export async function getDashboardData({
       },
       {
         label: selectedProductConfig.metricLabel,
-        value: formatCount(todayCoachingRequests),
+        value: formatCount(rangeCoachingRequests),
         delta: coachingDelta.text,
         trend: coachingDelta.trend,
       },
@@ -795,10 +997,38 @@ export async function getDashboardData({
     coachingTrend: toLinePoints(coachingTrendResult.rows),
     signupTrend: toLinePoints(signupTrendResult.rows),
     productRateTrend: toLinePoints(productRateTrendResult.rows),
+    productVisitTrend: productConversionTrendResult.rows.map((row) => ({
+      label: row.label,
+      value: numberValue(row.visits),
+    })),
+    productStartTrend: productConversionTrendResult.rows.map((row) => ({
+      label: row.label,
+      value: numberValue(row.starts),
+    })),
+    productCompleteTrend: productConversionTrendResult.rows.map((row) => ({
+      label: row.label,
+      value: numberValue(row.completes),
+    })),
     funnelItems: [
-      createFunnel(1, "방문", pageVisits, null, base),
-      createFunnel(2, selectedProductConfig.startStepLabel, started, pageVisits, base),
-      createFunnel(3, selectedProductConfig.completeStepLabel, completed, started, base),
+      createFunnel(1, "방문", pageVisits, null, base, createFunnelHref("visit")),
+      createFunnel(
+        2,
+        selectedProductConfig.startStepLabel,
+        started,
+        pageVisits,
+        base,
+        createFunnelHref("start"),
+        createFunnelHref("visit_drop"),
+      ),
+      createFunnel(
+        3,
+        selectedProductConfig.completeStepLabel,
+        completed,
+        started,
+        base,
+        createFunnelHref("complete"),
+        createFunnelHref("start_drop"),
+      ),
     ],
     channels: [
       {
@@ -807,7 +1037,8 @@ export async function getDashboardData({
         value: "100%",
         count: `(${formatCount(totalChannelCount)}건)`,
         fill: 100,
-        emoji: "🌐",
+        icon: channelAssets["직접유입"].icon,
+        iconClass: channelAssets["직접유입"].iconClass,
         href: createDashboardHref("all"),
       },
       ...sortedChannels.map(([label, count]) => {
@@ -838,6 +1069,9 @@ export async function getDashboardData({
       count: `${formatCount(numberValue(row.click_count))}건`,
       uniqueCount: `${formatCount(numberValue(row.unique_count))}명`,
       fill: fillPercent(numberValue(row.click_count), maxBannerClickCount),
+      href: createDatedLogHref("/traffic/banner-clicks", {
+        bannerKey: row.banner_key || "unknown",
+      }),
     })),
     bannerClickTotal: formatCount(totalBannerClickCount),
     screenInflows: dashboardScreenKeys.map((screen) => {
@@ -848,6 +1082,7 @@ export async function getDashboardData({
         label: screen.label,
         count: `${formatCount(count)}건`,
         fill: fillPercent(count, maxScreenInflowCount),
+        href: createDatedLogHref("/traffic/logs", { screen: screen.key }),
       };
     }),
     screenInflowTotal: formatCount(totalScreenInflowCount),
@@ -855,6 +1090,9 @@ export async function getDashboardData({
     selectedChannelLabel,
     selectedProductKey,
     selectedProductLabel: selectedProductConfig.label,
+    dashboardStartDate: dashboardDateRange.startDate,
+    dashboardEndDate: dashboardDateRange.endDate,
+    dashboardPeriodLabel: dashboardDateRange.label,
     productOptions: dashboardProductOptions,
     productFunnelTitle: selectedProductConfig.funnelTitle,
     productFunnelDescription: selectedProductConfig.funnelDescription,

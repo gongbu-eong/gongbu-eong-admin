@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { ScreenInflowItem } from "@/features/admin/data/dashboard";
 import styles from "./ScreenClickList.module.css";
 
@@ -16,22 +17,34 @@ export function ScreenClickList({
     <section className={styles.wrap}>
       <header className={styles.header}>
         <div>
-          <h2>화면별 유입</h2>
+          <h2>페이지 이동 · 화면별 조회</h2>
           <p>{channelLabel} 기준 · 총 {total}건</p>
         </div>
       </header>
       <div className={styles.list}>
-        {items.map((item) => (
-          <div className={styles.item} key={item.key}>
-            <div className={styles.top}>
-              <strong>{item.label}</strong>
-              <b>{item.count}</b>
+        {items.map((item) => {
+          const content = (
+            <>
+              <div className={styles.top}>
+                <strong>{item.label}</strong>
+                <b>{item.count}</b>
+              </div>
+              <div className={styles.track}>
+                <i style={{ width: `${item.fill}%` }} />
+              </div>
+            </>
+          );
+
+          return item.href ? (
+            <Link className={styles.item} href={item.href} key={item.key}>
+              {content}
+            </Link>
+          ) : (
+            <div className={styles.item} key={item.key}>
+              {content}
             </div>
-            <div className={styles.track}>
-              <i style={{ width: `${item.fill}%` }} />
-            </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </section>
   );

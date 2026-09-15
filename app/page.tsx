@@ -3,7 +3,12 @@ import { AdminDashboardPage } from "@/features/admin/components/AdminDashboardPa
 export const dynamic = "force-dynamic";
 
 type PageProps = {
-  searchParams?: Promise<{ channel?: string; product?: string }>;
+  searchParams?: Promise<{
+    channel?: string;
+    product?: string;
+    startDate?: string;
+    endDate?: string;
+  }>;
 };
 
 export default async function Page({ searchParams }: PageProps) {
@@ -13,6 +18,8 @@ export default async function Page({ searchParams }: PageProps) {
     <AdminDashboardPage
       selectedChannel={params?.channel}
       selectedProduct={params?.product}
+      startDate={params?.startDate}
+      endDate={params?.endDate}
     />
   );
 }

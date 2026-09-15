@@ -14,12 +14,127 @@
   font-weight: 700;
 }
 
+.insightPanel,
+.analysisPanel {
+  width: 100%;
+  margin-top: 16px;
+}
+
+.insightHeader,
+.analysisHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 2px 4px 12px;
+}
+
+.insightHeader h2,
+.analysisHeader h2 {
+  margin: 0;
+  color: var(--admin-muted);
+  font-size: 18px;
+  font-weight: 800;
+}
+
+.insightHeader p,
+.analysisHeader p {
+  margin: 6px 0 0;
+  color: var(--admin-muted);
+  font-size: 13px;
+}
+
+.analysisControls {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 14px;
+  width: 100%;
+  margin: 0 0 14px;
+  padding: 14px 16px;
+  border: 1px solid #e3e9f3;
+  border-radius: 14px;
+  background: #fff;
+}
+
+.dateRangeForm {
+  display: flex;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.dateRangeForm label {
+  display: grid;
+  gap: 5px;
+  color: var(--admin-muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.dateRangeForm input {
+  height: 44px;
+  min-width: 148px;
+  border: 1px solid #d8e0ed;
+  border-radius: 10px;
+  padding: 0 12px;
+  color: var(--admin-text);
+  font-size: 14px;
+  font-weight: 700;
+  background: #fff;
+}
+
+.dateRangeForm button {
+  height: 44px;
+  border: 0;
+  border-radius: 10px;
+  padding: 0 16px;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 800;
+  background: #2f7ff0;
+  cursor: pointer;
+}
+
+.productSelect {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: var(--admin-muted);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.productSelect > span:first-child {
+  white-space: nowrap;
+}
+
+.productSelect > span:last-child {
+  min-width: 260px;
+}
+
+.analysisGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  width: 100%;
+  margin-top: 16px;
+}
+
 .metrics {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 16px;
   width: 100%;
   margin-top: 12px;
+}
+
+.productMetrics {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  width: 100%;
 }
 
 .chartGrid {
@@ -27,7 +142,7 @@
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 16px;
   width: 100%;
-  margin-top: 16px;
+  margin-top: 0;
 }
 
 .chartCard {
@@ -64,26 +179,57 @@
   }
 
   .chartGrid,
+  .analysisGrid,
   .lowerGrid {
     grid-template-columns: 1fr;
   }
 }
 
 @media (max-width: 640px) {
-  .dashboardToolbar {
+  .dashboardToolbar,
+  .insightHeader,
+  .analysisHeader {
+    flex-direction: column;
+    align-items: stretch;
     justify-content: stretch;
   }
 
-  .dashboardToolbar label {
+  .dashboardToolbar label,
+  .insightHeader label,
+  .analysisHeader label {
     width: 100%;
     justify-content: space-between;
   }
 
-  .dashboardToolbar label > span:last-child {
+  .analysisControls,
+  .productSelect,
+  .dateRangeForm,
+  .dateRangeForm label,
+  .dateRangeForm input,
+  .dateRangeForm button {
+    width: 100%;
+  }
+
+  .productSelect {
+    align-items: stretch;
+    gap: 8px;
+  }
+
+  .productSelect > span:last-child {
+    min-width: 0;
+  }
+
+  .dashboardToolbar label > span:last-child,
+  .insightHeader label > span:last-child,
+  .analysisHeader label > span:last-child {
     width: 100%;
   }
 
   .metrics {
+    grid-template-columns: 1fr;
+  }
+
+  .productMetrics {
     grid-template-columns: 1fr;
   }
 

@@ -70,6 +70,7 @@ export type TrafficLogChannelFilter =
   | "blog"
   | "threads"
   | "search"
+  | "page_move"
   | "direct";
 
 export type TrafficQuery = {
@@ -83,6 +84,7 @@ export type TrafficLogQuery = {
   startDate?: string | null;
   endDate?: string | null;
   channel?: TrafficLogChannelFilter | string | null;
+  screen?: string | null;
   keyword?: string | null;
   page?: string | number | null;
   from?: string | null;
@@ -111,12 +113,14 @@ export type TrafficLogData = {
   startDate: string;
   endDate: string;
   channel: TrafficLogChannelFilter;
+  screen: string;
   keyword: string;
 };
 
 export type BannerClickLogQuery = {
   startDate?: string | null;
   endDate?: string | null;
+  bannerKey?: string | null;
   keyword?: string | null;
   page?: string | number | null;
   from?: string | null;
@@ -145,6 +149,59 @@ export type BannerClickLogData = {
   totalPages: number;
   page: number;
   pageSize: number;
+  startDate: string;
+  endDate: string;
+  bannerKey: string;
+  keyword: string;
+};
+
+export type FunnelProductFilter =
+  | "diagnosis"
+  | "resume_coaching"
+  | "interview_coaching";
+
+export type FunnelStepFilter =
+  | "visit"
+  | "start"
+  | "complete"
+  | "visit_drop"
+  | "start_drop";
+
+export type FunnelLogQuery = {
+  product?: FunnelProductFilter | string | null;
+  step?: FunnelStepFilter | string | null;
+  startDate?: string | null;
+  endDate?: string | null;
+  keyword?: string | null;
+  page?: string | number | null;
+};
+
+export type FunnelLogItem = {
+  id: string;
+  eventAt: string;
+  userName: string;
+  userEmail: string;
+  provider: "kakao" | "naver" | "unknown";
+  providerLabel: string;
+  anonymousId: string;
+  ipAddress: string;
+  device: "모바일" | "웹" | "알 수 없음";
+  channel: string;
+  path: string;
+  referrer: string;
+  lastAction: string;
+};
+
+export type FunnelLogData = {
+  rows: FunnelLogItem[];
+  totalCount: number;
+  totalPages: number;
+  page: number;
+  pageSize: number;
+  product: FunnelProductFilter;
+  productLabel: string;
+  step: FunnelStepFilter;
+  stepLabel: string;
   startDate: string;
   endDate: string;
   keyword: string;
@@ -180,6 +237,7 @@ export const trafficChannelColors: Record<string, string> = {
   "블로그": "#1fb573",
   "스레드": "#a54de8",
   "검색": "#f5b91e",
+  "페이지 이동": "#23a6d5",
   "직접유입": "#5a6580",
 };
 
@@ -188,5 +246,6 @@ export const trafficChannelOrder = [
   "블로그",
   "스레드",
   "검색",
+  "페이지 이동",
   "직접유입",
 ];

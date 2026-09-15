@@ -29,8 +29,10 @@ export type FunnelItem = {
   label: string;
   value: string;
   fill: number;
+  href?: string;
   conversion?: string;
   drop?: string;
+  dropHref?: string;
 };
 
 export type ChannelItem = {
@@ -51,6 +53,7 @@ export type BannerClickItem = {
   count: string;
   uniqueCount: string;
   fill: number;
+  href?: string;
 };
 
 export type ScreenInflowItem = {
@@ -58,6 +61,7 @@ export type ScreenInflowItem = {
   label: string;
   count: string;
   fill: number;
+  href?: string;
 };
 
 export type DashboardProductOption = {
@@ -85,31 +89,22 @@ export const navItems: NavItem[] = [
     key: "traffic",
     href: "/traffic",
     icon: "/admin-assets/nav-traffic.png",
+    expandable: true,
+    children: [
+      { label: "요약", key: "traffic-source", href: "/traffic" },
+      { label: "전환 퍼널", key: "traffic-funnel", href: "/traffic/funnel" },
+      { label: "유입 로그", key: "traffic-logs", href: "/traffic/logs" },
+      {
+        label: "배너/CTA 클릭",
+        key: "traffic-banner-clicks",
+        href: "/traffic/banner-clicks",
+      },
+    ],
   },
   {
     label: "회원 관리",
     key: "members",
     href: "/members",
     icon: "/admin-assets/nav-user.png",
-  },
-  {
-    label: "커뮤니티 관리",
-    key: "community",
-    href: "#",
-    icon: "/admin-assets/nav-community.png",
-    expandable: true,
-  },
-  {
-    label: "공지·알림",
-    key: "notices",
-    href: "#",
-    icon: "/admin-assets/nav-notice.png",
-    expandable: true,
-  },
-  {
-    label: "설정",
-    key: "settings",
-    href: "#",
-    icon: "/admin-assets/nav-setting.png",
   },
 ];

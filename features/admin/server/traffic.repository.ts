@@ -3,6 +3,10 @@ import {
   BannerClickLogQuery,
   CampaignPerformanceData,
   CampaignPerformanceRow,
+  FunnelLogData,
+  FunnelLogQuery,
+  FunnelProductFilter,
+  FunnelStepFilter,
   TrafficBannerClick,
   TrafficChannel,
   TrafficData,
@@ -96,6 +100,21 @@ type BannerClickLogRow = {
   user_agent: string | null;
 };
 
+type FunnelLogRow = {
+  id: string;
+  event_at: string;
+  user_name: string | null;
+  user_email: string | null;
+  provider: string | null;
+  anonymous_id: string | null;
+  ip_address: string | null;
+  user_agent: string | null;
+  channel: string | null;
+  path: string | null;
+  referrer: string | null;
+  last_action: string;
+};
+
 type CountRow = {
   count: string;
 };
@@ -152,12 +171,13 @@ const periodBoundsSql = `
 `;
 
 const visitorKeySql =
-  "COALESCE(user_id::TEXT, anonymous_id::TEXT, ip_address::TEXT, id::TEXT)";
+  "COALESCE(user_id::TEXT, session_id::TEXT, anonymous_id::TEXT, ip_address::TEXT, id::TEXT)";
 
 const trafficEventsSql = `
   SELECT
     user_id,
     anonymous_id,
+    session_id,
     ip_address,
     id,
     event_name,
@@ -165,6 +185,8 @@ const trafficEventsSql = `
     user_agent,
     path,
     COALESCE(
+      NULLIF(traffic_channel, ''),
+      NULLIF(metadata->>'trafficChannel', ''),
       NULLIF(substring(path from '[?&]utm_source=([^&]+)'), ''),
       CASE
         WHEN referrer ILIKE '%gongbueong.career.co.kr%' OR referrer ILIKE '%localhost%' THEN NULL
@@ -176,16 +198,22 @@ const trafficEventsSql = `
     COALESCE(NULLIF(substring(path from '[?&]utm_campaign=([^&]+)'), ''), '캠페인 없음') AS campaign,
     COALESCE(NULLIF(substring(path from '[?&]utm_content=([^&]+)'), ''), path, '-') AS link,
     path AS landing_path,
+    COALESCE(NULLIF(screen_key, ''), NULLIF(metadata->>'screenKey', '')) AS screen_key,
+    COALESCE(NULLIF(canonical_path, ''), NULLIF(metadata->>'canonicalPath', '')) AS canonical_path,
+    COALESCE(NULLIF(previous_path, ''), NULLIF(metadata->>'previousPath', '')) AS previous_path,
+    ${visitorKeySql} AS visitor_key,
     referrer,
     created_at AS event_at,
     created_at
   FROM public.access_logs
+  WHERE event_name = 'page_view'
 `;
 
 const campaignTrafficEventsSql = `
   SELECT
     user_id,
     anonymous_id,
+    session_id,
     ip_address,
     id,
     COALESCE(
@@ -223,6 +251,7 @@ const campaignTrafficEventsSql = `
   SELECT
     user_id,
     anonymous_id,
+    NULL::uuid AS session_id,
     ip_address,
     id,
     COALESCE(NULLIF(source, ''), NULLIF(referrer, ''), 'direct') AS source_value,
@@ -260,6 +289,135 @@ const trafficScreenDefinitions = [
   { key: "other", label: "기타" },
 ];
 
+const funnelProductOptions: Record<
+  FunnelProductFilter,
+  {
+    label: string;
+    visitWhere: string;
+    startSql: string;
+    completeSql: string;
+    startAction: string;
+    completeAction: string;
+  }
+> = {
+  diagnosis: {
+    label: "강점·성향 유형",
+    visitWhere:
+      "split_part(logs.path, '?', 1) IN ('/ai-tools/diagnosis', '/events/diagnosis')",
+    startAction: "진단 시작",
+    completeAction: "진단 완료",
+    startSql: `
+      SELECT
+        events.id::TEXT AS id,
+        COALESCE(events.user_id::TEXT, events.anonymous_id::TEXT, events.id::TEXT) AS visitor_key,
+        events.user_id,
+        events.anonymous_id,
+        events.created_at AS event_at,
+        COALESCE(NULLIF(events.properties->>'path', ''), events.current_landing_path, '-') AS path,
+        COALESCE(NULLIF(events.properties->>'previous_path', ''), events.current_referrer, '-') AS referrer,
+        COALESCE(NULLIF(events.properties->>'traffic_channel', ''), events.current_source, '직접유입') AS channel,
+        NULLIF(events.properties->>'ip_address', '') AS ip_address,
+        NULLIF(events.properties->>'user_agent', '') AS user_agent
+      FROM public.product_events events
+      WHERE events.event_type = 'diagnosis_start'
+        AND events.properties->>'action' = 'start_button_click'
+    `,
+    completeSql: `
+      SELECT
+        results.id::TEXT AS id,
+        COALESCE(results.user_id::TEXT, runs.anonymous_id::TEXT, results.id::TEXT) AS visitor_key,
+        results.user_id,
+        runs.anonymous_id,
+        COALESCE(runs.completed_at, results.created_at) AS event_at,
+        '/ai-tools/diagnosis/result' AS path,
+        COALESCE(runs.referer, '-') AS referrer,
+        '직접유입' AS channel,
+        runs.ip_address::TEXT AS ip_address,
+        runs.user_agent
+      FROM public.diagnosis_results results
+      JOIN public.diagnosis_runs runs ON runs.id = results.diagnosis_run_id
+    `,
+  },
+  resume_coaching: {
+    label: "AI NCS 자소서 코칭",
+    visitWhere: "split_part(logs.path, '?', 1) = '/ai-tools/coaching'",
+    startAction: "코칭 시작",
+    completeAction: "코칭 완료",
+    startSql: `
+      SELECT
+        requests.id::TEXT AS id,
+        COALESCE(requests.user_id::TEXT, requests.anonymous_id::TEXT, requests.id::TEXT) AS visitor_key,
+        requests.user_id,
+        requests.anonymous_id,
+        requests.created_at AS event_at,
+        '/ai-tools/coaching' AS path,
+        '-' AS referrer,
+        requests.entry_source::TEXT AS channel,
+        requests.ip_address::TEXT AS ip_address,
+        requests.user_agent
+      FROM public.resume_coaching_requests requests
+    `,
+    completeSql: `
+      SELECT
+        results.id::TEXT AS id,
+        COALESCE(requests.user_id::TEXT, requests.anonymous_id::TEXT, requests.id::TEXT) AS visitor_key,
+        requests.user_id,
+        requests.anonymous_id,
+        results.created_at AS event_at,
+        '/ai-tools/coaching/result/' || results.id::TEXT AS path,
+        '-' AS referrer,
+        requests.entry_source::TEXT AS channel,
+        requests.ip_address::TEXT AS ip_address,
+        requests.user_agent
+      FROM public.resume_coaching_results results
+      JOIN public.resume_coaching_requests requests ON requests.id = results.request_id
+    `,
+  },
+  interview_coaching: {
+    label: "AI NCS 면접 코칭",
+    visitWhere: "split_part(logs.path, '?', 1) = '/ai-tools/interview-coaching'",
+    startAction: "코칭 시작",
+    completeAction: "코칭 완료",
+    startSql: `
+      SELECT
+        sessions.id::TEXT AS id,
+        COALESCE(sessions.user_id::TEXT, sessions.anonymous_id::TEXT, sessions.id::TEXT) AS visitor_key,
+        sessions.user_id,
+        sessions.anonymous_id,
+        sessions.started_at AS event_at,
+        '/ai-tools/interview-coaching' AS path,
+        '-' AS referrer,
+        sessions.entry_source::TEXT AS channel,
+        sessions.ip_address::TEXT AS ip_address,
+        sessions.user_agent
+      FROM public.interview_coaching_sessions sessions
+    `,
+    completeSql: `
+      SELECT
+        sessions.id::TEXT AS id,
+        COALESCE(sessions.user_id::TEXT, sessions.anonymous_id::TEXT, sessions.id::TEXT) AS visitor_key,
+        sessions.user_id,
+        sessions.anonymous_id,
+        COALESCE(sessions.completed_at, sessions.updated_at, sessions.started_at) AS event_at,
+        '/ai-tools/interview-coaching/result/' || sessions.id::TEXT AS path,
+        '-' AS referrer,
+        sessions.entry_source::TEXT AS channel,
+        sessions.ip_address::TEXT AS ip_address,
+        sessions.user_agent
+      FROM public.interview_coaching_sessions sessions
+      WHERE sessions.completed_at IS NOT NULL OR sessions.result IS NOT NULL
+    `,
+  },
+};
+
+const funnelStepLabels: Record<FunnelStepFilter, string> = {
+  visit: "방문",
+  start: "시작",
+  complete: "완료",
+  visit_drop: "방문 후 이탈",
+  start_drop: "시작 후 이탈",
+};
+
 function numberValue(value: string | number | null | undefined) {
   return Number(value || 0);
 }
@@ -292,9 +450,27 @@ function normalizeLogChannel(
     value === "blog" ||
     value === "threads" ||
     value === "search" ||
+    value === "page_move" ||
     value === "direct"
     ? value
     : "all";
+}
+
+function normalizeFunnelProduct(
+  value?: FunnelLogQuery["product"],
+): FunnelProductFilter {
+  return value === "resume_coaching" || value === "interview_coaching"
+    ? value
+    : "diagnosis";
+}
+
+function normalizeFunnelStep(value?: FunnelLogQuery["step"]): FunnelStepFilter {
+  return value === "start" ||
+    value === "complete" ||
+    value === "visit_drop" ||
+    value === "start_drop"
+    ? value
+    : "visit";
 }
 
 function normalizePage(value?: TrafficLogQuery["page"]) {
@@ -305,6 +481,18 @@ function normalizePage(value?: TrafficLogQuery["page"]) {
 
 function normalizeKeyword(value?: string | null) {
   return (value || "").trim().slice(0, 100);
+}
+
+function normalizeScreenFilter(value?: string | null) {
+  const normalized = (value || "").trim();
+  if (!normalized || normalized === "all") return "all";
+  return trafficScreenDefinitions.some((screen) => screen.key === normalized)
+    ? normalized
+    : "all";
+}
+
+function normalizeBannerKey(value?: string | null) {
+  return (value || "").trim().slice(0, 120);
 }
 
 function toKstDateInput(value: Date) {
@@ -364,6 +552,14 @@ function mapChannelLabel(source: string | null) {
   if (value.includes("blog")) return "블로그";
   if (value.includes("thread")) return "스레드";
   if (
+    trimmed === "페이지 이동" ||
+    value.includes("page_move") ||
+    value.includes("page move") ||
+    value.includes("internal")
+  ) {
+    return "페이지 이동";
+  }
+  if (
     value.includes("naver") ||
     value.includes("google") ||
     value.includes("daum") ||
@@ -380,6 +576,7 @@ function mapChannelFilterToLabel(channel: TrafficLogChannelFilter) {
   if (channel === "blog") return "블로그";
   if (channel === "threads") return "스레드";
   if (channel === "search") return "검색";
+  if (channel === "page_move") return "페이지 이동";
   if (channel === "direct") return "직접유입";
   return "";
 }
@@ -471,7 +668,8 @@ async function getDailyChannelTrendRows(params: unknown[]) {
           ('블로그', 2),
           ('스레드', 3),
           ('검색', 4),
-          ('직접유입', 5)
+          ('페이지 이동', 5),
+          ('직접유입', 6)
         ) AS channel(label, sort_order)
       ),
       normalized_logs AS (
@@ -485,6 +683,11 @@ async function getDailyChannelTrendRows(params: unknown[]) {
               THEN '블로그'
             WHEN LOWER(logs.source_value) LIKE '%thread%'
               THEN '스레드'
+            WHEN logs.source_value = '페이지 이동'
+              OR LOWER(logs.source_value) LIKE '%page_move%'
+              OR LOWER(logs.source_value) LIKE '%page move%'
+              OR LOWER(logs.source_value) LIKE '%internal%'
+              THEN '페이지 이동'
             WHEN LOWER(logs.source_value) LIKE '%naver%'
               OR LOWER(logs.source_value) LIKE '%google%'
               OR LOWER(logs.source_value) LIKE '%daum%'
@@ -492,14 +695,14 @@ async function getDailyChannelTrendRows(params: unknown[]) {
               THEN '검색'
             ELSE '직접유입'
           END AS source_value,
-          logs.id
+          logs.visitor_key
         FROM days
         JOIN (${trafficEventsSql}) logs
           ON logs.event_at >= days.day_kst::timestamp AT TIME ZONE 'Asia/Seoul'
          AND logs.event_at < (days.day_kst + 1)::timestamp AT TIME ZONE 'Asia/Seoul'
       ),
       grouped AS (
-        SELECT day_kst, source_value, COUNT(*) AS count
+        SELECT day_kst, source_value, COUNT(DISTINCT visitor_key) AS count
         FROM normalized_logs
         GROUP BY day_kst, source_value
       )
@@ -549,6 +752,19 @@ async function getDailyScreenInflowRows(params: unknown[]) {
         SELECT
           days.day_kst,
           CASE
+            WHEN logs.screen_key IN (
+              'home',
+              'jobs',
+              'job_detail',
+              'ai_tools',
+              'coaching',
+              'interview_coaching',
+              'diagnosis',
+              'community',
+              'calendar',
+              'my',
+              'login'
+            ) THEN logs.screen_key
             WHEN split_part(logs.landing_path, '?', 1) = '/' THEN 'home'
             WHEN split_part(logs.landing_path, '?', 1) = '/jobs' THEN 'jobs'
             WHEN split_part(logs.landing_path, '?', 1) ~ '^/jobs/[^/]+$' THEN 'job_detail'
@@ -687,7 +903,7 @@ export async function getTrafficData(args?: TrafficQuery): Promise<TrafficData> 
   const currentResult = await query<ChannelCountRow>(
       `
         ${periodBoundsSql}
-        SELECT source_value, COUNT(*) AS count
+        SELECT source_value, COUNT(DISTINCT visitor_key) AS count
         FROM (${trafficEventsSql}) traffic_events, ranges
         WHERE event_at >= current_start
           AND event_at < current_end
@@ -698,7 +914,7 @@ export async function getTrafficData(args?: TrafficQuery): Promise<TrafficData> 
   const previousResult = await query<ChannelCountRow>(
       `
         ${periodBoundsSql}
-        SELECT source_value, COUNT(*) AS count
+        SELECT source_value, COUNT(DISTINCT visitor_key) AS count
         FROM (${trafficEventsSql}) traffic_events, ranges
         WHERE event_at >= previous_start
           AND event_at < previous_end
@@ -952,24 +1168,27 @@ export async function getTrafficLogData(
   const { startDate, endDate } = createDefaultLogDates(args);
   const channel = normalizeLogChannel(args?.channel);
   const channelLabel = mapChannelFilterToLabel(channel);
+  const screen = normalizeScreenFilter(args?.screen);
   const keyword = normalizeKeyword(args?.keyword);
   const page = normalizePage(args?.page);
   const pageSize = 20;
-  const filterParams = [startDate, endDate, channelLabel, keyword];
+  const filterParams = [startDate, endDate, channelLabel, keyword, screen];
   const baseSql = `
     WITH input AS (
       SELECT
         $1::date AS requested_start,
         $2::date AS requested_end,
         $3::text AS requested_channel,
-        $4::text AS keyword
+        $4::text AS keyword,
+        $5::text AS requested_screen
     ),
     ranges AS (
       SELECT
         (LEAST(requested_start, requested_end)::timestamp AT TIME ZONE 'Asia/Seoul') AS current_start,
         ((GREATEST(requested_start, requested_end) + 1)::timestamp AT TIME ZONE 'Asia/Seoul') AS current_end,
         requested_channel,
-        keyword
+        keyword,
+        requested_screen
       FROM input
     ),
     normalized_logs AS (
@@ -979,7 +1198,40 @@ export async function getTrafficLogData(
         logs.ip_address::text AS ip_address,
         logs.user_agent,
         logs.path,
-        logs.referrer,
+        COALESCE(NULLIF(logs.previous_path, ''), logs.referrer) AS referrer,
+        CASE
+          WHEN logs.screen_key IN (
+            'home',
+            'jobs',
+            'job_detail',
+            'ai_tools',
+            'coaching',
+            'interview_coaching',
+            'diagnosis',
+            'community',
+            'calendar',
+            'my',
+            'login'
+          ) THEN logs.screen_key
+          WHEN split_part(logs.path, '?', 1) = '/' THEN 'home'
+          WHEN split_part(logs.path, '?', 1) = '/jobs' THEN 'jobs'
+          WHEN split_part(logs.path, '?', 1) ~ '^/jobs/[^/]+$' THEN 'job_detail'
+          WHEN split_part(logs.path, '?', 1) LIKE '/ai-tools/interview-coaching%' THEN 'interview_coaching'
+          WHEN split_part(logs.path, '?', 1) LIKE '/ai-tools/coaching%' THEN 'coaching'
+          WHEN split_part(logs.path, '?', 1) LIKE '/ai-tools/diagnosis%'
+            OR split_part(logs.path, '?', 1) LIKE '/events/diagnosis%'
+            THEN 'diagnosis'
+          WHEN split_part(logs.path, '?', 1) = '/ai-tools'
+            OR split_part(logs.path, '?', 1) LIKE '/ai-tools/job-tools%'
+            THEN 'ai_tools'
+          WHEN split_part(logs.path, '?', 1) LIKE '/community%' THEN 'community'
+          WHEN split_part(logs.path, '?', 1) LIKE '/calendar%' THEN 'calendar'
+          WHEN split_part(logs.path, '?', 1) LIKE '/my%' THEN 'my'
+          WHEN split_part(logs.path, '?', 1) LIKE '/login%'
+            OR split_part(logs.path, '?', 1) LIKE '/auth%'
+            THEN 'login'
+          ELSE 'other'
+        END AS screen_key,
         CASE
           WHEN LOWER(source_value) LIKE '%instagram%'
             OR LOWER(source_value) = 'ig'
@@ -988,6 +1240,11 @@ export async function getTrafficLogData(
             THEN '블로그'
           WHEN LOWER(source_value) LIKE '%thread%'
             THEN '스레드'
+          WHEN source_value = '페이지 이동'
+            OR LOWER(source_value) LIKE '%page_move%'
+            OR LOWER(source_value) LIKE '%page move%'
+            OR LOWER(source_value) LIKE '%internal%'
+            THEN '페이지 이동'
           WHEN LOWER(source_value) LIKE '%naver%'
             OR LOWER(source_value) LIKE '%google%'
             OR LOWER(source_value) LIKE '%daum%'
@@ -1024,6 +1281,7 @@ export async function getTrafficLogData(
       FROM normalized_logs
       CROSS JOIN ranges
       WHERE (ranges.requested_channel = '' OR normalized_logs.source_value = ranges.requested_channel)
+        AND (ranges.requested_screen = 'all' OR normalized_logs.screen_key = ranges.requested_screen)
         AND (
           ranges.keyword = ''
           OR normalized_logs.path ILIKE '%' || ranges.keyword || '%'
@@ -1051,7 +1309,7 @@ export async function getTrafficLogData(
       SELECT *
       FROM filtered_logs
       ORDER BY visited_at DESC, id DESC
-      LIMIT $5::integer OFFSET $6::integer
+      LIMIT $6::integer OFFSET $7::integer
     `,
     [...filterParams, pageSize, (effectivePage - 1) * pageSize],
   );
@@ -1077,6 +1335,209 @@ export async function getTrafficLogData(
     startDate,
     endDate,
     channel,
+    screen,
+    keyword,
+  };
+}
+
+export async function getFunnelLogData(
+  args?: FunnelLogQuery,
+): Promise<FunnelLogData> {
+  const { startDate, endDate } = createDefaultLogDates(args);
+  const product = normalizeFunnelProduct(args?.product);
+  const step = normalizeFunnelStep(args?.step);
+  const keyword = normalizeKeyword(args?.keyword);
+  const page = normalizePage(args?.page);
+  const pageSize = 20;
+  const productConfig = funnelProductOptions[product];
+  const filterParams = [startDate, endDate, keyword, step];
+  const baseSql = `
+    WITH input AS (
+      SELECT
+        $1::date AS requested_start,
+        $2::date AS requested_end,
+        $3::text AS keyword,
+        $4::text AS requested_step
+    ),
+    ranges AS (
+      SELECT
+        (LEAST(requested_start, requested_end)::timestamp AT TIME ZONE 'Asia/Seoul') AS current_start,
+        ((GREATEST(requested_start, requested_end) + 1)::timestamp AT TIME ZONE 'Asia/Seoul') AS current_end,
+        keyword,
+        requested_step
+      FROM input
+    ),
+    visits AS (
+      SELECT
+        logs.id::TEXT AS id,
+        logs.visitor_key,
+        logs.user_id,
+        logs.anonymous_id,
+        logs.event_at,
+        logs.landing_path AS path,
+        COALESCE(NULLIF(logs.previous_path, ''), logs.referrer, '-') AS referrer,
+        logs.source_value AS channel,
+        logs.ip_address::TEXT AS ip_address,
+        logs.user_agent
+      FROM (${trafficEventsSql}) logs, ranges
+      WHERE logs.event_at >= ranges.current_start
+        AND logs.event_at < ranges.current_end
+        AND ${productConfig.visitWhere}
+    ),
+    starts AS (
+      SELECT start_events.*
+      FROM (${productConfig.startSql}) start_events, ranges
+      WHERE start_events.event_at >= ranges.current_start
+        AND start_events.event_at < ranges.current_end
+    ),
+    completes AS (
+      SELECT complete_events.*
+      FROM (${productConfig.completeSql}) complete_events, ranges
+      WHERE complete_events.event_at >= ranges.current_start
+        AND complete_events.event_at < ranges.current_end
+    ),
+    selected_events AS (
+      SELECT visits.*, '방문' AS last_action
+      FROM visits, ranges
+      WHERE ranges.requested_step = 'visit'
+      UNION ALL
+      SELECT starts.*, $5::text AS last_action
+      FROM starts, ranges
+      WHERE ranges.requested_step = 'start'
+      UNION ALL
+      SELECT completes.*, $6::text AS last_action
+      FROM completes, ranges
+      WHERE ranges.requested_step = 'complete'
+      UNION ALL
+      SELECT visits.*, '방문 후 이탈' AS last_action
+      FROM visits
+      CROSS JOIN ranges
+      LEFT JOIN starts ON starts.visitor_key = visits.visitor_key
+      WHERE ranges.requested_step = 'visit_drop'
+        AND starts.visitor_key IS NULL
+      UNION ALL
+      SELECT starts.*, '시작 후 이탈' AS last_action
+      FROM starts
+      CROSS JOIN ranges
+      LEFT JOIN completes ON completes.visitor_key = starts.visitor_key
+      WHERE ranges.requested_step = 'start_drop'
+        AND completes.visitor_key IS NULL
+    ),
+    deduped_events AS (
+      SELECT *
+      FROM (
+        SELECT
+          selected_events.*,
+          ROW_NUMBER() OVER (
+            PARTITION BY selected_events.visitor_key
+            ORDER BY selected_events.event_at DESC, selected_events.id DESC
+          ) AS row_no
+        FROM selected_events
+      ) ranked
+      WHERE ranked.row_no = 1
+    ),
+    enriched_events AS (
+      SELECT
+        deduped_events.id,
+        deduped_events.event_at,
+        COALESCE(
+          NULLIF(users.community_nickname, ''),
+          NULLIF(users.nickname, ''),
+          NULLIF(users.display_name, ''),
+          NULLIF(users.email::text, ''),
+          '익명'
+        ) AS user_name,
+        COALESCE(users.email::text, oauth.provider_email::text, '-') AS user_email,
+        oauth.provider::text AS provider,
+        deduped_events.anonymous_id::TEXT AS anonymous_id,
+        deduped_events.ip_address,
+        deduped_events.user_agent,
+        deduped_events.channel,
+        deduped_events.path,
+        deduped_events.referrer,
+        deduped_events.last_action
+      FROM deduped_events
+      LEFT JOIN public.users users ON users.id = deduped_events.user_id
+      LEFT JOIN LATERAL (
+        SELECT
+          account.provider,
+          account.provider_email
+        FROM public.user_oauth_accounts account
+        WHERE account.user_id = users.id
+        ORDER BY account.last_used_at DESC NULLS LAST, account.linked_at DESC
+        LIMIT 1
+      ) oauth ON TRUE
+    ),
+    filtered_events AS (
+      SELECT enriched_events.*
+      FROM enriched_events
+      CROSS JOIN ranges
+      WHERE ranges.keyword = ''
+        OR enriched_events.user_name ILIKE '%' || ranges.keyword || '%'
+        OR enriched_events.user_email ILIKE '%' || ranges.keyword || '%'
+        OR enriched_events.ip_address ILIKE '%' || ranges.keyword || '%'
+        OR enriched_events.path ILIKE '%' || ranges.keyword || '%'
+        OR enriched_events.referrer ILIKE '%' || ranges.keyword || '%'
+    )
+  `;
+  const countResult = await query<CountRow>(
+    `
+      ${baseSql}
+      SELECT COUNT(*) AS count
+      FROM filtered_events
+    `,
+    [...filterParams, productConfig.startAction, productConfig.completeAction],
+  );
+  const totalCount = numberValue(countResult.rows[0]?.count);
+  const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
+  const effectivePage = Math.min(page, totalPages);
+  const rowsResult = await query<FunnelLogRow>(
+    `
+      ${baseSql}
+      SELECT *
+      FROM filtered_events
+      ORDER BY event_at DESC, id DESC
+      LIMIT $7::integer OFFSET $8::integer
+    `,
+    [
+      ...filterParams,
+      productConfig.startAction,
+      productConfig.completeAction,
+      pageSize,
+      (effectivePage - 1) * pageSize,
+    ],
+  );
+
+  return {
+    rows: rowsResult.rows.map((row) => ({
+      id: row.id,
+      eventAt: formatLogDateTime(row.event_at),
+      userName: row.user_name || "익명",
+      userEmail: row.user_email || "-",
+      provider: mapProvider(row.provider),
+      providerLabel: mapProviderLabel(row.provider),
+      anonymousId: row.anonymous_id || "-",
+      ipAddress: row.ip_address || "-",
+      device: row.user_agent
+        ? isMobileUserAgent(row.user_agent)
+          ? "모바일"
+          : "웹"
+        : "알 수 없음",
+      channel: mapChannelLabel(row.channel),
+      path: row.path || "-",
+      referrer: row.referrer || "-",
+      lastAction: row.last_action,
+    })),
+    totalCount,
+    totalPages,
+    page: effectivePage,
+    pageSize,
+    product,
+    productLabel: productConfig.label,
+    step,
+    stepLabel: funnelStepLabels[step],
+    startDate,
+    endDate,
     keyword,
   };
 }
@@ -1085,22 +1546,25 @@ export async function getBannerClickLogData(
   args?: BannerClickLogQuery,
 ): Promise<BannerClickLogData> {
   const { startDate, endDate } = createDefaultLogDates(args);
+  const bannerKey = normalizeBannerKey(args?.bannerKey);
   const keyword = normalizeKeyword(args?.keyword);
   const page = normalizePage(args?.page);
   const pageSize = 20;
-  const filterParams = [startDate, endDate, keyword];
+  const filterParams = [startDate, endDate, keyword, bannerKey];
   const baseSql = `
     WITH input AS (
       SELECT
         $1::date AS requested_start,
         $2::date AS requested_end,
-        $3::text AS keyword
+        $3::text AS keyword,
+        $4::text AS requested_banner_key
     ),
     ranges AS (
       SELECT
         (LEAST(requested_start, requested_end)::timestamp AT TIME ZONE 'Asia/Seoul') AS current_start,
         ((GREATEST(requested_start, requested_end) + 1)::timestamp AT TIME ZONE 'Asia/Seoul') AS current_end,
-        keyword
+        keyword,
+        requested_banner_key
       FROM input
     ),
     normalized_clicks AS (
@@ -1181,6 +1645,10 @@ export async function getBannerClickLogData(
         OR normalized_clicks.anonymous_id ILIKE '%' || ranges.keyword || '%'
         OR normalized_clicks.ip_address ILIKE '%' || ranges.keyword || '%'
       )
+      AND (
+        ranges.requested_banner_key = ''
+        OR normalized_clicks.banner_key = ranges.requested_banner_key
+      )
     )
   `;
   const countResult = await query<CountRow>(
@@ -1200,7 +1668,7 @@ export async function getBannerClickLogData(
       SELECT *
       FROM filtered_clicks
       ORDER BY clicked_at DESC, id DESC
-      LIMIT $4::integer OFFSET $5::integer
+      LIMIT $5::integer OFFSET $6::integer
     `,
     [...filterParams, pageSize, (effectivePage - 1) * pageSize],
   );
@@ -1228,6 +1696,7 @@ export async function getBannerClickLogData(
     pageSize,
     startDate,
     endDate,
+    bannerKey,
     keyword,
   };
 }

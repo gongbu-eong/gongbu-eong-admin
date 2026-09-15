@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { FunnelItem } from "@/features/admin/data/dashboard";
 import styles from "./FunnelList.module.css";
 
@@ -45,48 +46,65 @@ export function FunnelList({
         <p>{description}</p>
       </header>
       <div className={styles.list}>
-        {items.map((item) => (
-          <div className={styles.item} key={item.step}>
-            <div className={styles.top}>
-              <span className={styles.step}>{item.step}</span>
-              <span className={styles.labelCell}>
-                <strong>{item.label}</strong>
-                {funnelHelpTemplates[item.step] ? (
-                  <span className={styles.helpWrap}>
-                    <button
-                      type="button"
-                      className={styles.helpButton}
-                      aria-label={`${item.label} 집계 기준`}
-                      aria-describedby={`funnel-help-${item.step}`}
-                    >
-                      ?
-                    </button>
-                    <span
-                      className={styles.tooltip}
-                      id={`funnel-help-${item.step}`}
-                      role="tooltip"
-                    >
-                      <b>{funnelHelpTemplates[item.step].title}</b>
-                      <span>
-                        {funnelHelpTemplates[item.step].description(
-                          productLabel,
-                        )}
+        {items.map((item) => {
+          const content = (
+            <>
+              <div className={styles.top}>
+                <span className={styles.step}>{item.step}</span>
+                <span className={styles.labelCell}>
+                  <strong>{item.label}</strong>
+                  {funnelHelpTemplates[item.step] ? (
+                    <span className={styles.helpWrap}>
+                      <span
+                        className={styles.helpButton}
+                        aria-describedby={`funnel-help-${item.step}`}
+                        aria-label={`${item.label} 집계 기준`}
+                        role="button"
+                        tabIndex={0}
+                      >
+                        ?
+                      </span>
+                      <span
+                        className={styles.tooltip}
+                        id={`funnel-help-${item.step}`}
+                        role="tooltip"
+                      >
+                        <b>{funnelHelpTemplates[item.step].title}</b>
+                        <span>
+                          {funnelHelpTemplates[item.step].description(
+                            productLabel,
+                          )}
+                        </span>
                       </span>
                     </span>
-                  </span>
+                  ) : null}
+                </span>
+                {item.conversion ? (
+                  <span className={styles.conversion}>{item.conversion}</span>
                 ) : null}
-              </span>
-              {item.conversion ? (
-                <span className={styles.conversion}>{item.conversion}</span>
-              ) : null}
-              {item.drop ? <span className={styles.drop}>{item.drop}</span> : null}
-              <b>{item.value}</b>
+                {item.drop ? (
+                  <span className={styles.drop}>{item.drop}</span>
+                ) : null}
+                <b>{item.value}</b>
+              </div>
+              <div className={styles.track}>
+                <i style={{ width: `${item.fill}%` }} />
+              </div>
+            </>
+          );
+
+          return (
+            <div className={styles.item} key={item.step}>
+              {item.href ? (
+                <Link className={styles.itemLink} href={item.href}>
+                  {content}
+                </Link>
+              ) : (
+                content
+              )}
             </div>
-            <div className={styles.track}>
-              <i style={{ width: `${item.fill}%` }} />
-            </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </section>
   );
