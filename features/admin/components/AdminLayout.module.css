@@ -147,11 +147,38 @@
   min-height: 100vh;
   margin-left: 236px;
   padding: 32px 32px 32px;
-  overflow-x: hidden;
+  overflow: visible;
 }
 
 .header {
-  height: 49px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  min-height: 49px;
+}
+
+.headerWithActions {
+  position: sticky;
+  top: 0;
+  z-index: 9;
+  margin: -12px -16px 16px;
+  padding: 12px 16px;
+  border: 1px solid rgba(227, 233, 243, 0.88);
+  border-radius: 16px;
+  background: rgba(245, 247, 251, 0.96);
+  box-shadow: 0 12px 30px rgba(35, 48, 71, 0.08);
+  backdrop-filter: blur(10px);
+}
+
+.headerText {
+  min-width: 180px;
+}
+
+.headerActions {
+  display: flex;
+  justify-content: flex-end;
+  min-width: 0;
 }
 
 .header h1 {
@@ -176,7 +203,7 @@
   }
 
   .sidebar {
-    position: sticky;
+    position: relative;
     width: 100%;
     height: auto;
     min-height: 0;
@@ -233,5 +260,24 @@
     width: 100%;
     margin-left: 0;
     padding: 24px 16px 40px;
+  }
+
+  .header,
+  .headerWithActions {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+  }
+
+  .headerWithActions {
+    top: 0;
+    margin: -8px -8px 16px;
+    padding: 12px 8px;
+    border-radius: 14px;
+  }
+
+  .headerActions {
+    width: 100%;
+    justify-content: stretch;
   }
 }

@@ -1,5 +1,6 @@
 import {
   BannerClickItem,
+  BehaviorPatternItem,
   ChannelItem,
   DashboardProductOption,
   FunnelItem,
@@ -23,6 +24,7 @@ type DashboardData = {
   channelTotal: string;
   bannerClicks: BannerClickItem[];
   bannerClickTotal: string;
+  behaviorPatterns: BehaviorPatternItem[];
   screenInflows: ScreenInflowItem[];
   screenInflowTotal: string;
   selectedChannelKey: string;
@@ -88,6 +90,15 @@ type ScreenInflowRow = {
   inflow_count: string;
 };
 
+type BehaviorPatternRow = {
+  channel_label: string;
+  visitors: string;
+  bounce_count: string;
+  revisit_count: string;
+  action_count: string;
+  page_move_count: string;
+};
+
 const channelAssets: Record<string, Pick<ChannelItem, "icon" | "iconClass">> = {
   "인스타그램": { icon: "/admin-assets/channel-instagram.svg" },
   "블로그": { icon: "/admin-assets/channel-blog.png", iconClass: "blog" },
@@ -134,7 +145,7 @@ const dashboardScreenKeys = [
 ];
 
 const visitorKeySql =
-  "COALESCE(user_id::TEXT, session_id::TEXT, anonymous_id::TEXT, ip_address::TEXT, id::TEXT)";
+  "COALESCE(user_id::TEXT, session_id::TEXT, anonymous_id::TEXT, NULLIF(CONCAT_WS('|', ip_address::TEXT, NULLIF(user_agent, '')), ''))";
 
 const trafficEventsSql = `
   SELECT
@@ -144,6 +155,7 @@ const trafficEventsSql = `
     ip_address,
     id,
     event_name,
+    user_agent,
     COALESCE(
       NULLIF(traffic_channel, ''),
       NULLIF(metadata->>'trafficChannel', ''),
@@ -900,6 +912,206 @@ export async function getDashboardData({
     `,
     dashboardDateParams,
   );
+  const behaviorPatternResult = await query<BehaviorPatternRow>(
+    `
+      ${dashboardRangeSql},
+      page_events AS (
+        SELECT
+          traffic_events.id::TEXT AS visit_id,
+          traffic_events.visitor_key,
+          CASE
+            WHEN traffic_events.source_value = '인스타그램'
+              OR traffic_events.source_value ILIKE '%instagram%'
+              OR LOWER(traffic_events.source_value) = 'ig'
+              THEN '인스타그램'
+            WHEN traffic_events.source_value = '블로그'
+              OR traffic_events.source_value ILIKE '%blog%'
+              OR traffic_events.source_value ILIKE '%블로그%'
+              THEN '블로그'
+            WHEN traffic_events.source_value = '스레드'
+              OR traffic_events.source_value ILIKE '%thread%'
+              THEN '스레드'
+            WHEN traffic_events.source_value ILIKE '%page_move%'
+              OR traffic_events.source_value ILIKE '%page move%'
+              OR traffic_events.source_value ILIKE '%internal%'
+              OR traffic_events.source_value = '페이지 이동'
+              THEN '페이지 이동'
+            WHEN traffic_events.source_value = '검색'
+              OR traffic_events.source_value ILIKE '%naver%'
+              OR traffic_events.source_value ILIKE '%google%'
+              OR traffic_events.source_value ILIKE '%daum%'
+              OR traffic_events.source_value ILIKE '%search%'
+              THEN '검색'
+            WHEN traffic_events.source_value = '직접유입'
+              OR LOWER(traffic_events.source_value) = 'direct'
+              THEN '직접유입'
+            ELSE '직접유입'
+          END AS source_label,
+          traffic_events.landing_path,
+          traffic_events.screen_key,
+          traffic_events.event_at
+        FROM (${trafficEventsSql}) traffic_events, ranges
+        WHERE traffic_events.visitor_key IS NOT NULL
+          AND traffic_events.event_at >= ranges.range_start
+          AND traffic_events.event_at < ranges.range_end
+      ),
+      all_page_events AS (
+        SELECT
+          traffic_events.visitor_key,
+          traffic_events.landing_path,
+          traffic_events.screen_key,
+          traffic_events.event_at
+        FROM (${trafficEventsSql}) traffic_events, ranges
+        WHERE traffic_events.visitor_key IS NOT NULL
+          AND traffic_events.event_at >= ranges.range_start
+          AND traffic_events.event_at < ranges.range_end + INTERVAL '7 days'
+      ),
+      channel_defs AS (
+        SELECT *
+        FROM (VALUES
+          ('블로그', 1),
+          ('검색', 2),
+          ('인스타그램', 3),
+          ('스레드', 4),
+          ('페이지 이동', 5),
+          ('직접유입', 6)
+        ) AS channels(label, sort_order)
+      ),
+      job_detail_visits AS (
+        SELECT
+          page_events.visit_id,
+          page_events.visitor_key,
+          page_events.source_label,
+          page_events.event_at
+        FROM page_events
+        WHERE page_events.screen_key = 'job_detail'
+          OR split_part(page_events.landing_path, '?', 1) ~ '^/jobs/[^/]+$'
+      ),
+      job_detail_channel_visitors AS (
+        SELECT DISTINCT ON (visit_id)
+          visit_id,
+          visitor_key,
+          source_label,
+          event_at
+        FROM job_detail_visits
+        ORDER BY visit_id, event_at
+      ),
+      product_actions AS (
+        SELECT
+          COALESCE(
+            events.user_id::TEXT,
+            events.anonymous_id::TEXT,
+            NULLIF(CONCAT_WS('|', NULLIF(events.properties->>'ip_address', ''), NULLIF(events.properties->>'user_agent', '')), '')
+          ) AS visitor_key,
+          events.event_type,
+          COALESCE(NULLIF(events.properties->>'banner_key', ''), '') AS banner_key,
+          events.created_at AS event_at
+        FROM public.product_events events, ranges
+        WHERE events.created_at >= ranges.range_start
+          AND events.created_at < ranges.range_end + INTERVAL '30 minutes'
+      ),
+      later_page_events AS (
+        SELECT DISTINCT
+          job_detail_visits.visit_id,
+          job_detail_visits.source_label,
+          job_detail_visits.visitor_key
+        FROM job_detail_channel_visitors job_detail_visits
+        JOIN all_page_events page_events
+          ON page_events.visitor_key = job_detail_visits.visitor_key
+         AND page_events.event_at > job_detail_visits.event_at
+         AND page_events.event_at <= job_detail_visits.event_at + INTERVAL '30 minutes'
+      ),
+      later_action_events AS (
+        SELECT DISTINCT
+          job_detail_visits.visit_id,
+          job_detail_visits.source_label,
+          job_detail_visits.visitor_key
+        FROM job_detail_channel_visitors job_detail_visits
+        JOIN product_actions actions
+          ON actions.visitor_key = job_detail_visits.visitor_key
+         AND actions.event_at > job_detail_visits.event_at
+         AND actions.event_at <= job_detail_visits.event_at + INTERVAL '30 minutes'
+      ),
+      job_action_events AS (
+        SELECT DISTINCT
+          job_detail_visits.visit_id,
+          job_detail_visits.source_label,
+          job_detail_visits.visitor_key
+        FROM job_detail_channel_visitors job_detail_visits
+        JOIN product_actions actions
+          ON actions.visitor_key = job_detail_visits.visitor_key
+         AND actions.event_at > job_detail_visits.event_at
+         AND actions.event_at <= job_detail_visits.event_at + INTERVAL '30 minutes'
+         AND actions.event_type IN ('job_detail_bookmark_click', 'job_detail_apply_click')
+      ),
+      other_page_move_events AS (
+        SELECT DISTINCT
+          job_detail_visits.visit_id,
+          job_detail_visits.source_label,
+          job_detail_visits.visitor_key
+        FROM job_detail_channel_visitors job_detail_visits
+        JOIN all_page_events page_events
+          ON page_events.visitor_key = job_detail_visits.visitor_key
+         AND page_events.event_at > job_detail_visits.event_at
+         AND page_events.event_at <= job_detail_visits.event_at + INTERVAL '30 minutes'
+         AND NOT (
+              page_events.screen_key = 'job_detail'
+           OR split_part(page_events.landing_path, '?', 1) ~ '^/jobs/[^/]+$'
+         )
+      ),
+      revisit_events AS (
+        SELECT DISTINCT
+          job_detail_visits.visit_id,
+          job_detail_visits.source_label,
+          job_detail_visits.visitor_key
+        FROM job_detail_channel_visitors job_detail_visits
+        JOIN all_page_events page_events
+          ON page_events.visitor_key = job_detail_visits.visitor_key
+         AND page_events.event_at >= job_detail_visits.event_at + INTERVAL '1 day'
+         AND page_events.event_at <= job_detail_visits.event_at + INTERVAL '7 days'
+      ),
+      stats AS (
+        SELECT
+          job_detail_channel_visitors.source_label,
+          COUNT(DISTINCT job_detail_channel_visitors.visit_id) AS visitors,
+          COUNT(DISTINCT job_detail_channel_visitors.visit_id) FILTER (
+            WHERE later_page_events.visitor_key IS NULL
+              AND later_action_events.visitor_key IS NULL
+          ) AS bounce_count,
+          COUNT(DISTINCT revisit_events.visit_id) AS revisit_count,
+          COUNT(DISTINCT job_action_events.visit_id) AS action_count,
+          COUNT(DISTINCT other_page_move_events.visit_id) AS page_move_count
+        FROM job_detail_channel_visitors
+        LEFT JOIN later_page_events
+          ON later_page_events.source_label = job_detail_channel_visitors.source_label
+         AND later_page_events.visit_id = job_detail_channel_visitors.visit_id
+        LEFT JOIN later_action_events
+          ON later_action_events.source_label = job_detail_channel_visitors.source_label
+         AND later_action_events.visit_id = job_detail_channel_visitors.visit_id
+        LEFT JOIN revisit_events
+          ON revisit_events.source_label = job_detail_channel_visitors.source_label
+         AND revisit_events.visit_id = job_detail_channel_visitors.visit_id
+        LEFT JOIN job_action_events
+          ON job_action_events.source_label = job_detail_channel_visitors.source_label
+         AND job_action_events.visit_id = job_detail_channel_visitors.visit_id
+        LEFT JOIN other_page_move_events
+          ON other_page_move_events.source_label = job_detail_channel_visitors.source_label
+         AND other_page_move_events.visit_id = job_detail_channel_visitors.visit_id
+        GROUP BY job_detail_channel_visitors.source_label
+      )
+      SELECT
+        channel_defs.label AS channel_label,
+        COALESCE(stats.visitors, 0)::TEXT AS visitors,
+        COALESCE(stats.bounce_count, 0)::TEXT AS bounce_count,
+        COALESCE(stats.revisit_count, 0)::TEXT AS revisit_count,
+        COALESCE(stats.action_count, 0)::TEXT AS action_count,
+        COALESCE(stats.page_move_count, 0)::TEXT AS page_move_count
+      FROM channel_defs
+      LEFT JOIN stats ON stats.source_label = channel_defs.label
+      ORDER BY channel_defs.sort_order
+    `,
+    dashboardDateParams,
+  );
   const bannerClickRows = bannerClickResult.rows;
   const maxBannerClickCount = Math.max(
     ...bannerClickRows.map((row) => numberValue(row.click_count)),
@@ -933,6 +1145,38 @@ export async function getDashboardData({
     (sum, screen) => sum + (groupedScreenInflows.get(screen.key) || 0),
     0,
   );
+  const behaviorPatterns = behaviorPatternResult.rows.map((row) => {
+    const visitors = numberValue(row.visitors);
+    const bounce = numberValue(row.bounce_count);
+    const revisit = numberValue(row.revisit_count);
+    const action = numberValue(row.action_count);
+    const pageMove = numberValue(row.page_move_count);
+    const formatBehaviorRate = (value: number) =>
+      visitors > 0 ? formatPercent((value / visitors) * 100) : "0%";
+
+    return {
+      key: row.channel_label,
+      channelLabel: row.channel_label,
+      visitors: `${formatCount(visitors)}건`,
+      bounce: `${formatCount(bounce)}건`,
+      bounceRate: formatBehaviorRate(bounce),
+      revisit: `${formatCount(revisit)}건`,
+      revisitRate: formatBehaviorRate(revisit),
+      action: `${formatCount(action)}건`,
+      actionRate: formatBehaviorRate(action),
+      pageMove: `${formatCount(pageMove)}건`,
+      pageMoveRate: formatBehaviorRate(pageMove),
+      fill: fillPercent(
+        visitors,
+        Math.max(
+          ...behaviorPatternResult.rows.map((item) =>
+            numberValue(item.visitors),
+          ),
+          1,
+        ),
+      ),
+    };
+  });
   const createDashboardHref = (channelKey: string) => {
     const params = new URLSearchParams();
 
@@ -1074,6 +1318,7 @@ export async function getDashboardData({
       }),
     })),
     bannerClickTotal: formatCount(totalBannerClickCount),
+    behaviorPatterns,
     screenInflows: dashboardScreenKeys.map((screen) => {
       const count = groupedScreenInflows.get(screen.key) || 0;
 

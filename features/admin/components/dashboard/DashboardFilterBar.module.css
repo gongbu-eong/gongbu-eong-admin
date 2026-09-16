@@ -1,0 +1,88 @@
+.bar {
+  display: flex;
+  align-items: flex-end;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 14px;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+.dateForm {
+  display: flex;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.dateForm label {
+  display: grid;
+  gap: 5px;
+  color: var(--admin-muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.dateForm input {
+  height: 42px;
+  min-width: 146px;
+  border: 1px solid #d8e0ed;
+  border-radius: 10px;
+  padding: 0 12px;
+  color: var(--admin-text);
+  font-size: 14px;
+  font-weight: 700;
+  background: #fff;
+}
+
+.dateForm button {
+  height: 42px;
+  border: 0;
+  border-radius: 10px;
+  padding: 0 16px;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 800;
+  background: #2f7ff0;
+  cursor: pointer;
+}
+
+.productSelect {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: var(--admin-muted);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.productSelect > span:first-child {
+  white-space: nowrap;
+}
+
+.productSelect > span:last-child {
+  min-width: 260px;
+}
+
+@media (max-width: 640px) {
+  .bar,
+  .productSelect,
+  .dateForm,
+  .dateForm label,
+  .dateForm input,
+  .dateForm button {
+    width: 100%;
+  }
+
+  .productSelect {
+    align-items: stretch;
+    gap: 8px;
+  }
+
+  .productSelect > span:last-child {
+    min-width: 0;
+  }
+}

@@ -7,6 +7,7 @@ type AdminLayoutProps = {
   description: string;
   activeNav: string;
   activeSubNav?: string;
+  headerActions?: React.ReactNode;
   children: React.ReactNode;
 };
 
@@ -15,6 +16,7 @@ export async function AdminLayout({
   description,
   activeNav,
   activeSubNav,
+  headerActions,
   children,
 }: AdminLayoutProps) {
   await requireAdminSession();
@@ -23,9 +25,18 @@ export async function AdminLayout({
     <div className={styles.shell}>
       <AdminSidebar activeNav={activeNav} activeSubNav={activeSubNav} />
       <main className={styles.main}>
-        <header className={styles.header}>
-          <h1>{title}</h1>
-          <p>{description}</p>
+        <header
+          className={`${styles.header} ${
+            headerActions ? styles.headerWithActions : ""
+          }`}
+        >
+          <div className={styles.headerText}>
+            <h1>{title}</h1>
+            <p>{description}</p>
+          </div>
+          {headerActions ? (
+            <div className={styles.headerActions}>{headerActions}</div>
+          ) : null}
         </header>
         {children}
       </main>

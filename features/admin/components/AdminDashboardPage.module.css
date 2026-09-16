@@ -44,76 +44,6 @@
   font-size: 13px;
 }
 
-.analysisControls {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 14px;
-  width: 100%;
-  margin: 0 0 14px;
-  padding: 14px 16px;
-  border: 1px solid #e3e9f3;
-  border-radius: 14px;
-  background: #fff;
-}
-
-.dateRangeForm {
-  display: flex;
-  align-items: flex-end;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.dateRangeForm label {
-  display: grid;
-  gap: 5px;
-  color: var(--admin-muted);
-  font-size: 12px;
-  font-weight: 700;
-}
-
-.dateRangeForm input {
-  height: 44px;
-  min-width: 148px;
-  border: 1px solid #d8e0ed;
-  border-radius: 10px;
-  padding: 0 12px;
-  color: var(--admin-text);
-  font-size: 14px;
-  font-weight: 700;
-  background: #fff;
-}
-
-.dateRangeForm button {
-  height: 44px;
-  border: 0;
-  border-radius: 10px;
-  padding: 0 16px;
-  color: #fff;
-  font-size: 14px;
-  font-weight: 800;
-  background: #2f7ff0;
-  cursor: pointer;
-}
-
-.productSelect {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  color: var(--admin-muted);
-  font-size: 13px;
-  font-weight: 800;
-}
-
-.productSelect > span:first-child {
-  white-space: nowrap;
-}
-
-.productSelect > span:last-child {
-  min-width: 260px;
-}
-
 .analysisGrid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -162,7 +92,8 @@
 .funnelCard,
 .channelCard,
 .screenClickCard,
-.bannerCard {
+.bannerCard,
+.behaviorCard {
   display: flex;
   height: 100%;
   min-height: 0;
@@ -171,6 +102,10 @@
 
 .funnelCard {
   overflow: visible;
+}
+
+.behaviorCard {
+  grid-column: 1 / -1;
 }
 
 @media (max-width: 1280px) {
@@ -201,24 +136,6 @@
     justify-content: space-between;
   }
 
-  .analysisControls,
-  .productSelect,
-  .dateRangeForm,
-  .dateRangeForm label,
-  .dateRangeForm input,
-  .dateRangeForm button {
-    width: 100%;
-  }
-
-  .productSelect {
-    align-items: stretch;
-    gap: 8px;
-  }
-
-  .productSelect > span:last-child {
-    min-width: 0;
-  }
-
   .dashboardToolbar label > span:last-child,
   .insightHeader label > span:last-child,
   .analysisHeader label > span:last-child {
@@ -237,7 +154,8 @@
   .funnelCard,
   .channelCard,
   .screenClickCard,
-  .bannerCard {
+  .bannerCard,
+  .behaviorCard {
     min-height: 360px;
     height: auto;
   }

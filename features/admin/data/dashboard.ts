@@ -64,6 +64,21 @@ export type ScreenInflowItem = {
   href?: string;
 };
 
+export type BehaviorPatternItem = {
+  key: string;
+  channelLabel: string;
+  visitors: string;
+  bounce: string;
+  bounceRate: string;
+  revisit: string;
+  revisitRate: string;
+  action: string;
+  actionRate: string;
+  pageMove: string;
+  pageMoveRate: string;
+  fill: number;
+};
+
 export type DashboardProductOption = {
   key: string;
   label: string;

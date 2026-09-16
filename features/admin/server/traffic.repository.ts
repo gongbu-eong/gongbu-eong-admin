@@ -171,7 +171,7 @@ const periodBoundsSql = `
 `;
 
 const visitorKeySql =
-  "COALESCE(user_id::TEXT, session_id::TEXT, anonymous_id::TEXT, ip_address::TEXT, id::TEXT)";
+  "COALESCE(user_id::TEXT, session_id::TEXT, anonymous_id::TEXT, NULLIF(CONCAT_WS('|', ip_address::TEXT, NULLIF(user_agent, '')), ''))";
 
 const trafficEventsSql = `
   SELECT

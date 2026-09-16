@@ -1,8 +1,9 @@
 import { AdminLayout } from "@/features/admin/components/AdminLayout";
 import { AdminCard } from "@/features/admin/components/common/AdminCard";
 import { BannerClickList } from "@/features/admin/components/dashboard/BannerClickList";
+import { BehaviorPatternList } from "@/features/admin/components/dashboard/BehaviorPatternList";
 import { ChannelList } from "@/features/admin/components/dashboard/ChannelList";
-import { DashboardProductSelect } from "@/features/admin/components/dashboard/DashboardProductSelect";
+import { DashboardFilterBar } from "@/features/admin/components/dashboard/DashboardFilterBar";
 import { FunnelList } from "@/features/admin/components/dashboard/FunnelList";
 import { LineChart } from "@/features/admin/components/dashboard/LineChart";
 import { MetricCard } from "@/features/admin/components/dashboard/MetricCard";
@@ -56,6 +57,7 @@ export async function AdminDashboardPage({
     metrics,
     bannerClicks,
     bannerClickTotal,
+    behaviorPatterns,
     channelTotal,
     screenInflows,
     screenInflowTotal,
@@ -104,6 +106,15 @@ export async function AdminDashboardPage({
       activeNav="dashboard"
       title="대시보드"
       description="오늘의 주요 지표를 확인해보세요."
+      headerActions={
+        <DashboardFilterBar
+          startDate={dashboardStartDate}
+          endDate={dashboardEndDate}
+          selectedChannel={selectedChannelKey}
+          selectedProduct={selectedProductKey}
+          options={productOptions}
+        />
+      }
     >
       <section className={styles.metrics} aria-label="주요 지표">
         {commonMetrics.map((metric) => (
@@ -175,46 +186,6 @@ export async function AdminDashboardPage({
             </p>
           </div>
         </div>
-        <div className={styles.analysisControls}>
-          <form className={styles.dateRangeForm} action="/">
-            {selectedChannelKey !== "all" ? (
-              <input
-                type="hidden"
-                name="channel"
-                value={selectedChannelKey}
-              />
-            ) : null}
-            {selectedProductKey !== "diagnosis" ? (
-              <input
-                type="hidden"
-                name="product"
-                value={selectedProductKey}
-              />
-            ) : null}
-            <label>
-              <span>조회 시작</span>
-              <input
-                type="date"
-                name="startDate"
-                defaultValue={dashboardStartDate}
-              />
-            </label>
-            <label>
-              <span>조회 종료</span>
-              <input
-                type="date"
-                name="endDate"
-                defaultValue={dashboardEndDate}
-              />
-            </label>
-            <button type="submit">적용</button>
-          </form>
-          <DashboardProductSelect
-            className={styles.productSelect}
-            options={productOptions}
-            selectedProduct={selectedProductKey}
-          />
-        </div>
         <div className={styles.productMetrics}>
           {productMetrics.map((metric) => (
             <MetricCard key={metric.label} metric={metric} />
@@ -281,6 +252,12 @@ export async function AdminDashboardPage({
         </AdminCard>
         <AdminCard className={styles.bannerCard}>
           <BannerClickList items={bannerClicks} total={bannerClickTotal} />
+        </AdminCard>
+        <AdminCard className={styles.behaviorCard}>
+          <BehaviorPatternList
+            items={behaviorPatterns}
+            periodLabel={dashboardPeriodLabel}
+          />
         </AdminCard>
       </section>
     </AdminLayout>
