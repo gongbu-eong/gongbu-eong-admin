@@ -62,6 +62,7 @@ export async function AdminMemberDetailPage({ userId, activeTab, selectedItem }:
 
   return (
     <AdminLayout activeNav="members" title="회원 정보 상세" description="회원의 정보 상세 페이지입니다.">
+      <Link className={styles.backLink} href="/members">← 회원 목록으로 돌아가기</Link>
       <section className={styles.profileCard}>
         <div className={styles.avatar} style={{ backgroundColor: member.backgroundColor }}>
           <Image src={member.avatarSrc} width={64} height={64} alt="" unoptimized />
@@ -178,7 +179,6 @@ export async function AdminMemberDetailPage({ userId, activeTab, selectedItem }:
         </ActivitySection>
       ) : null}
 
-      <Link className={styles.backLink} href="/members">회원 목록으로 →</Link>
     </AdminLayout>
   );
 }

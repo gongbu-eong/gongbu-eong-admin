@@ -20,7 +20,7 @@ export function excludedIpCondition(ipExpression: string) {
   return `NOT EXISTS (
     SELECT 1
     FROM public.analytics_excluded_ips excluded_ips
-    WHERE excluded_ips.ip_address::text = NULLIF((${ipExpression})::text, '')
+    WHERE HOST(excluded_ips.ip_address) = NULLIF(SPLIT_PART((${ipExpression})::text, '/', 1), '')
   )`;
 }
 
@@ -28,7 +28,7 @@ function excludedIpMatchCondition(ipExpression: string) {
   return `EXISTS (
     SELECT 1
     FROM public.analytics_excluded_ips excluded_ips
-    WHERE excluded_ips.ip_address::text = NULLIF((${ipExpression})::text, '')
+    WHERE HOST(excluded_ips.ip_address) = NULLIF(SPLIT_PART((${ipExpression})::text, '/', 1), '')
   )`;
 }
 

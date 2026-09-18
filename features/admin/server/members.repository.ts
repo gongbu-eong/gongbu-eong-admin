@@ -364,17 +364,41 @@ function formatCommunityStatus(value: string | null) {
 
 function formatKind(value: string | null) {
   if (!value) return "-";
-  if (value === "attribution_capture") return "방문";
-  if (value === "diagnosis_complete") return "진단 완료";
+  const labels: Record<string, string> = {
+    attribution_capture: "방문",
+    entry: "최초 진입",
+    page_view: "페이지 방문",
+    screen_click: "화면 요소 클릭",
+    banner_impression: "배너 노출",
+    diagnosis_start: "진단 시작",
+    diagnosis_complete: "진단 완료",
+    diagnosis_result_view: "진단 결과 열람",
+    login_success: "로그인 성공",
+    login_failed: "로그인 실패",
+    signup: "회원 가입",
+    bookmark_click: "찜 클릭",
+    apply_click: "지원 클릭",
+    community_post: "게시글 작성",
+    community_comment: "댓글 작성",
+    community_reply: "대댓글 작성",
+  };
+
+  if (labels[value]) return labels[value];
   if (value.includes("resume_coaching")) return "자소서 코칭";
   if (value.includes("interview_coaching")) return "면접 코칭";
   if (value.includes("share")) return "공유";
-  if (value.includes("signup")) return "회원 가입";
   return value;
 }
 
-function formatTarget(value: string | null) {
+function formatTarget(value: string | null, kind?: string | null) {
+  if (kind === "diagnosis_complete" || kind === "diagnosis_result_view") {
+    return "강점·성향 진단 결과";
+  }
+  if (kind?.includes("resume_coaching")) return "AI NCS 자소서 코칭";
+  if (kind?.includes("interview_coaching")) return "AI NCS 면접 코칭";
   if (!value) return "-";
+  if (value === "home" || value === "/home" || value === "/") return "메인";
+  if (value === "diagnosis_result_view") return "강점·성향 진단 결과";
   if (value.includes("diagnosis/result")) return "강점·성향 진단 결과";
   if (value.includes("diagnosis")) return "강점·성향 진단";
   if (value.includes("coaching")) return "AI NCS 자소서 코칭";
@@ -382,6 +406,55 @@ function formatTarget(value: string | null) {
   if (value.includes("jobs")) return "채용공고";
   if (value === "/") return "메인";
   return value;
+}
+
+function shortenLogText(value: string, maxLength = 96) {
+  const normalized = value.replace(/\s+/g, " ").trim();
+  return normalized.length > maxLength
+    ? `${normalized.slice(0, maxLength - 1)}…`
+    : normalized;
+}
+
+function formatLogDetail(kind: string | null, target: string | null, detail: string | null) {
+  if (!detail) return "-";
+
+  try {
+    const parsed = JSON.parse(detail) as Record<string, unknown>;
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      const getText = (...keys: string[]) => {
+        for (const key of keys) {
+          const value = parsed[key];
+          if (typeof value === "string" && value.trim()) return value;
+        }
+        return "";
+      };
+
+      if (kind === "screen_click") {
+        const elementText = getText("element_text", "banner_name", "button_text");
+        return elementText ? `클릭: ${shortenLogText(elementText)}` : "화면 요소 클릭";
+      }
+
+      if (kind === "banner_impression") {
+        const bannerName = getText("banner_name", "element_text");
+        return bannerName ? `배너: ${shortenLogText(bannerName)}` : "배너 노출";
+      }
+
+      if (kind === "attribution_capture" || kind === "entry") {
+        const channel = getText("traffic_channel", "source", "medium", "campaign");
+        return channel ? `유입: ${shortenLogText(channel)}` : "유입 기록";
+      }
+
+      const title = getText("title", "job_title", "screen_name");
+      if (title) return shortenLogText(title);
+
+      if (target) return formatTarget(target, kind);
+      return "이벤트 기록";
+    }
+  } catch {
+    // 기존 문자열 상세 값은 아래에서 정제해 표시한다.
+  }
+
+  return shortenLogText(detail);
 }
 
 function maskEmail(value: string | null) {
@@ -920,8 +993,8 @@ export async function getMemberDetailData(
       id: row.id,
       actor: row.actor || "시스템",
       kind: formatKind(row.kind),
-      target: formatTarget(row.target),
-      detail: row.detail || "",
+      target: formatTarget(row.target, row.kind),
+      detail: formatLogDetail(row.kind, row.target, row.detail),
       occurredAt: formatDateTime(row.occurred_at),
     })),
   };

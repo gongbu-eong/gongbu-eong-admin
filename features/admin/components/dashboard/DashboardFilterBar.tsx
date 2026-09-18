@@ -115,45 +115,46 @@ export function DashboardFilterBar({
           />
           <span>직접 기간 조회</span>
         </label>
-        {!showCustomRange ? (
-          <div className={styles.presetGroup} aria-label="조회 기간">
-            {[
-              ["today", "오늘"],
-              ["7d", "최근 7일"],
-              ["30d", "최근 30일"],
-            ].map(([key, label]) => (
-              <button
-                className={preset === key ? styles.presetActive : styles.preset}
-                key={key}
-                type="button"
-                onClick={() => changePreset(key as "today" | "7d" | "30d")}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-        ) : null}
-        {showCustomRange ? (
-          <form className={styles.dateForm} onSubmit={applyDateRange}>
-            <label>
-              <span>조회 시작</span>
-              <input
-                type="date"
-                value={draftStartDate}
-                onChange={(event) => setDraftStartDate(event.target.value)}
-              />
-            </label>
-            <label>
-              <span>조회 종료</span>
-              <input
-                type="date"
-                value={draftEndDate}
-                onChange={(event) => setDraftEndDate(event.target.value)}
-              />
-            </label>
-            <button type="submit">적용</button>
-          </form>
-        ) : null}
+        <div className={styles.rangeSlot}>
+          {!showCustomRange ? (
+            <div className={styles.presetGroup} aria-label="조회 기간">
+              {[
+                ["today", "오늘"],
+                ["7d", "최근 7일"],
+                ["30d", "최근 30일"],
+              ].map(([key, label]) => (
+                <button
+                  className={preset === key ? styles.presetActive : styles.preset}
+                  key={key}
+                  type="button"
+                  onClick={() => changePreset(key as "today" | "7d" | "30d")}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          ) : (
+            <form className={styles.dateForm} onSubmit={applyDateRange}>
+              <label>
+                <span>조회 시작</span>
+                <input
+                  type="date"
+                  value={draftStartDate}
+                  onChange={(event) => setDraftStartDate(event.target.value)}
+                />
+              </label>
+              <label>
+                <span>조회 종료</span>
+                <input
+                  type="date"
+                  value={draftEndDate}
+                  onChange={(event) => setDraftEndDate(event.target.value)}
+                />
+              </label>
+              <button type="submit">적용</button>
+            </form>
+          )}
+        </div>
       </div>
     </section>
   );

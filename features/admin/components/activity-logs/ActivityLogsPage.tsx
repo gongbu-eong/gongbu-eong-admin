@@ -5,12 +5,12 @@ import { getActivityLogData, ActivityLogQuery } from "@/features/admin/server/ac
 import styles from "@/features/admin/components/traffic/TrafficLogsPage.module.css";
 
 const eventOptions = [
-  ["all", "전체 이벤트"],
-  ["page_view", "페이지 방문"],
+  ["visit", "방문"],
   ["product", "기능·버튼 이벤트"],
   ["attribution", "유입 기록"],
   ["login", "로그인"],
   ["entry", "최초 진입"],
+  ["all", "전체 방문·이벤트"],
 ] as const;
 
 const screenOptions = [
@@ -98,12 +98,11 @@ export async function ActivityLogsPage({ filters }: ActivityLogsPageProps) {
         <AdminCard className={styles.tableCard}>
           <div className={styles.tableTop}>
             <div>
-              <h2>전체 방문·이벤트 이력</h2>
+              <h2>{data.event === "visit" ? "방문 이력" : data.event === "all" ? "전체 방문·이벤트 이력" : "이벤트 이력"}</h2>
               <p>총 <strong>{formatCount(data.totalCount)}</strong>건 · 비회원은 IP와 익명 식별자로 확인합니다.{data.ip ? ` · ${data.ip} 로그만 조회 중` : ""}</p>
             </div>
             <span className={styles.tableActions}>
               {data.ip ? <Link className={styles.backButtonSecondary} href={makeHref(data, 1, "")}>전체 IP 보기</Link> : null}
-              <Link className={styles.backButtonSecondary} href="/">대시보드</Link>
             </span>
           </div>
           <div className={styles.tableWrap}>

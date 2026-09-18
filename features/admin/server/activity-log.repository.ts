@@ -58,6 +58,10 @@ function dateValue(value: string | undefined, fallback: string) {
   return /^\d{4}-\d{2}-\d{2}$/.test(value || "") ? value as string : fallback;
 }
 
+function normalizeIp(value: string | undefined) {
+  return (value || "").trim().split("/")[0] || "";
+}
+
 function defaultDates(args?: ActivityLogQuery) {
   const today = new Intl.DateTimeFormat("en-CA", {
     timeZone: "Asia/Seoul",
@@ -80,6 +84,7 @@ function formatDateTime(value: string) {
     day: "numeric",
     hour: "2-digit",
     minute: "2-digit",
+    second: "2-digit",
     hour12: false,
   }).format(date);
 }
@@ -87,12 +92,15 @@ function formatDateTime(value: string) {
 function formatEvent(value: string | null) {
   if (!value) return "기타 이벤트";
   const labels: Record<string, string> = {
-    page_view: "페이지 방문",
+    page_view: "방문",
+    screen_click: "화면 요소 클릭",
+    banner_impression: "배너 노출",
     banner_click: "배너·버튼 클릭",
     bookmark_click: "찜 클릭",
     apply_click: "지원 클릭",
     diagnosis_start: "진단 시작",
     diagnosis_complete: "진단 완료",
+    diagnosis_result_view: "진단 결과 열람",
     login_success: "로그인 성공",
     login_failed: "로그인 실패",
     attribution_capture: "유입 기록",
@@ -103,10 +111,11 @@ function formatEvent(value: string | null) {
 
 export async function getActivityLogData(args?: ActivityLogQuery): Promise<ActivityLogData> {
   const { startDate, endDate } = defaultDates(args);
-  const event = args?.event || "all";
+  const requestedEvent = args?.event || "visit";
+  const event = requestedEvent === "page_view" ? "visit" : requestedEvent;
   const screen = args?.screen || "all";
   const keyword = (args?.keyword || "").trim();
-  const ip = (args?.ip || "").trim();
+  const ip = normalizeIp(args?.ip);
   const page = Math.max(1, Number(args?.page || 1));
   const pattern = keyword ? `%${keyword}%` : "";
   const offset = (page - 1) * pageSize;
@@ -121,7 +130,7 @@ export async function getActivityLogData(args?: ActivityLogQuery): Promise<Activ
         access.user_id,
         access.anonymous_id,
         access.session_id,
-        access.ip_address::text AS ip_address,
+        SPLIT_PART(access.ip_address::text, '/', 1) AS ip_address,
         COALESCE(access.canonical_path, access.path) AS path,
         COALESCE(access.title, access.screen_key, access.traffic_channel, access.referrer) AS detail,
         COALESCE(NULLIF(access.screen_key, ''), access.metadata->>'screenKey') AS screen_key
@@ -137,7 +146,7 @@ export async function getActivityLogData(args?: ActivityLogQuery): Promise<Activ
         events.user_id,
         events.anonymous_id,
         NULL::uuid,
-        NULLIF(events.properties->>'ip_address', ''),
+        SPLIT_PART(NULLIF(events.properties->>'ip_address', ''), '/', 1),
         COALESCE(events.properties->>'path', events.properties->>'screenKey', events.properties->>'targetPath'),
         COALESCE(events.properties->>'banner_name', events.properties->>'title', events.properties::text),
         events.properties->>'screenKey'
@@ -153,7 +162,7 @@ export async function getActivityLogData(args?: ActivityLogQuery): Promise<Activ
         events.user_id,
         events.anonymous_id,
         NULL::uuid,
-        events.ip_address::text,
+        SPLIT_PART(events.ip_address::text, '/', 1),
         events.landing_path,
         COALESCE(events.source, events.medium, events.campaign, events.referrer),
         NULL::text
@@ -169,7 +178,7 @@ export async function getActivityLogData(args?: ActivityLogQuery): Promise<Activ
         events.user_id,
         NULL::uuid,
         NULL::uuid,
-        events.ip_address::text,
+        SPLIT_PART(events.ip_address::text, '/', 1),
         '/login',
         COALESCE(events.provider::text, events.failure_reason),
         'login'
@@ -185,7 +194,7 @@ export async function getActivityLogData(args?: ActivityLogQuery): Promise<Activ
         events.user_id,
         events.anonymous_id,
         NULL::uuid,
-        events.ip_address::text,
+        SPLIT_PART(events.ip_address::text, '/', 1),
         events.landing_path,
         COALESCE(events.campaign_source, events.campaign_medium, events.campaign_name),
         NULL::text
@@ -206,7 +215,7 @@ export async function getActivityLogData(args?: ActivityLogQuery): Promise<Activ
   `;
   const whereSql = `
     WHERE ($3::text = 'all' OR
-      ($3::text = 'page_view' AND event_type = 'page_view') OR
+      ($3::text = 'visit' AND event_type = 'page_view') OR
       ($3::text = 'product' AND event_type NOT IN ('page_view', 'attribution_capture', 'entry', 'login_success', 'login_failed')) OR
       ($3::text = 'attribution' AND event_type = 'attribution_capture') OR
       ($3::text = 'login' AND event_type LIKE 'login_%') OR

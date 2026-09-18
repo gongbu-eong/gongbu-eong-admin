@@ -11,19 +11,25 @@
 }
 
 .rangeControls {
-  display: flex;
-  align-items: flex-end;
-  justify-content: flex-end;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: max-content 380px;
+  align-items: end;
   gap: 12px;
   min-width: 500px;
+}
+
+.rangeSlot {
+  width: 380px;
+  min-width: 380px;
 }
 
 .presetGroup {
   display: flex;
   align-items: center;
+  width: 100%;
   gap: 4px;
   padding: 3px;
+  box-sizing: border-box;
   border: 1px solid #d8e0ed;
   border-radius: 10px;
   background: #f7f9fc;
@@ -31,6 +37,7 @@
 
 .preset,
 .presetActive {
+  flex: 1 1 0;
   height: 34px;
   border: 0;
   border-radius: 7px;
@@ -69,11 +76,14 @@
 .dateForm {
   display: flex;
   align-items: flex-end;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  width: 100%;
   gap: 8px;
 }
 
 .dateForm label {
+  flex: 1 1 0;
+  min-width: 0;
   display: grid;
   gap: 5px;
   color: var(--admin-muted);
@@ -82,8 +92,10 @@
 }
 
 .dateForm input {
+  width: 100%;
   height: 42px;
-  min-width: 146px;
+  min-width: 0;
+  box-sizing: border-box;
   border: 1px solid #d8e0ed;
   border-radius: 10px;
   padding: 0 12px;
@@ -94,6 +106,7 @@
 }
 
 .dateForm button {
+  flex: 0 0 58px;
   height: 42px;
   border: 0;
   border-radius: 10px;
@@ -132,6 +145,7 @@
 
   .bar,
   .rangeControls,
+  .rangeSlot,
   .presetGroup,
   .customToggle,
   .productSelect,
@@ -143,6 +157,32 @@
   }
 
   .rangeControls {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+    min-width: 0;
+  }
+
+  .rangeSlot {
+    min-width: 0;
+  }
+
+  .customToggle {
+    align-self: flex-start;
+    width: auto;
+  }
+
+  .dateForm {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 58px;
+    align-items: end;
+  }
+
+  .dateForm label,
+  .dateForm input,
+  .dateForm button {
+    width: auto;
     min-width: 0;
   }
 
