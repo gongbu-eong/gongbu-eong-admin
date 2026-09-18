@@ -99,6 +99,23 @@
   width: 100%;
 }
 
+.channelInsight {
+  display: grid;
+  gap: 16px;
+  width: 100%;
+}
+
+.channelTrendCard {
+  width: 100%;
+}
+
+.channelDetailGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  width: 100%;
+}
+
 .trafficTrendCard {
   height: 400px;
   overflow: hidden;
@@ -152,6 +169,7 @@
 
   .chartGrid,
   .trafficTrendGrid,
+  .channelDetailGrid,
   .trafficPairGrid,
   .analysisGrid,
   .lowerGrid {

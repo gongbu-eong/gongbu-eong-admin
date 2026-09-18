@@ -239,8 +239,9 @@ export async function AdminDashboardPage({
             </p>
           </div>
         </div>
-        <div className={styles.trafficPairGrid}>
+        <div className={styles.channelInsight}>
           <TrendViewCard
+              className={styles.channelTrendCard}
               title="유입 채널 순방문자"
               subtitle="최근 7일 · 같은 방문자 중복 제외"
               listSubtitle={`목록 · ${dashboardPeriodText}`}
@@ -250,13 +251,24 @@ export async function AdminDashboardPage({
               maxValue={trafficChannelScale.maxValue}
               valueSuffix="명"
           />
-          <AdminCard className={styles.channelCard}>
-            <ChannelList
-              items={channels}
-              total={channelTotal}
-              selectedChannel={selectedChannelKey}
-            />
-          </AdminCard>
+          <div className={styles.channelDetailGrid}>
+            <AdminCard className={styles.channelCard}>
+              <ChannelList
+                items={channels}
+                total={channelTotal}
+                selectedChannel={selectedChannelKey}
+              />
+            </AdminCard>
+            <AdminCard className={styles.screenClickCard}>
+              <ScreenClickList
+                items={screenInflows}
+                total={screenInflowTotal}
+                channelLabel={selectedChannelLabel}
+              />
+            </AdminCard>
+          </div>
+        </div>
+        <div className={styles.trafficPairGrid}>
           <TrendViewCard
               title="배너·버튼 클릭"
               subtitle="최근 7일 · 전체 클릭 / 찜 / 지원"
@@ -279,18 +291,11 @@ export async function AdminDashboardPage({
               listSeries={jobDetailBehaviorListTrend}
               maxValue={jobDetailBehaviorScale.maxValue}
           />
-        <AdminCard className={styles.behaviorCard}>
+          <AdminCard className={styles.behaviorCard}>
           <BehaviorPatternList
             items={behaviorPatterns}
             periodLabel={dashboardPeriodLabel}
           />
-        </AdminCard>
-          <AdminCard className={styles.screenClickCard}>
-            <ScreenClickList
-              items={screenInflows}
-              total={screenInflowTotal}
-              channelLabel={selectedChannelLabel}
-            />
           </AdminCard>
         </div>
       </section>

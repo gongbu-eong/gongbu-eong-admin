@@ -25,6 +25,7 @@ export function DashboardFilterBar({
 }: DashboardFilterBarProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const [showCustomRange, setShowCustomRange] = useState(preset === "custom");
   const [draftStartDate, setDraftStartDate] = useState(startDate);
   const [draftEndDate, setDraftEndDate] = useState(endDate);
 
@@ -57,11 +58,21 @@ export function DashboardFilterBar({
   };
 
   const changePreset = (nextPreset: "today" | "7d" | "30d") => {
+    setShowCustomRange(false);
     const params = new URLSearchParams(searchParams.toString());
     params.set("period", nextPreset);
     params.delete("startDate");
     params.delete("endDate");
     pushDashboard(params);
+  };
+
+  const toggleCustomRange = (checked: boolean) => {
+    setShowCustomRange(checked);
+
+    if (checked) {
+      setDraftStartDate(endDate);
+      setDraftEndDate(endDate);
+    }
   };
 
   const changeProduct = (nextProduct: string) => {
@@ -97,25 +108,35 @@ export function DashboardFilterBar({
           </button>
         ))}
       </div>
-      <form className={styles.dateForm} onSubmit={applyDateRange}>
-        <label>
-          <span>조회 시작</span>
-          <input
-            type="date"
-            value={draftStartDate}
-            onChange={(event) => setDraftStartDate(event.target.value)}
-          />
-        </label>
-        <label>
-          <span>조회 종료</span>
-          <input
-            type="date"
-            value={draftEndDate}
-            onChange={(event) => setDraftEndDate(event.target.value)}
-          />
-        </label>
-        <button type="submit">적용</button>
-      </form>
+      <label className={styles.customToggle}>
+        <input
+          type="checkbox"
+          checked={showCustomRange}
+          onChange={(event) => toggleCustomRange(event.target.checked)}
+        />
+        <span>직접 기간 조회</span>
+      </label>
+      {showCustomRange ? (
+        <form className={styles.dateForm} onSubmit={applyDateRange}>
+          <label>
+            <span>조회 시작</span>
+            <input
+              type="date"
+              value={draftStartDate}
+              onChange={(event) => setDraftStartDate(event.target.value)}
+            />
+          </label>
+          <label>
+            <span>조회 종료</span>
+            <input
+              type="date"
+              value={draftEndDate}
+              onChange={(event) => setDraftEndDate(event.target.value)}
+            />
+          </label>
+          <button type="submit">적용</button>
+        </form>
+      ) : null}
       <label className={styles.productSelect}>
         <span>분석 대상</span>
         <AdminSelect
