@@ -74,6 +74,8 @@ export type BehaviorPatternItem = {
   key: string;
   channelLabel: string;
   visitors: string;
+  activity: string;
+  activityRate: string;
   bounce: string;
   bounceRate: string;
   revisit: string;

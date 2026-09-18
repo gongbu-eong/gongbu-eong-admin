@@ -932,8 +932,8 @@ export async function getDashboardData({
             ('banner:job_detail_apply_click'),
             ('behavior:job_detail_visitors'),
             ('behavior:activity_visitors'),
-            ('behavior:bookmark_clicks'),
-            ('behavior:apply_clicks')
+            ('behavior:apply_clicks'),
+            ('behavior:revisit_visitors')
           ) AS metrics(metric_key)
         ),
         raw_channel_visits AS (
@@ -1062,6 +1062,13 @@ export async function getDashboardData({
           )
           GROUP BY day_kst, metric_key
         ),
+        behavior_page_events AS (
+          SELECT logs.*
+          FROM (${trafficEventsSql}) logs
+          CROSS JOIN bounds
+          WHERE logs.event_at >= bounds.range_start
+            AND logs.event_at < bounds.range_end + INTERVAL '30 days'
+        ),
         page_event_gaps AS (
           SELECT
             traffic_events.*,
@@ -1069,7 +1076,7 @@ export async function getDashboardData({
               PARTITION BY traffic_events.visitor_key
               ORDER BY traffic_events.event_at, traffic_events.id
             ) AS previous_event_at
-          FROM traffic_events
+          FROM behavior_page_events traffic_events
           WHERE traffic_events.visitor_key IS NOT NULL
         ),
         page_event_sessions AS (
@@ -1090,24 +1097,31 @@ export async function getDashboardData({
           FROM page_event_gaps
         ),
         job_detail_visits AS (
-          SELECT DISTINCT ON (logs.visitor_key, logs.session_no)
+          SELECT DISTINCT ON (logs.visitor_key)
             (logs.event_at AT TIME ZONE 'Asia/Seoul')::date AS day_kst,
             logs.visitor_key,
             logs.visitor_key || ':' || logs.session_no::TEXT AS session_key,
             logs.event_at
           FROM page_event_sessions logs
-          WHERE
+          WHERE logs.event_at >= (SELECT range_start FROM bounds)
+            AND logs.event_at < (SELECT range_end FROM bounds)
+            AND (
               logs.screen_key = 'job_detail'
               OR split_part(logs.landing_path, '?', 1) ~ '^/jobs/[^/]+$'
-          ORDER BY logs.visitor_key, logs.session_no, logs.event_at, logs.id
+            )
+          ORDER BY logs.visitor_key, logs.event_at, logs.id
         ),
         later_page_activity AS (
           SELECT DISTINCT visits.day_kst, visits.visitor_key, visits.session_key
           FROM job_detail_visits visits
           JOIN page_event_sessions logs
-            ON logs.visitor_key = visits.visitor_key
+           ON logs.visitor_key = visits.visitor_key
            AND logs.event_at > visits.event_at
            AND logs.event_at <= visits.event_at + INTERVAL '30 minutes'
+           AND NOT (
+             logs.screen_key = 'job_detail'
+             OR split_part(logs.landing_path, '?', 1) ~ '^/jobs/[^/]+$'
+           )
         ),
         later_action_activity AS (
           SELECT DISTINCT
@@ -1143,6 +1157,14 @@ export async function getDashboardData({
           UNION
           SELECT day_kst, visitor_key FROM later_action_activity
         ),
+        revisit_visitors AS (
+          SELECT DISTINCT visits.day_kst, visits.visitor_key
+          FROM job_detail_visits visits
+          JOIN page_event_sessions logs
+            ON logs.visitor_key = visits.visitor_key
+           AND logs.event_at > visits.event_at + INTERVAL '30 minutes'
+           AND logs.event_at <= visits.event_at + INTERVAL '30 days'
+        ),
         behavior_counts AS (
           SELECT day_kst, 'behavior:job_detail_visitors' AS metric_key, COUNT(DISTINCT visitor_key)::TEXT AS count
           FROM job_detail_visits
@@ -1152,14 +1174,13 @@ export async function getDashboardData({
           FROM activity_visitors
           GROUP BY day_kst
           UNION ALL
-          SELECT day_kst, 'behavior:bookmark_clicks' AS metric_key, COUNT(*)::TEXT AS count
-          FROM later_action_events
-          WHERE event_type = 'job_detail_bookmark_click'
-          GROUP BY day_kst
-          UNION ALL
           SELECT day_kst, 'behavior:apply_clicks' AS metric_key, COUNT(*)::TEXT AS count
           FROM later_action_events
           WHERE event_type = 'job_detail_apply_click'
+          GROUP BY day_kst
+          UNION ALL
+          SELECT day_kst, 'behavior:revisit_visitors' AS metric_key, COUNT(DISTINCT visitor_key)::TEXT AS count
+          FROM revisit_visitors
           GROUP BY day_kst
         ),
         counts AS (
@@ -1220,8 +1241,8 @@ export async function getDashboardData({
           ('banner:job_detail_apply_click'),
           ('behavior:job_detail_visitors'),
           ('behavior:activity_visitors'),
-          ('behavior:bookmark_clicks'),
-          ('behavior:apply_clicks')
+          ('behavior:apply_clicks'),
+          ('behavior:revisit_visitors')
         ) AS metrics(metric_key)
       ),
       visitor_counts AS (
@@ -1396,10 +1417,7 @@ export async function getDashboardData({
         SELECT * FROM (${trafficEventsSql}) events
       ),
       job_detail_visits AS (
-        SELECT DISTINCT ON (
-          (events.event_at AT TIME ZONE 'Asia/Seoul')::date,
-          events.visitor_key
-        )
+        SELECT DISTINCT ON (events.visitor_key)
           (events.event_at AT TIME ZONE 'Asia/Seoul')::date AS day_kst,
           events.visitor_key,
           events.event_at
@@ -1411,22 +1429,22 @@ export async function getDashboardData({
             events.screen_key = 'job_detail'
             OR split_part(events.landing_path, '?', 1) ~ '^/jobs/[^/]+$'
           )
-        ORDER BY
-          (events.event_at AT TIME ZONE 'Asia/Seoul')::date,
-          events.visitor_key,
-          events.event_at,
-          events.id
+        ORDER BY events.visitor_key, events.event_at, events.id
       ),
       later_page_activity AS (
         SELECT DISTINCT visits.day_kst, visits.visitor_key
         FROM job_detail_visits visits
         JOIN all_page_events events
-          ON events.visitor_key = visits.visitor_key
+         ON events.visitor_key = visits.visitor_key
          AND events.event_at > visits.event_at
          AND events.event_at <= visits.event_at + INTERVAL '30 minutes'
+         AND NOT (
+           events.screen_key = 'job_detail'
+           OR split_part(events.landing_path, '?', 1) ~ '^/jobs/[^/]+$'
+         )
       ),
       later_action_activity AS (
-        SELECT DISTINCT visits.day_kst, visits.visitor_key
+        SELECT DISTINCT visits.day_kst, visits.visitor_key, events.event_type
         FROM job_detail_visits visits
         JOIN public.product_events events
           ON COALESCE(
@@ -1459,14 +1477,20 @@ export async function getDashboardData({
         FROM activity_visitors
         GROUP BY day_kst
         UNION ALL
-        SELECT day_kst, 'behavior:bookmark_clicks' AS metric_key, COUNT(*)::TEXT AS count
-        FROM raw_banner_events
-        WHERE metric_key = 'banner:job_detail_bookmark_click'
+        SELECT day_kst, 'behavior:apply_clicks' AS metric_key, COUNT(*)::TEXT AS count
+        FROM later_action_activity
+        WHERE event_type = 'job_detail_apply_click'
         GROUP BY day_kst
         UNION ALL
-        SELECT day_kst, 'behavior:apply_clicks' AS metric_key, COUNT(*)::TEXT AS count
-        FROM raw_banner_events
-        WHERE metric_key = 'banner:job_detail_apply_click'
+        SELECT day_kst, 'behavior:revisit_visitors' AS metric_key, COUNT(DISTINCT visitor_key)::TEXT AS count
+        FROM (
+          SELECT DISTINCT visits.day_kst, visits.visitor_key
+          FROM job_detail_visits visits
+          JOIN all_page_events events
+            ON events.visitor_key = visits.visitor_key
+           AND events.event_at > visits.event_at + INTERVAL '30 minutes'
+           AND events.event_at <= visits.event_at + INTERVAL '30 days'
+        ) revisit_visitors
         GROUP BY day_kst
       ),
       counts AS (
@@ -1860,7 +1884,7 @@ export async function getDashboardData({
           OR split_part(page_events.landing_path, '?', 1) ~ '^/jobs/[^/]+$'
       ),
       job_detail_channel_visitors AS (
-        SELECT DISTINCT ON (session_key)
+        SELECT DISTINCT ON (visitor_key)
           visit_id,
           visitor_key,
           source_label,
@@ -1870,7 +1894,7 @@ export async function getDashboardData({
         CROSS JOIN ranges
         WHERE event_at >= ranges.range_start
           AND event_at < ranges.range_end
-        ORDER BY session_key, event_at DESC, visit_id DESC
+        ORDER BY visitor_key, event_at, visit_id
       ),
       product_actions AS (
         SELECT
@@ -1963,9 +1987,17 @@ export async function getDashboardData({
          AND actions.event_at <= job_detail_visits.event_at + INTERVAL '30 minutes'
         ORDER BY actions.action_id, job_detail_visits.event_at DESC, job_detail_visits.visit_id DESC
       ),
+      all_later_page_events AS (
+        SELECT DISTINCT source_label, visitor_key
+        FROM attributed_page_events
+      ),
       later_page_events AS (
         SELECT DISTINCT source_label, visitor_key
         FROM attributed_page_events
+        WHERE NOT (
+             screen_key = 'job_detail'
+          OR split_part(landing_path, '?', 1) ~ '^/jobs/[^/]+$'
+        )
       ),
       later_action_events AS (
         SELECT DISTINCT source_label, visitor_key
@@ -2027,7 +2059,7 @@ export async function getDashboardData({
           job_detail_channel_visitors.source_label,
           COUNT(DISTINCT job_detail_channel_visitors.visitor_key) AS visitors,
           COUNT(DISTINCT job_detail_channel_visitors.visitor_key) FILTER (
-            WHERE later_page_events.visitor_key IS NULL
+            WHERE all_later_page_events.visitor_key IS NULL
               AND later_action_events.visitor_key IS NULL
           ) AS bounce_count,
           COUNT(DISTINCT job_detail_channel_visitors.visitor_key) FILTER (
@@ -2041,7 +2073,7 @@ export async function getDashboardData({
           , GREATEST(
               COUNT(DISTINCT job_detail_channel_visitors.visitor_key)
               - COUNT(DISTINCT job_detail_channel_visitors.visitor_key) FILTER (
-                  WHERE later_page_events.visitor_key IS NULL
+                  WHERE all_later_page_events.visitor_key IS NULL
                     AND later_action_events.visitor_key IS NULL
                 )
               - COUNT(DISTINCT recognized_action_or_page_visitors.visitor_key),
@@ -2051,6 +2083,9 @@ export async function getDashboardData({
         LEFT JOIN later_page_events
           ON later_page_events.source_label = job_detail_channel_visitors.source_label
          AND later_page_events.visitor_key = job_detail_channel_visitors.visitor_key
+        LEFT JOIN all_later_page_events
+          ON all_later_page_events.source_label = job_detail_channel_visitors.source_label
+         AND all_later_page_events.visitor_key = job_detail_channel_visitors.visitor_key
         LEFT JOIN later_action_events
           ON later_action_events.source_label = job_detail_channel_visitors.source_label
          AND later_action_events.visitor_key = job_detail_channel_visitors.visitor_key
@@ -2123,6 +2158,7 @@ export async function getDashboardData({
   );
   const behaviorPatterns = behaviorPatternResult.rows.map((row) => {
     const visitors = numberValue(row.visitors);
+    const activity = numberValue(row.activity_count);
     const bounce = numberValue(row.bounce_count);
     const revisit = numberValue(row.revisit_count);
     const bookmark = numberValue(row.bookmark_count);
@@ -2136,6 +2172,8 @@ export async function getDashboardData({
       key: row.channel_label,
       channelLabel: row.channel_label,
       visitors: `${formatCount(visitors)}명`,
+      activity: `${formatCount(activity)}명`,
+      activityRate: formatBehaviorRate(activity),
       bounce: `${formatCount(bounce)}명`,
       bounceRate: formatBehaviorRate(bounce),
       revisit: `${formatCount(revisit)}명`,
@@ -2217,13 +2255,13 @@ export async function getDashboardData({
         color: "#1fb573",
       },
       {
-        key: "behavior:bookmark_clicks",
-        label: "찜 클릭",
+        key: "behavior:apply_clicks",
+        label: "지원 클릭",
         color: "#f5b91e",
       },
       {
-        key: "behavior:apply_clicks",
-        label: "지원 클릭",
+        key: "behavior:revisit_visitors",
+        label: "재방문자",
         color: "#e65c5c",
       },
     ],
@@ -2310,13 +2348,13 @@ export async function getDashboardData({
         color: "#1fb573",
       },
       {
-        key: "behavior:bookmark_clicks",
-        label: "찜 클릭",
+        key: "behavior:apply_clicks",
+        label: "지원 클릭",
         color: "#f5b91e",
       },
       {
-        key: "behavior:apply_clicks",
-        label: "지원 클릭",
+        key: "behavior:revisit_visitors",
+        label: "재방문자",
         color: "#e65c5c",
       },
     ],

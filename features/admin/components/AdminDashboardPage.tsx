@@ -300,7 +300,7 @@ export async function AdminDashboardPage({
           <TrendViewCard
             className={styles.behaviorTrendCard}
               title="공고 상세 방문 후 행동 추이"
-              subtitle="최근 7일 · 방문자 / 후속 행동 / 찜 / 지원"
+              subtitle="최근 7일 · 방문자 / 후속 행동 방문자 / 지원 클릭 / 30일 재방문"
               listSubtitle={`목록 · ${dashboardPeriodText}`}
               yLabels={jobDetailBehaviorScale.yLabels}
               series={jobDetailBehaviorTrend}
