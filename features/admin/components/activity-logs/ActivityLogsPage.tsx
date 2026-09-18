@@ -5,12 +5,12 @@ import { getActivityLogData, ActivityLogQuery } from "@/features/admin/server/ac
 import styles from "@/features/admin/components/traffic/TrafficLogsPage.module.css";
 
 const eventOptions = [
+  ["all", "전체 방문·이벤트"],
   ["visit", "방문"],
   ["product", "기능·버튼 이벤트"],
   ["attribution", "유입 기록"],
   ["login", "로그인"],
   ["entry", "최초 진입"],
-  ["all", "전체 방문·이벤트"],
 ] as const;
 
 const screenOptions = [
@@ -62,7 +62,7 @@ export async function ActivityLogsPage({ filters }: ActivityLogsPageProps) {
     <AdminLayout
       activeNav="activity-logs"
       title="방문·이벤트 로그"
-      description="가입자와 비회원의 방문 및 기능 이용 이력을 한 곳에서 확인합니다."
+      description="가입자와 비회원의 방문·유입·기능 이용 이력을 시간순으로 확인합니다."
       headerActions={
         <form className={styles.headerFilters} action="/activity-logs">
           <label className={styles.headerDateField}>

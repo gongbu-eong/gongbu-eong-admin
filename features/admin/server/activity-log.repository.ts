@@ -126,7 +126,7 @@ function formatEvent(value: string | null) {
 
 export async function getActivityLogData(args?: ActivityLogQuery): Promise<ActivityLogData> {
   const { startDate, endDate } = defaultDates(args);
-  const requestedEvent = args?.event || "visit";
+  const requestedEvent = args?.event || "all";
   const event = requestedEvent === "page_view" ? "visit" : requestedEvent;
   const screen = args?.screen || "all";
   const keyword = (args?.keyword || "").trim();
