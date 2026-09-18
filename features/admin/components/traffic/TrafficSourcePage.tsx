@@ -74,13 +74,13 @@ export async function TrafficSourcePage({ filters }: TrafficSourcePageProps) {
         <section className={styles.chartGrid}>
           <AdminCard className={styles.distributionCard}>
             <div className={styles.cardTitle}>
-              <h2>채널별 분포</h2>
-              <p>비중(도넛)과 유입량(막대)을 함께 확인</p>
+              <h2>유입 채널별 순방문자</h2>
+              <p>중복 방문과 페이지 이동은 제외하고 최초 유입 채널만 집계합니다.</p>
             </div>
             <div
               className={styles.donut}
               style={{ background: createDonutGradient(data.channels) }}
-              aria-label={`전체 ${formatCount(data.totalVisitors)}건`}
+              aria-label={`전체 순방문자 ${formatCount(data.totalVisitors)}명`}
             >
               <div>
                 <span>전체</span>
@@ -94,7 +94,7 @@ export async function TrafficSourcePage({ filters }: TrafficSourcePageProps) {
                     <strong>{channel.label}</strong>
                     <span>
                       <b>{formatPercent(channel.percent)}</b>
-                      ({formatCount(channel.count)}건)
+                      ({formatCount(channel.count)}명)
                     </span>
                   </div>
                   <div className={styles.barTrack}>
@@ -112,8 +112,8 @@ export async function TrafficSourcePage({ filters }: TrafficSourcePageProps) {
 
           <AdminCard className={styles.trendCard}>
             <LineChart
-              title="채널별 유입 추이"
-              subtitle="최근 7일 기준 · 채널별 유입 흐름"
+              title="채널별 순방문자 추이"
+              subtitle="일별 순방문자 · 중복 방문과 페이지 이동 제외"
               yLabels={data.yLabels}
               legends={data.trendSeries.map((series) => ({
                 label: series.label,
@@ -127,12 +127,12 @@ export async function TrafficSourcePage({ filters }: TrafficSourcePageProps) {
 
         <AdminCard className={styles.detailCard}>
           <div className={styles.detailHeader}>
-            <h2>채널별 상세</h2>
+            <h2>채널별 순방문자</h2>
           </div>
           <div className={styles.table}>
             <div className={styles.tableHeader}>
               <span>채널</span>
-              <span>유입량</span>
+              <span>방문자 수</span>
               <span>비중</span>
               <span>지난 기간 대비</span>
             </div>
@@ -145,7 +145,7 @@ export async function TrafficSourcePage({ filters }: TrafficSourcePageProps) {
                     <i style={{ backgroundColor: channel.color }} />
                     {channel.label}
                   </span>
-                  <span>{formatCount(channel.count)}건</span>
+                  <span>{formatCount(channel.count)}명</span>
                   <span>{formatPercent(channel.percent)}</span>
                   <span className={isUp ? styles.up : styles.down}>
                     {isUp ? "▲" : "▼"} {formatPercent(Math.abs(channel.deltaPercent))}
@@ -155,7 +155,7 @@ export async function TrafficSourcePage({ filters }: TrafficSourcePageProps) {
             })}
             <div className={styles.totalRow}>
               <span>합계</span>
-              <span>{formatCount(data.totalVisitors)}건</span>
+              <span>{formatCount(data.totalVisitors)}명</span>
               <span>{data.totalVisitors > 0 ? "100%" : "0%"}</span>
               <span
                 className={
@@ -170,7 +170,7 @@ export async function TrafficSourcePage({ filters }: TrafficSourcePageProps) {
 
         <AdminCard className={styles.dailyDetailCard}>
           <div className={styles.dailyHeader}>
-            <h2>날짜별 채널 상세</h2>
+            <h2>날짜별 순방문자 채널</h2>
             <p>{data.periodValue} 기준</p>
           </div>
           <div className={styles.dailyTable}>
@@ -196,10 +196,10 @@ export async function TrafficSourcePage({ filters }: TrafficSourcePageProps) {
                 <span>{row.date}</span>
                 {data.trendSeries.map((series) => (
                   <span key={series.label}>
-                    {formatCount(row.counts[series.label] || 0)}건
+                    {formatCount(row.counts[series.label] || 0)}명
                   </span>
                 ))}
-                <strong>{formatCount(row.total)}건</strong>
+                <strong>{formatCount(row.total)}명</strong>
               </div>
             ))}
           </div>

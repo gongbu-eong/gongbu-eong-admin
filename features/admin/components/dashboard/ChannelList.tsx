@@ -19,7 +19,7 @@ export function ChannelList({
       <header className={styles.header}>
         <div>
           <h2>유입 채널</h2>
-          <p>오늘 유입 로그 기준 · 총 {total}건</p>
+          <p>조회 기간 순방문자 기준 · 총 {total}명</p>
         </div>
         <Link href="/traffic/logs?from=dashboard">로그보기 &gt;</Link>
       </header>

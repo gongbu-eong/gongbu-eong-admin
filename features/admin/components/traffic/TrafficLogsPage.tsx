@@ -88,10 +88,10 @@ export async function TrafficLogsPage({ filters }: TrafficLogsPageProps) {
     <AdminLayout
       activeNav={fromDashboard ? "dashboard" : "traffic"}
       activeSubNav={fromDashboard ? undefined : "traffic-logs"}
-      title="유입 로그 전체보기"
-      description="접속 경로, IP, 기기, 회원 정보를 최신순으로 확인해요."
+      title="페이지 조회 로그"
+      description="개별 페이지 조회 이력을 중복 포함으로 확인합니다."
     >
-      <section className={styles.page} aria-label="유입 로그 전체보기">
+      <section className={styles.page} aria-label="페이지 조회 로그">
         <AdminCard className={styles.searchCard}>
           <form className={styles.filters} action="/traffic/logs">
             <label className={styles.dateField}>
@@ -145,10 +145,10 @@ export async function TrafficLogsPage({ filters }: TrafficLogsPageProps) {
         <AdminCard className={styles.tableCard}>
           <div className={styles.tableTop}>
             <div>
-              <h2>유입 로그</h2>
+              <h2>페이지 조회 로그</h2>
               <p>
-                총 <strong>{formatCount(data.totalCount)}</strong>건 · 페이지당{" "}
-                {formatCount(data.pageSize)}건
+                총 <strong>{formatCount(data.totalCount)}</strong>건 · 방문자 집계와
+                별개인 개별 조회 기록
               </p>
             </div>
             <Link href={fromDashboard ? "/" : "/traffic"}>

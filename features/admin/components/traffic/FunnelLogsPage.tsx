@@ -15,7 +15,7 @@ const productOptions: Array<{ label: string; value: FunnelProductFilter }> = [
   { label: "AI NCS 면접", value: "interview_coaching" },
 ];
 
-const stepOptions: Array<{ label: string; value: FunnelStepFilter }> = [
+const allStepOptions: Array<{ label: string; value: FunnelStepFilter }> = [
   { label: "방문", value: "visit" },
   { label: "시작", value: "start" },
   { label: "완료", value: "complete" },
@@ -72,6 +72,13 @@ function deviceClass(device: "모바일" | "웹" | "알 수 없음") {
 
 export async function FunnelLogsPage({ filters }: FunnelLogsPageProps) {
   const data = await getFunnelLogData(filters);
+  const stepOptions =
+    data.product === "diagnosis"
+      ? allStepOptions.filter(
+          (option) =>
+            option.value !== "visit" && option.value !== "visit_drop",
+        )
+      : allStepOptions;
   const pages = createVisiblePages(data.page, data.totalPages);
 
   return (

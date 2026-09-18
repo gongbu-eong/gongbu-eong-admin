@@ -12,6 +12,7 @@ import { query } from "@/features/admin/server/db";
 
 type DashboardData = {
   metrics: MetricItem[];
+  jobDetailMetrics: MetricItem[];
   visitorTrend: LinePoint[];
   coachingTrend: LinePoint[];
   signupTrend: LinePoint[];
@@ -38,6 +39,7 @@ type DashboardData = {
   productFunnelTitle: string;
   productFunnelDescription: string;
   productRateTrendTitle: string;
+  productHasVisitStep: boolean;
 };
 
 type MetricsRow = {
@@ -93,9 +95,11 @@ type ScreenInflowRow = {
 type BehaviorPatternRow = {
   channel_label: string;
   visitors: string;
+  activity_count: string;
   bounce_count: string;
   revisit_count: string;
-  action_count: string;
+  bookmark_count: string;
+  apply_count: string;
   page_move_count: string;
 };
 
@@ -114,7 +118,6 @@ const dashboardChannelOptions = [
   { key: "blog", label: "블로그" },
   { key: "threads", label: "스레드" },
   { key: "search", label: "검색" },
-  { key: "page_move", label: "페이지 이동" },
   { key: "direct", label: "직접유입" },
 ];
 
@@ -145,7 +148,7 @@ const dashboardScreenKeys = [
 ];
 
 const visitorKeySql =
-  "COALESCE(user_id::TEXT, session_id::TEXT, anonymous_id::TEXT, NULLIF(CONCAT_WS('|', ip_address::TEXT, NULLIF(user_agent, '')), ''))";
+  "COALESCE(user_id::TEXT, anonymous_id::TEXT, session_id::TEXT, NULLIF(CONCAT_WS('|', ip_address::TEXT, NULLIF(user_agent, '')), ''))";
 
 const trafficEventsSql = `
   SELECT
@@ -156,6 +159,7 @@ const trafficEventsSql = `
     id,
     event_name,
     user_agent,
+    metadata,
     COALESCE(
       NULLIF(traffic_channel, ''),
       NULLIF(metadata->>'trafficChannel', ''),
@@ -184,8 +188,17 @@ const coachingStartEventsSql = `
 `;
 
 const coachingCompleteEventsSql = `
-  SELECT results.id::TEXT AS result_key, results.created_at AS event_at
+  SELECT
+    results.id::TEXT AS result_key,
+    COALESCE(
+      requests.user_id::TEXT,
+      requests.anonymous_id::TEXT,
+      requests.id::TEXT
+    ) AS visitor_key,
+    results.created_at AS event_at
   FROM public.resume_coaching_results results
+  JOIN public.resume_coaching_requests requests
+    ON requests.id = results.request_id
 `;
 
 const coachingPageVisitEventsSql = `
@@ -202,7 +215,7 @@ const diagnosisStartEventsSql = `
     created_at AS event_at
   FROM public.product_events
   WHERE event_type = 'diagnosis_start'
-    AND properties->>'action' = 'start_button_click'
+    AND properties->>'action' IN ('question_1_view', 'start_button_click')
 `;
 
 const diagnosisCompleteEventsSql = `
@@ -255,6 +268,7 @@ type DashboardProductConfig = {
   funnelTitle: string;
   funnelDescription: string;
   rateTrendTitle: string;
+  hasVisitStep: boolean;
   pageVisitEventsSql: string;
   startEventsSql: string;
   completeEventsSql: string;
@@ -269,8 +283,9 @@ const productAnalyticsConfigs: Record<string, DashboardProductConfig> = {
     startStepLabel: "진단 시작",
     completeStepLabel: "진단 완료",
     funnelTitle: "강점·성향 유형 전환 퍼널",
-    funnelDescription: "방문부터 결과 확인까지 유저의 이탈률을 봅니다.",
+    funnelDescription: "Q1 진입부터 결과 확인까지 유저의 이탈률을 봅니다.",
     rateTrendTitle: "강점·성향 진단 완료 추이",
+    hasVisitStep: false,
     pageVisitEventsSql: diagnosisPageVisitEventsSql,
     startEventsSql: diagnosisStartEventsSql,
     completeEventsSql: diagnosisCompleteEventsSql,
@@ -285,6 +300,7 @@ const productAnalyticsConfigs: Record<string, DashboardProductConfig> = {
     funnelTitle: "AI NCS 자소서 코칭 전환 퍼널",
     funnelDescription: "방문부터 결과 확인까지 유저의 이탈률을 봅니다.",
     rateTrendTitle: "AI NCS 자소서 코칭 완료 추이",
+    hasVisitStep: true,
     pageVisitEventsSql: coachingPageVisitEventsSql,
     startEventsSql: coachingStartEventsSql,
     completeEventsSql: coachingCompleteEventsSql,
@@ -299,6 +315,7 @@ const productAnalyticsConfigs: Record<string, DashboardProductConfig> = {
     funnelTitle: "AI NCS 면접 코칭 전환 퍼널",
     funnelDescription: "방문부터 결과 확인까지 유저의 이탈률을 봅니다.",
     rateTrendTitle: "AI NCS 면접 코칭 완료 추이",
+    hasVisitStep: true,
     pageVisitEventsSql: interviewPageVisitEventsSql,
     startEventsSql: interviewStartEventsSql,
     completeEventsSql: interviewCompleteEventsSql,
@@ -523,43 +540,34 @@ export async function getDashboardData({
   ];
 
   const metricsResult = await query<MetricsRow>(`
-    WITH bounds AS (
-      SELECT date_trunc('day', NOW() AT TIME ZONE 'Asia/Seoul') AS today_kst
-    ),
-    ranges AS (
-      SELECT
-        today_kst AT TIME ZONE 'Asia/Seoul' AS today_start,
-        (today_kst + INTERVAL '1 day') AT TIME ZONE 'Asia/Seoul' AS tomorrow_start,
-        (today_kst - INTERVAL '1 day') AT TIME ZONE 'Asia/Seoul' AS yesterday_start
-      FROM bounds
-    )
+    ${dashboardRangeSql}
     SELECT
       (
         SELECT COUNT(DISTINCT visitor_key)
         FROM (${trafficEventsSql}) traffic_events, ranges
-        WHERE event_at >= today_start AND event_at < tomorrow_start
+        WHERE event_at >= range_start AND event_at < range_end
       ) AS today_visitors,
       (
         SELECT COUNT(DISTINCT visitor_key)
         FROM (${trafficEventsSql}) traffic_events, ranges
-        WHERE event_at >= yesterday_start AND event_at < today_start
+        WHERE event_at >= previous_start AND event_at < previous_end
       ) AS yesterday_visitors,
       (
         SELECT COUNT(*)
         FROM public.users, ranges
         WHERE status = 'active'
-          AND COALESCE(signup_completed_at, created_at) >= today_start
-          AND COALESCE(signup_completed_at, created_at) < tomorrow_start
+          AND COALESCE(signup_completed_at, created_at) >= range_start
+          AND COALESCE(signup_completed_at, created_at) < range_end
       ) AS today_signups,
       (
         SELECT COUNT(*)
         FROM public.users, ranges
         WHERE status = 'active'
-          AND COALESCE(signup_completed_at, created_at) >= yesterday_start
-          AND COALESCE(signup_completed_at, created_at) < today_start
+          AND COALESCE(signup_completed_at, created_at) >= previous_start
+          AND COALESCE(signup_completed_at, created_at) < previous_end
       ) AS yesterday_signups
     FROM ranges
-  `);
+  `, dashboardDateParams);
 
   const metricsRow = metricsResult.rows[0];
   const todayVisitors = numberValue(metricsRow?.today_visitors);
@@ -571,22 +579,22 @@ export async function getDashboardData({
       ${dashboardRangeSql}
       SELECT
         (
-          SELECT COUNT(DISTINCT request_key)
+          SELECT COUNT(DISTINCT visitor_key)
           FROM (${selectedProductConfig.startEventsSql}) starts, ranges
           WHERE event_at >= range_start AND event_at < range_end
         ) AS current_starts,
         (
-          SELECT COUNT(DISTINCT request_key)
+          SELECT COUNT(DISTINCT visitor_key)
           FROM (${selectedProductConfig.startEventsSql}) starts, ranges
           WHERE event_at >= previous_start AND event_at < previous_end
         ) AS previous_starts,
         (
-          SELECT COUNT(DISTINCT result_key)
+          SELECT COUNT(DISTINCT visitor_key)
           FROM (${selectedProductConfig.completeEventsSql}) completes, ranges
           WHERE event_at >= range_start AND event_at < range_end
         ) AS current_completes,
         (
-          SELECT COUNT(DISTINCT result_key)
+          SELECT COUNT(DISTINCT visitor_key)
           FROM (${selectedProductConfig.completeEventsSql}) completes, ranges
           WHERE event_at >= previous_start AND event_at < previous_end
         ) AS previous_completes
@@ -616,8 +624,8 @@ export async function getDashboardData({
       ? (previousRangeCoachingCompleted / previousRangeCoachingRequests) * 100
       : 0;
 
-  const visitorDelta = createDelta(todayVisitors, yesterdayVisitors);
-  const signupDelta = createDelta(todaySignups, yesterdaySignups);
+  const visitorDelta = createPeriodDelta(todayVisitors, yesterdayVisitors);
+  const signupDelta = createPeriodDelta(todaySignups, yesterdaySignups);
   const coachingDelta = createPeriodDelta(
     rangeCoachingRequests,
     previousRangeCoachingRequests,
@@ -661,7 +669,7 @@ export async function getDashboardData({
             INTERVAL '1 day'
           ) AS day_kst
         )
-        SELECT to_char(days.day_kst, 'MM/DD') AS label, COUNT(DISTINCT starts.request_key) AS value
+        SELECT to_char(days.day_kst, 'MM/DD') AS label, COUNT(DISTINCT starts.visitor_key) AS value
         FROM days
         LEFT JOIN (${selectedProductConfig.startEventsSql}) starts
           ON starts.event_at >= days.day_kst AT TIME ZONE 'Asia/Seoul'
@@ -696,7 +704,7 @@ export async function getDashboardData({
         )
         SELECT
           to_char(days.day_kst, 'MM/DD') AS label,
-          COUNT(DISTINCT completes.result_key) AS value
+          COUNT(DISTINCT completes.visitor_key) AS value
         FROM days
         LEFT JOIN (${selectedProductConfig.completeEventsSql}) completes
             ON completes.event_at >= days.day_kst AT TIME ZONE 'Asia/Seoul'
@@ -725,7 +733,7 @@ export async function getDashboardData({
         starts AS (
           SELECT
             days.day_kst,
-            COUNT(DISTINCT starts.request_key) AS value
+            COUNT(DISTINCT starts.visitor_key) AS value
           FROM days
           LEFT JOIN (${selectedProductConfig.startEventsSql}) starts
             ON starts.event_at >= days.day_kst AT TIME ZONE 'Asia/Seoul'
@@ -735,7 +743,7 @@ export async function getDashboardData({
         completes AS (
           SELECT
             days.day_kst,
-            COUNT(DISTINCT completes.result_key) AS value
+            COUNT(DISTINCT completes.visitor_key) AS value
           FROM days
           LEFT JOIN (${selectedProductConfig.completeEventsSql}) completes
             ON completes.event_at >= days.day_kst AT TIME ZONE 'Asia/Seoul'
@@ -765,12 +773,12 @@ export async function getDashboardData({
           WHERE event_at >= range_start AND event_at < range_end
         ) AS page_visits,
         (
-          SELECT COUNT(DISTINCT request_key)
+          SELECT COUNT(DISTINCT visitor_key)
           FROM (${selectedProductConfig.startEventsSql}) starts, ranges
           WHERE event_at >= range_start AND event_at < range_end
         ) AS coaching_started,
         (
-          SELECT COUNT(DISTINCT result_key)
+          SELECT COUNT(DISTINCT visitor_key)
           FROM (${selectedProductConfig.completeEventsSql}) completes, ranges
           WHERE event_at >= range_start AND event_at < range_end
         ) AS coaching_completed
@@ -782,7 +790,11 @@ export async function getDashboardData({
   const pageVisits = numberValue(funnelRow?.page_visits);
   const started = numberValue(funnelRow?.coaching_started);
   const completed = numberValue(funnelRow?.coaching_completed);
-  const base = Math.max(pageVisits, started, completed, 1);
+  const base = Math.max(
+    selectedProductConfig.hasVisitStep ? pageVisits : started,
+    completed,
+    1,
+  );
   const createFunnelHref = (step: string) => {
     const params = new URLSearchParams({
       product: selectedProductKey,
@@ -797,12 +809,32 @@ export async function getDashboardData({
 
   const channelResult = await query<ChannelRow>(
     `
-      ${dashboardRangeSql}
+      ${dashboardRangeSql},
+      acquisition_visitors AS (
+        SELECT DISTINCT ON (visitor_key)
+          visitor_key,
+          CASE
+            WHEN source_value = '페이지 이동'
+              OR LOWER(source_value) LIKE '%page_move%'
+              OR LOWER(source_value) LIKE '%page move%'
+              OR LOWER(source_value) LIKE '%internal%'
+              THEN COALESCE(
+                NULLIF(metadata #>> '{attribution,first,source}', ''),
+                NULLIF(metadata #>> '{attribution,current,source}', ''),
+                'direct'
+              )
+            ELSE source_value
+          END AS source_value
+        FROM (${trafficEventsSql}) traffic_events, ranges
+        WHERE visitor_key IS NOT NULL
+          AND event_at >= range_start
+          AND event_at < range_end
+        ORDER BY visitor_key, event_at, id
+      )
       SELECT
         source_value AS label,
-        COUNT(DISTINCT visitor_key) AS count
-      FROM (${trafficEventsSql}) traffic_events, ranges
-      WHERE event_at >= range_start AND event_at < range_end
+        COUNT(*) AS count
+      FROM acquisition_visitors
       GROUP BY source_value
     `,
     dashboardDateParams,
@@ -881,32 +913,58 @@ export async function getDashboardData({
   const screenInflowResult = await query<ScreenInflowRow>(
     `
     ${dashboardRangeSql},
+    acquisition_channels AS (
+      SELECT DISTINCT ON (visitor_key)
+        visitor_key,
+        CASE
+          WHEN source_value = '페이지 이동'
+            OR LOWER(source_value) LIKE '%page_move%'
+            OR LOWER(source_value) LIKE '%page move%'
+            OR LOWER(source_value) LIKE '%internal%'
+            THEN COALESCE(
+              NULLIF(metadata #>> '{attribution,first,source}', ''),
+              NULLIF(metadata #>> '{attribution,current,source}', ''),
+              'direct'
+            )
+          ELSE source_value
+        END AS source_value
+      FROM (${trafficEventsSql}) traffic_events, ranges
+      WHERE visitor_key IS NOT NULL
+        AND event_at >= range_start
+        AND event_at < range_end
+      ORDER BY visitor_key, event_at, id
+    ),
     normalized_events AS (
       SELECT
-        source_value,
+        traffic_events.visitor_key,
+        COALESCE(acquisition_channels.source_value, traffic_events.source_value) AS source_value,
         CASE
-          WHEN screen_key IN ('home', 'job_detail', 'diagnosis', 'community', 'my', 'calendar', 'login')
-            THEN screen_key
-          WHEN split_part(landing_path, '?', 1) = '/' THEN 'home'
-          WHEN split_part(landing_path, '?', 1) ~ '^/jobs/[^/]+$' THEN 'job_detail'
-          WHEN split_part(landing_path, '?', 1) LIKE '/ai-tools/diagnosis%'
-            OR split_part(landing_path, '?', 1) LIKE '/events/diagnosis%'
+          WHEN traffic_events.screen_key IN ('home', 'job_detail', 'diagnosis', 'community', 'my', 'calendar', 'login')
+            THEN traffic_events.screen_key
+          WHEN split_part(traffic_events.landing_path, '?', 1) = '/' THEN 'home'
+          WHEN split_part(traffic_events.landing_path, '?', 1) ~ '^/jobs/[^/]+$' THEN 'job_detail'
+          WHEN split_part(traffic_events.landing_path, '?', 1) LIKE '/ai-tools/diagnosis%'
+            OR split_part(traffic_events.landing_path, '?', 1) LIKE '/events/diagnosis%'
             THEN 'diagnosis'
-          WHEN split_part(landing_path, '?', 1) LIKE '/community%' THEN 'community'
-          WHEN split_part(landing_path, '?', 1) LIKE '/my%' THEN 'my'
-          WHEN split_part(landing_path, '?', 1) LIKE '/calendar%' THEN 'calendar'
-          WHEN split_part(landing_path, '?', 1) LIKE '/login%'
-            OR split_part(landing_path, '?', 1) LIKE '/auth%'
+          WHEN split_part(traffic_events.landing_path, '?', 1) LIKE '/community%' THEN 'community'
+          WHEN split_part(traffic_events.landing_path, '?', 1) LIKE '/my%' THEN 'my'
+          WHEN split_part(traffic_events.landing_path, '?', 1) LIKE '/calendar%' THEN 'calendar'
+          WHEN split_part(traffic_events.landing_path, '?', 1) LIKE '/login%'
+            OR split_part(traffic_events.landing_path, '?', 1) LIKE '/auth%'
             THEN 'login'
           ELSE 'other'
         END AS normalized_screen_key
-      FROM (${trafficEventsSql}) traffic_events, ranges
-      WHERE event_at >= range_start AND event_at < range_end
+      FROM (${trafficEventsSql}) traffic_events
+      LEFT JOIN acquisition_channels
+        ON acquisition_channels.visitor_key = traffic_events.visitor_key
+      CROSS JOIN ranges
+      WHERE traffic_events.event_at >= ranges.range_start
+        AND traffic_events.event_at < ranges.range_end
     )
     SELECT
       source_value AS channel_source,
       normalized_screen_key AS screen_key,
-      COUNT(*) AS inflow_count
+      COUNT(DISTINCT visitor_key) AS inflow_count
     FROM normalized_events
     GROUP BY source_value, normalized_screen_key
     `,
@@ -915,6 +973,27 @@ export async function getDashboardData({
   const behaviorPatternResult = await query<BehaviorPatternRow>(
     `
       ${dashboardRangeSql},
+      acquisition_channels AS (
+      SELECT DISTINCT ON (visitor_key)
+          visitor_key,
+          CASE
+            WHEN source_value = '페이지 이동'
+              OR LOWER(source_value) LIKE '%page_move%'
+              OR LOWER(source_value) LIKE '%page move%'
+              OR LOWER(source_value) LIKE '%internal%'
+              THEN COALESCE(
+                NULLIF(metadata #>> '{attribution,first,source}', ''),
+                NULLIF(metadata #>> '{attribution,current,source}', ''),
+                'direct'
+              )
+            ELSE source_value
+          END AS source_value
+        FROM (${trafficEventsSql}) traffic_events, ranges
+        WHERE visitor_key IS NOT NULL
+          AND event_at >= range_start
+          AND event_at < range_end
+        ORDER BY visitor_key, event_at, id
+      ),
       page_events AS (
         SELECT
           traffic_events.id::TEXT AS visit_id,
@@ -950,18 +1029,32 @@ export async function getDashboardData({
           traffic_events.landing_path,
           traffic_events.screen_key,
           traffic_events.event_at
-        FROM (${trafficEventsSql}) traffic_events, ranges
-        WHERE traffic_events.visitor_key IS NOT NULL
-          AND traffic_events.event_at >= ranges.range_start
-          AND traffic_events.event_at < ranges.range_end
+        FROM (
+          SELECT
+            traffic_events.id,
+            traffic_events.visitor_key,
+            traffic_events.landing_path,
+            traffic_events.screen_key,
+            traffic_events.event_at,
+            COALESCE(acquisition_channels.source_value, traffic_events.source_value) AS source_value
+          FROM (${trafficEventsSql}) traffic_events
+          LEFT JOIN acquisition_channels
+            ON acquisition_channels.visitor_key = traffic_events.visitor_key
+          CROSS JOIN ranges
+          WHERE traffic_events.visitor_key IS NOT NULL
+            AND traffic_events.event_at >= ranges.range_start
+            AND traffic_events.event_at < ranges.range_end
+        ) traffic_events
       ),
       all_page_events AS (
         SELECT
+          traffic_events.id::TEXT AS event_id,
           traffic_events.visitor_key,
           traffic_events.landing_path,
           traffic_events.screen_key,
           traffic_events.event_at
-        FROM (${trafficEventsSql}) traffic_events, ranges
+        FROM (${trafficEventsSql}) traffic_events
+        CROSS JOIN ranges
         WHERE traffic_events.visitor_key IS NOT NULL
           AND traffic_events.event_at >= ranges.range_start
           AND traffic_events.event_at < ranges.range_end + INTERVAL '7 days'
@@ -973,8 +1066,7 @@ export async function getDashboardData({
           ('검색', 2),
           ('인스타그램', 3),
           ('스레드', 4),
-          ('페이지 이동', 5),
-          ('직접유입', 6)
+          ('직접유입', 5)
         ) AS channels(label, sort_order)
       ),
       job_detail_visits AS (
@@ -988,123 +1080,185 @@ export async function getDashboardData({
           OR split_part(page_events.landing_path, '?', 1) ~ '^/jobs/[^/]+$'
       ),
       job_detail_channel_visitors AS (
-        SELECT DISTINCT ON (visit_id)
+        SELECT DISTINCT ON (visitor_key)
           visit_id,
           visitor_key,
           source_label,
           event_at
         FROM job_detail_visits
-        ORDER BY visit_id, event_at
+        ORDER BY visitor_key, event_at DESC, visit_id DESC
       ),
       product_actions AS (
         SELECT
-          COALESCE(
-            events.user_id::TEXT,
-            events.anonymous_id::TEXT,
-            NULLIF(CONCAT_WS('|', NULLIF(events.properties->>'ip_address', ''), NULLIF(events.properties->>'user_agent', '')), '')
-          ) AS visitor_key,
+          events.id::TEXT AS action_id,
+          events.visitor_key,
           events.event_type,
-          COALESCE(NULLIF(events.properties->>'banner_key', ''), '') AS banner_key,
+          COALESCE(acquisition_channels.source_value, 'direct') AS source_value,
           events.created_at AS event_at
-        FROM public.product_events events, ranges
-        WHERE events.created_at >= ranges.range_start
-          AND events.created_at < ranges.range_end + INTERVAL '30 minutes'
+        FROM (
+          SELECT
+            product_events.id,
+            COALESCE(
+              product_events.user_id::TEXT,
+              product_events.anonymous_id::TEXT,
+              NULLIF(product_events.properties->>'session_id', ''),
+              NULLIF(CONCAT_WS('|', NULLIF(product_events.properties->>'ip_address', ''), NULLIF(product_events.properties->>'user_agent', '')), '')
+            ) AS visitor_key,
+            product_events.event_type,
+            product_events.created_at
+          FROM public.product_events
+          CROSS JOIN ranges
+          WHERE product_events.created_at >= ranges.range_start
+            AND product_events.created_at < ranges.range_end
+            AND (
+              product_events.event_type IN ('job_detail_bookmark_click', 'job_detail_apply_click')
+              OR (
+                product_events.event_type = 'banner_click'
+                AND product_events.properties->>'placement' = 'job_detail_bottom'
+              )
+            )
+        ) events
+        LEFT JOIN acquisition_channels
+          ON acquisition_channels.visitor_key = events.visitor_key
+      ),
+      normalized_action_events AS (
+        SELECT
+          product_actions.action_id,
+          product_actions.visitor_key,
+          product_actions.event_type,
+          product_actions.event_at,
+          CASE
+            WHEN product_actions.source_value = '인스타그램'
+              OR product_actions.source_value ILIKE '%instagram%'
+              OR LOWER(product_actions.source_value) = 'ig'
+              THEN '인스타그램'
+            WHEN product_actions.source_value = '블로그'
+              OR product_actions.source_value ILIKE '%blog%'
+              OR product_actions.source_value ILIKE '%블로그%'
+              THEN '블로그'
+            WHEN product_actions.source_value = '스레드'
+              OR product_actions.source_value ILIKE '%thread%'
+              THEN '스레드'
+            WHEN product_actions.source_value = '검색'
+              OR product_actions.source_value ILIKE '%naver%'
+              OR product_actions.source_value ILIKE '%google%'
+              OR product_actions.source_value ILIKE '%daum%'
+              OR product_actions.source_value ILIKE '%search%'
+              THEN '검색'
+            ELSE '직접유입'
+          END AS source_label
+        FROM product_actions
+      ),
+      attributed_page_events AS (
+        SELECT DISTINCT ON (page_events.event_id)
+          page_events.event_id,
+          job_detail_visits.source_label,
+          job_detail_visits.visitor_key,
+          page_events.screen_key,
+          page_events.landing_path,
+          page_events.event_at
+        FROM job_detail_visits
+        JOIN all_page_events page_events
+          ON page_events.visitor_key = job_detail_visits.visitor_key
+         AND page_events.event_at > job_detail_visits.event_at
+         AND page_events.event_at <= job_detail_visits.event_at + INTERVAL '30 minutes'
+        ORDER BY page_events.event_id, job_detail_visits.event_at DESC, job_detail_visits.visit_id DESC
+      ),
+      attributed_action_events AS (
+        SELECT DISTINCT ON (actions.action_id)
+          actions.action_id,
+          actions.event_type,
+          job_detail_visits.source_label,
+          job_detail_visits.visitor_key,
+          actions.event_at
+        FROM job_detail_visits
+        JOIN normalized_action_events actions
+          ON actions.visitor_key = job_detail_visits.visitor_key
+         AND actions.event_at > job_detail_visits.event_at
+         AND actions.event_at <= job_detail_visits.event_at + INTERVAL '30 minutes'
+        ORDER BY actions.action_id, job_detail_visits.event_at DESC, job_detail_visits.visit_id DESC
       ),
       later_page_events AS (
-        SELECT DISTINCT
-          job_detail_visits.visit_id,
-          job_detail_visits.source_label,
-          job_detail_visits.visitor_key
-        FROM job_detail_channel_visitors job_detail_visits
-        JOIN all_page_events page_events
-          ON page_events.visitor_key = job_detail_visits.visitor_key
-         AND page_events.event_at > job_detail_visits.event_at
-         AND page_events.event_at <= job_detail_visits.event_at + INTERVAL '30 minutes'
+        SELECT DISTINCT source_label, visitor_key
+        FROM attributed_page_events
       ),
       later_action_events AS (
-        SELECT DISTINCT
-          job_detail_visits.visit_id,
-          job_detail_visits.source_label,
-          job_detail_visits.visitor_key
-        FROM job_detail_channel_visitors job_detail_visits
-        JOIN product_actions actions
-          ON actions.visitor_key = job_detail_visits.visitor_key
-         AND actions.event_at > job_detail_visits.event_at
-         AND actions.event_at <= job_detail_visits.event_at + INTERVAL '30 minutes'
+        SELECT DISTINCT source_label, visitor_key
+        FROM attributed_action_events
       ),
-      job_action_events AS (
-        SELECT DISTINCT
-          job_detail_visits.visit_id,
-          job_detail_visits.source_label,
-          job_detail_visits.visitor_key
-        FROM job_detail_channel_visitors job_detail_visits
-        JOIN product_actions actions
-          ON actions.visitor_key = job_detail_visits.visitor_key
-         AND actions.event_at > job_detail_visits.event_at
-         AND actions.event_at <= job_detail_visits.event_at + INTERVAL '30 minutes'
-         AND actions.event_type IN ('job_detail_bookmark_click', 'job_detail_apply_click')
+      bookmark_counts AS (
+        SELECT
+          source_label,
+          COUNT(*) FILTER (WHERE event_type = 'job_detail_bookmark_click') AS bookmark_count,
+          COUNT(*) FILTER (WHERE event_type = 'job_detail_apply_click') AS apply_count
+        FROM normalized_action_events
+        GROUP BY source_label
       ),
-      other_page_move_events AS (
-        SELECT DISTINCT
-          job_detail_visits.visit_id,
-          job_detail_visits.source_label,
-          job_detail_visits.visitor_key
-        FROM job_detail_channel_visitors job_detail_visits
-        JOIN all_page_events page_events
-          ON page_events.visitor_key = job_detail_visits.visitor_key
-         AND page_events.event_at > job_detail_visits.event_at
-         AND page_events.event_at <= job_detail_visits.event_at + INTERVAL '30 minutes'
-         AND NOT (
-              page_events.screen_key = 'job_detail'
-           OR split_part(page_events.landing_path, '?', 1) ~ '^/jobs/[^/]+$'
-         )
+      other_page_move_counts AS (
+        SELECT
+          source_label,
+          COUNT(*) AS page_move_count
+        FROM attributed_page_events
+        WHERE NOT (
+             screen_key = 'job_detail'
+          OR split_part(landing_path, '?', 1) ~ '^/jobs/[^/]+$'
+        )
+        GROUP BY source_label
       ),
       revisit_events AS (
         SELECT DISTINCT
-          job_detail_visits.visit_id,
           job_detail_visits.source_label,
           job_detail_visits.visitor_key
         FROM job_detail_channel_visitors job_detail_visits
         JOIN all_page_events page_events
           ON page_events.visitor_key = job_detail_visits.visitor_key
+         AND page_events.event_at > job_detail_visits.event_at
          AND page_events.event_at >= job_detail_visits.event_at + INTERVAL '1 day'
          AND page_events.event_at <= job_detail_visits.event_at + INTERVAL '7 days'
       ),
       stats AS (
         SELECT
           job_detail_channel_visitors.source_label,
-          COUNT(DISTINCT job_detail_channel_visitors.visit_id) AS visitors,
-          COUNT(DISTINCT job_detail_channel_visitors.visit_id) FILTER (
+          COUNT(DISTINCT job_detail_channel_visitors.visitor_key) AS visitors,
+          COUNT(DISTINCT job_detail_channel_visitors.visitor_key) FILTER (
             WHERE later_page_events.visitor_key IS NULL
               AND later_action_events.visitor_key IS NULL
           ) AS bounce_count,
-          COUNT(DISTINCT revisit_events.visit_id) AS revisit_count,
-          COUNT(DISTINCT job_action_events.visit_id) AS action_count,
-          COUNT(DISTINCT other_page_move_events.visit_id) AS page_move_count
+          COUNT(DISTINCT job_detail_channel_visitors.visitor_key) FILTER (
+            WHERE later_page_events.visitor_key IS NOT NULL
+               OR later_action_events.visitor_key IS NOT NULL
+          ) AS activity_count,
+          COUNT(DISTINCT revisit_events.visitor_key) AS revisit_count,
+          COALESCE(bookmark_counts.bookmark_count, 0) AS bookmark_count,
+          COALESCE(bookmark_counts.apply_count, 0) AS apply_count,
+          COALESCE(other_page_move_counts.page_move_count, 0) AS page_move_count
         FROM job_detail_channel_visitors
         LEFT JOIN later_page_events
           ON later_page_events.source_label = job_detail_channel_visitors.source_label
-         AND later_page_events.visit_id = job_detail_channel_visitors.visit_id
+         AND later_page_events.visitor_key = job_detail_channel_visitors.visitor_key
         LEFT JOIN later_action_events
           ON later_action_events.source_label = job_detail_channel_visitors.source_label
-         AND later_action_events.visit_id = job_detail_channel_visitors.visit_id
+         AND later_action_events.visitor_key = job_detail_channel_visitors.visitor_key
         LEFT JOIN revisit_events
           ON revisit_events.source_label = job_detail_channel_visitors.source_label
-         AND revisit_events.visit_id = job_detail_channel_visitors.visit_id
-        LEFT JOIN job_action_events
-          ON job_action_events.source_label = job_detail_channel_visitors.source_label
-         AND job_action_events.visit_id = job_detail_channel_visitors.visit_id
-        LEFT JOIN other_page_move_events
-          ON other_page_move_events.source_label = job_detail_channel_visitors.source_label
-         AND other_page_move_events.visit_id = job_detail_channel_visitors.visit_id
+         AND revisit_events.visitor_key = job_detail_channel_visitors.visitor_key
+        LEFT JOIN bookmark_counts
+          ON bookmark_counts.source_label = job_detail_channel_visitors.source_label
+        LEFT JOIN other_page_move_counts
+          ON other_page_move_counts.source_label = job_detail_channel_visitors.source_label
         GROUP BY job_detail_channel_visitors.source_label
+          , bookmark_counts.bookmark_count
+          , bookmark_counts.apply_count
+          , other_page_move_counts.page_move_count
       )
       SELECT
         channel_defs.label AS channel_label,
         COALESCE(stats.visitors, 0)::TEXT AS visitors,
+        COALESCE(stats.activity_count, 0)::TEXT AS activity_count,
         COALESCE(stats.bounce_count, 0)::TEXT AS bounce_count,
         COALESCE(stats.revisit_count, 0)::TEXT AS revisit_count,
-        COALESCE(stats.action_count, 0)::TEXT AS action_count,
+        COALESCE(stats.bookmark_count, 0)::TEXT AS bookmark_count,
+        COALESCE(stats.apply_count, 0)::TEXT AS apply_count,
         COALESCE(stats.page_move_count, 0)::TEXT AS page_move_count
       FROM channel_defs
       LEFT JOIN stats ON stats.source_label = channel_defs.label
@@ -1149,7 +1303,8 @@ export async function getDashboardData({
     const visitors = numberValue(row.visitors);
     const bounce = numberValue(row.bounce_count);
     const revisit = numberValue(row.revisit_count);
-    const action = numberValue(row.action_count);
+    const bookmark = numberValue(row.bookmark_count);
+    const apply = numberValue(row.apply_count);
     const pageMove = numberValue(row.page_move_count);
     const formatBehaviorRate = (value: number) =>
       visitors > 0 ? formatPercent((value / visitors) * 100) : "0%";
@@ -1157,13 +1312,15 @@ export async function getDashboardData({
     return {
       key: row.channel_label,
       channelLabel: row.channel_label,
-      visitors: `${formatCount(visitors)}건`,
-      bounce: `${formatCount(bounce)}건`,
+      visitors: `${formatCount(visitors)}명`,
+      bounce: `${formatCount(bounce)}명`,
       bounceRate: formatBehaviorRate(bounce),
-      revisit: `${formatCount(revisit)}건`,
+      revisit: `${formatCount(revisit)}명`,
       revisitRate: formatBehaviorRate(revisit),
-      action: `${formatCount(action)}건`,
-      actionRate: formatBehaviorRate(action),
+      bookmark: `${formatCount(bookmark)}건`,
+      bookmarkRate: visitors > 0 ? formatPercent((bookmark / visitors) * 100) : "0%",
+      apply: `${formatCount(apply)}건`,
+      applyRate: visitors > 0 ? formatPercent((apply / visitors) * 100) : "0%",
       pageMove: `${formatCount(pageMove)}건`,
       pageMoveRate: formatBehaviorRate(pageMove),
       fill: fillPercent(
@@ -1177,6 +1334,14 @@ export async function getDashboardData({
       ),
     };
   });
+  const jobDetailVisitors = behaviorPatternResult.rows.reduce(
+    (sum, row) => sum + numberValue(row.visitors),
+    0,
+  );
+  const jobDetailActivityVisitors = behaviorPatternResult.rows.reduce(
+    (sum, row) => sum + numberValue(row.activity_count),
+    0,
+  );
   const createDashboardHref = (channelKey: string) => {
     const params = new URLSearchParams();
 
@@ -1212,7 +1377,7 @@ export async function getDashboardData({
   return {
     metrics: [
       {
-        label: "오늘 방문자",
+        label: "조회 기간 방문자",
         value: formatCount(todayVisitors),
         unit: "명",
         delta: visitorDelta.text,
@@ -1237,6 +1402,22 @@ export async function getDashboardData({
         trend: completionDelta.trend,
       },
     ],
+    jobDetailMetrics: [
+      {
+        label: "공고 상세 방문자",
+        value: formatCount(jobDetailVisitors),
+        unit: "명",
+        delta: "선택 기간 기준",
+        trend: "down",
+      },
+      {
+        label: "공고 상세 후 행동",
+        value: formatCount(jobDetailActivityVisitors),
+        unit: "명",
+        delta: "30분 내 페이지 이동·클릭 포함",
+        trend: "down",
+      },
+    ],
     visitorTrend: toLinePoints(visitorTrendResult.rows),
     coachingTrend: toLinePoints(coachingTrendResult.rows),
     signupTrend: toLinePoints(signupTrendResult.rows),
@@ -1253,33 +1434,60 @@ export async function getDashboardData({
       label: row.label,
       value: numberValue(row.completes),
     })),
-    funnelItems: [
-      createFunnel(1, "방문", pageVisits, null, base, createFunnelHref("visit")),
-      createFunnel(
-        2,
-        selectedProductConfig.startStepLabel,
-        started,
-        pageVisits,
-        base,
-        createFunnelHref("start"),
-        createFunnelHref("visit_drop"),
-      ),
-      createFunnel(
-        3,
-        selectedProductConfig.completeStepLabel,
-        completed,
-        started,
-        base,
-        createFunnelHref("complete"),
-        createFunnelHref("start_drop"),
-      ),
-    ],
+    funnelItems: selectedProductConfig.hasVisitStep
+      ? [
+          createFunnel(
+            1,
+            "방문",
+            pageVisits,
+            null,
+            base,
+            createFunnelHref("visit"),
+          ),
+          createFunnel(
+            2,
+            selectedProductConfig.startStepLabel,
+            started,
+            pageVisits,
+            base,
+            createFunnelHref("start"),
+            createFunnelHref("visit_drop"),
+          ),
+          createFunnel(
+            3,
+            selectedProductConfig.completeStepLabel,
+            completed,
+            started,
+            base,
+            createFunnelHref("complete"),
+            createFunnelHref("start_drop"),
+          ),
+        ]
+      : [
+          createFunnel(
+            1,
+            selectedProductConfig.startStepLabel,
+            started,
+            null,
+            base,
+            createFunnelHref("start"),
+          ),
+          createFunnel(
+            2,
+            selectedProductConfig.completeStepLabel,
+            completed,
+            started,
+            base,
+            createFunnelHref("complete"),
+            createFunnelHref("start_drop"),
+          ),
+        ],
     channels: [
       {
         key: "all",
         label: "전체",
         value: "100%",
-        count: `(${formatCount(totalChannelCount)}건)`,
+        count: `(${formatCount(totalChannelCount)}명)`,
         fill: 100,
         icon: channelAssets["직접유입"].icon,
         iconClass: channelAssets["직접유입"].iconClass,
@@ -1296,7 +1504,7 @@ export async function getDashboardData({
           value: formatPercent(
             totalChannelCount > 0 ? (count / totalChannelCount) * 100 : 0,
           ),
-          count: `(${formatCount(count)}건)`,
+          count: `(${formatCount(count)}명)`,
           fill: fillPercent(count, maxChannelCount),
           icon: channelAssets[label]?.icon || channelAssets["직접유입"].icon,
           iconClass:
@@ -1342,5 +1550,6 @@ export async function getDashboardData({
     productFunnelTitle: selectedProductConfig.funnelTitle,
     productFunnelDescription: selectedProductConfig.funnelDescription,
     productRateTrendTitle: selectedProductConfig.rateTrendTitle,
+    productHasVisitStep: selectedProductConfig.hasVisitStep,
   };
 }

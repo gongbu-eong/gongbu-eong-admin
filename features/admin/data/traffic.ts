@@ -61,6 +61,8 @@ export type TrafficData = {
   yLabels: string[];
   maxValue: number;
   totalVisitors: number;
+  jobDetailVisitors: number;
+  jobDetailActivityVisitors: number;
 };
 
 export type TrafficPeriodPreset = "today" | "7d" | "30d" | "custom";
@@ -246,6 +248,5 @@ export const trafficChannelOrder = [
   "블로그",
   "스레드",
   "검색",
-  "페이지 이동",
   "직접유입",
 ];

@@ -119,6 +119,11 @@ type CountRow = {
   count: string;
 };
 
+type JobDetailInsightRow = {
+  visitors: string;
+  activity_visitors: string;
+};
+
 const presetLabels: Record<TrafficPeriodPreset, string> = {
   today: "오늘",
   "7d": "최근 7일",
@@ -171,7 +176,7 @@ const periodBoundsSql = `
 `;
 
 const visitorKeySql =
-  "COALESCE(user_id::TEXT, session_id::TEXT, anonymous_id::TEXT, NULLIF(CONCAT_WS('|', ip_address::TEXT, NULLIF(user_agent, '')), ''))";
+  "COALESCE(user_id::TEXT, anonymous_id::TEXT, session_id::TEXT, NULLIF(CONCAT_WS('|', ip_address::TEXT, NULLIF(user_agent, '')), ''))";
 
 const trafficEventsSql = `
   SELECT
@@ -184,6 +189,7 @@ const trafficEventsSql = `
     title,
     user_agent,
     path,
+    metadata,
     COALESCE(
       NULLIF(traffic_channel, ''),
       NULLIF(metadata->>'trafficChannel', ''),
@@ -320,7 +326,7 @@ const funnelProductOptions: Record<
         NULLIF(events.properties->>'user_agent', '') AS user_agent
       FROM public.product_events events
       WHERE events.event_type = 'diagnosis_start'
-        AND events.properties->>'action' = 'start_button_click'
+        AND events.properties->>'action' IN ('question_1_view', 'start_button_click')
     `,
     completeSql: `
       SELECT
@@ -435,7 +441,7 @@ function formatPercent(value: number) {
 function normalizePreset(value?: TrafficQuery["preset"]): TrafficPeriodPreset {
   return value === "today" || value === "30d" || value === "custom"
     ? value
-    : "7d";
+    : "today";
 }
 
 function normalizeDate(value?: string | null) {
@@ -471,6 +477,16 @@ function normalizeFunnelStep(value?: FunnelLogQuery["step"]): FunnelStepFilter {
     value === "start_drop"
     ? value
     : "visit";
+}
+
+function normalizeDiagnosisFunnelStep(
+  product: FunnelProductFilter,
+  step: FunnelStepFilter,
+) {
+  if (product !== "diagnosis") return step;
+  if (step === "visit") return "start" as const;
+  if (step === "visit_drop") return "start_drop" as const;
+  return step;
 }
 
 function normalizePage(value?: TrafficLogQuery["page"]) {
@@ -610,6 +626,7 @@ function groupChannelRows(rows: ChannelCountRow[]) {
 
   for (const row of rows) {
     const label = mapChannelLabel(row.source_value);
+    if (!trafficChannelOrder.includes(label)) continue;
     grouped.set(label, (grouped.get(label) || 0) + numberValue(row.count));
   }
 
@@ -668,13 +685,13 @@ async function getDailyChannelTrendRows(params: unknown[]) {
           ('블로그', 2),
           ('스레드', 3),
           ('검색', 4),
-          ('페이지 이동', 5),
-          ('직접유입', 6)
+          ('직접유입', 5)
         ) AS channel(label, sort_order)
       ),
       normalized_logs AS (
         SELECT
           days.day_kst,
+          logs.visitor_key,
           CASE
             WHEN LOWER(logs.source_value) LIKE '%instagram%'
               OR LOWER(logs.source_value) = 'ig'
@@ -687,17 +704,44 @@ async function getDailyChannelTrendRows(params: unknown[]) {
               OR LOWER(logs.source_value) LIKE '%page_move%'
               OR LOWER(logs.source_value) LIKE '%page move%'
               OR LOWER(logs.source_value) LIKE '%internal%'
-              THEN '페이지 이동'
+              THEN '직접유입'
             WHEN LOWER(logs.source_value) LIKE '%naver%'
               OR LOWER(logs.source_value) LIKE '%google%'
               OR LOWER(logs.source_value) LIKE '%daum%'
               OR LOWER(logs.source_value) LIKE '%search%'
               THEN '검색'
             ELSE '직접유입'
-          END AS source_value,
-          logs.visitor_key
+          END AS source_value
         FROM days
-        JOIN (${trafficEventsSql}) logs
+        JOIN (
+          SELECT DISTINCT ON (
+            date_trunc('day', event_at AT TIME ZONE 'Asia/Seoul')::date,
+            visitor_key
+          )
+            date_trunc('day', event_at AT TIME ZONE 'Asia/Seoul')::date AS day_kst,
+            CASE
+              WHEN source_value = '페이지 이동'
+                OR LOWER(source_value) LIKE '%page_move%'
+                OR LOWER(source_value) LIKE '%page move%'
+                OR LOWER(source_value) LIKE '%internal%'
+                THEN COALESCE(
+                  NULLIF(metadata #>> '{attribution,first,source}', ''),
+                  NULLIF(metadata #>> '{attribution,current,source}', ''),
+                  'direct'
+                )
+              ELSE source_value
+            END AS source_value,
+            visitor_key,
+            event_at,
+            id
+          FROM (${trafficEventsSql}) traffic_events
+          WHERE visitor_key IS NOT NULL
+          ORDER BY
+            date_trunc('day', event_at AT TIME ZONE 'Asia/Seoul')::date,
+            visitor_key,
+            event_at,
+            id
+        ) logs
           ON logs.event_at >= days.day_kst::timestamp AT TIME ZONE 'Asia/Seoul'
          AND logs.event_at < (days.day_kst + 1)::timestamp AT TIME ZONE 'Asia/Seoul'
       ),
@@ -751,6 +795,7 @@ async function getDailyScreenInflowRows(params: unknown[]) {
       normalized_logs AS (
         SELECT
           days.day_kst,
+          logs.visitor_key,
           CASE
             WHEN logs.screen_key IN (
               'home',
@@ -783,8 +828,7 @@ async function getDailyScreenInflowRows(params: unknown[]) {
               OR split_part(logs.landing_path, '?', 1) LIKE '/auth%'
               THEN 'login'
             ELSE 'other'
-          END AS screen_key,
-          logs.id
+          END AS screen_key
         FROM days
         JOIN (${trafficEventsSql}) logs
           ON logs.event_at >= days.day_kst::timestamp AT TIME ZONE 'Asia/Seoul'
@@ -792,7 +836,7 @@ async function getDailyScreenInflowRows(params: unknown[]) {
         WHERE logs.event_name = 'page_view'
       ),
       grouped AS (
-        SELECT day_kst, screen_key, COUNT(*) AS count
+        SELECT day_kst, screen_key, COUNT(DISTINCT visitor_key) AS count
         FROM normalized_logs
         GROUP BY day_kst, screen_key
       )
@@ -902,26 +946,123 @@ export async function getTrafficData(args?: TrafficQuery): Promise<TrafficData> 
 
   const currentResult = await query<ChannelCountRow>(
       `
-        ${periodBoundsSql}
-        SELECT source_value, COUNT(DISTINCT visitor_key) AS count
-        FROM (${trafficEventsSql}) traffic_events, ranges
-        WHERE event_at >= current_start
-          AND event_at < current_end
+        ${periodBoundsSql},
+        acquisition_visitors AS (
+          SELECT DISTINCT ON (visitor_key)
+            visitor_key,
+            CASE
+              WHEN source_value = '페이지 이동'
+                OR LOWER(source_value) LIKE '%page_move%'
+                OR LOWER(source_value) LIKE '%page move%'
+                OR LOWER(source_value) LIKE '%internal%'
+                THEN COALESCE(
+                  NULLIF(metadata #>> '{attribution,first,source}', ''),
+                  NULLIF(metadata #>> '{attribution,current,source}', ''),
+                  'direct'
+                )
+              ELSE source_value
+            END AS source_value
+          FROM (${trafficEventsSql}) traffic_events, ranges
+          WHERE visitor_key IS NOT NULL
+            AND event_at >= current_start
+            AND event_at < current_end
+          ORDER BY visitor_key, event_at, id
+        )
+        SELECT source_value, COUNT(*) AS count
+        FROM acquisition_visitors
         GROUP BY source_value
       `,
       params,
     );
   const previousResult = await query<ChannelCountRow>(
       `
-        ${periodBoundsSql}
-        SELECT source_value, COUNT(DISTINCT visitor_key) AS count
-        FROM (${trafficEventsSql}) traffic_events, ranges
-        WHERE event_at >= previous_start
-          AND event_at < previous_end
+        ${periodBoundsSql},
+        acquisition_visitors AS (
+          SELECT DISTINCT ON (visitor_key)
+            visitor_key,
+            CASE
+              WHEN source_value = '페이지 이동'
+                OR LOWER(source_value) LIKE '%page_move%'
+                OR LOWER(source_value) LIKE '%page move%'
+                OR LOWER(source_value) LIKE '%internal%'
+                THEN COALESCE(
+                  NULLIF(metadata #>> '{attribution,first,source}', ''),
+                  NULLIF(metadata #>> '{attribution,current,source}', ''),
+                  'direct'
+                )
+              ELSE source_value
+            END AS source_value
+          FROM (${trafficEventsSql}) traffic_events, ranges
+          WHERE visitor_key IS NOT NULL
+            AND event_at >= previous_start
+            AND event_at < previous_end
+          ORDER BY visitor_key, event_at, id
+        )
+        SELECT source_value, COUNT(*) AS count
+        FROM acquisition_visitors
         GROUP BY source_value
       `,
       params,
     );
+  const jobDetailInsightResult = await query<JobDetailInsightRow>(
+    `
+      ${periodBoundsSql},
+      job_detail_visits AS (
+        SELECT DISTINCT ON (visitor_key)
+          visitor_key,
+          event_at
+        FROM (${trafficEventsSql}) logs, ranges
+        WHERE logs.visitor_key IS NOT NULL
+          AND logs.event_at >= ranges.current_start
+          AND logs.event_at < ranges.current_end
+          AND (
+            logs.screen_key = 'job_detail'
+            OR split_part(logs.landing_path, '?', 1) ~ '^/jobs/[^/]+$'
+          )
+        ORDER BY visitor_key, event_at, id
+      ),
+      later_page_views AS (
+        SELECT DISTINCT visits.visitor_key
+        FROM job_detail_visits visits
+        JOIN (${trafficEventsSql}) logs
+          ON logs.visitor_key = visits.visitor_key
+         AND logs.event_at > visits.event_at
+         AND logs.event_at <= visits.event_at + INTERVAL '30 minutes'
+      ),
+      later_product_actions AS (
+        SELECT DISTINCT visits.visitor_key
+        FROM job_detail_visits visits
+        JOIN public.product_events events
+          ON COALESCE(
+               events.user_id::TEXT,
+               events.anonymous_id::TEXT,
+               NULLIF(events.properties->>'session_id', ''),
+               NULLIF(CONCAT_WS('|', NULLIF(events.properties->>'ip_address', ''), NULLIF(events.properties->>'user_agent', '')), '')
+             ) = visits.visitor_key
+         AND events.created_at > visits.event_at
+         AND events.created_at <= visits.event_at + INTERVAL '30 minutes'
+         AND (
+           events.event_type IN ('job_detail_bookmark_click', 'job_detail_apply_click')
+           OR (
+             events.event_type = 'banner_click'
+             AND events.properties->>'placement' = 'job_detail_bottom'
+           )
+         )
+      )
+      SELECT
+        COUNT(DISTINCT visits.visitor_key)::TEXT AS visitors,
+        COUNT(DISTINCT visits.visitor_key) FILTER (
+          WHERE later_page_views.visitor_key IS NOT NULL
+             OR later_product_actions.visitor_key IS NOT NULL
+        )::TEXT AS activity_visitors
+      FROM job_detail_visits visits
+      LEFT JOIN later_page_views
+        ON later_page_views.visitor_key = visits.visitor_key
+      LEFT JOIN later_product_actions
+        ON later_product_actions.visitor_key = visits.visitor_key
+    `,
+    params,
+  );
   const trendRows = await getDailyChannelTrendRows(trendParams);
   const dailyTrendRows = await getDailyChannelTrendRows(params);
   const dailyScreenRowsResult = await getDailyScreenInflowRows(params);
@@ -989,6 +1130,12 @@ export async function getTrafficData(args?: TrafficQuery): Promise<TrafficData> 
     0,
   );
   const totalDelta = createDelta(totalVisitors, previousTotal, "지난 기간 대비");
+  const jobDetailVisitors = numberValue(
+    jobDetailInsightResult.rows[0]?.visitors,
+  );
+  const jobDetailActivityVisitors = numberValue(
+    jobDetailInsightResult.rows[0]?.activity_visitors,
+  );
 
   const channels: TrafficChannel[] = trafficChannelOrder
     .map((label) => {
@@ -1007,20 +1154,6 @@ export async function getTrafficData(args?: TrafficQuery): Promise<TrafficData> 
     .sort((a, b) => b.count - a.count);
 
   const topChannel = channels[0];
-  const risingChannel =
-    [...channels]
-      .filter((channel) => channel.count > 0)
-      .sort((a, b) => b.deltaPercent - a.deltaPercent)[0] || topChannel;
-  const directChannel =
-    channels.find((channel) => channel.label === "직접유입") || channels[0];
-  const previousDirect = previousChannels.get("직접유입") || 0;
-  const previousDirectPercent =
-    previousTotal > 0 ? (previousDirect / previousTotal) * 100 : 0;
-  const directDelta = createDelta(
-    directChannel.percent,
-    previousDirectPercent,
-    "재방문·브랜드 지표",
-  );
 
   const { labels: trendLabels, map: trendMap } = createTrendData(trendRows);
   const { labels: dailyLabels, map: dailyMap } = createTrendData(dailyTrendRows);
@@ -1109,9 +1242,9 @@ export async function getTrafficData(args?: TrafficQuery): Promise<TrafficData> 
   return {
     metrics: [
       {
-        label: "전체 유입",
+        label: "전체 방문자",
         value: formatCount(totalVisitors),
-        unit: "건",
+        unit: "명",
         delta: totalDelta.text,
         trend: totalDelta.trend,
       },
@@ -1122,19 +1255,23 @@ export async function getTrafficData(args?: TrafficQuery): Promise<TrafficData> 
         trend: "down",
       },
       {
-        label: "급상승 채널",
-        value: risingChannel?.count ? risingChannel.label : "없음",
+        label: "공고 상세 방문자",
+        value: formatCount(jobDetailVisitors),
+        unit: "명",
         delta:
-          risingChannel && risingChannel.count > 0
-            ? `▲ ${formatPercent(Math.max(0, risingChannel.deltaPercent))} 가장 큰 증가`
-            : "0% 가장 큰 증가",
-        trend: risingChannel && risingChannel.deltaPercent > 0 ? "up" : "down",
+          totalVisitors > 0
+            ? `전체의 ${formatPercent((jobDetailVisitors / totalVisitors) * 100)}`
+            : "전체의 0%",
+        trend: "down",
       },
       {
-        label: "직접유입 비중",
-        value: formatPercent(directChannel?.percent || 0),
-        delta: directDelta.text,
-        trend: directDelta.trend,
+        label: "공고 상세 후속 행동률",
+        value:
+          jobDetailVisitors > 0
+            ? formatPercent((jobDetailActivityVisitors / jobDetailVisitors) * 100)
+            : "0%",
+        delta: "30분 내 페이지 이동·클릭 포함",
+        trend: "down",
       },
     ],
     periodLabel: `조회 기간: ${periodValue}`,
@@ -1159,6 +1296,8 @@ export async function getTrafficData(args?: TrafficQuery): Promise<TrafficData> 
     yLabels: createYLabels(maxValue),
     maxValue,
     totalVisitors,
+    jobDetailVisitors,
+    jobDetailActivityVisitors,
   };
 }
 
@@ -1345,7 +1484,10 @@ export async function getFunnelLogData(
 ): Promise<FunnelLogData> {
   const { startDate, endDate } = createDefaultLogDates(args);
   const product = normalizeFunnelProduct(args?.product);
-  const step = normalizeFunnelStep(args?.step);
+  const step = normalizeDiagnosisFunnelStep(
+    product,
+    normalizeFunnelStep(args?.step),
+  );
   const keyword = normalizeKeyword(args?.keyword);
   const page = normalizePage(args?.page);
   const pageSize = 20;
@@ -1535,7 +1677,12 @@ export async function getFunnelLogData(
     product,
     productLabel: productConfig.label,
     step,
-    stepLabel: funnelStepLabels[step],
+    stepLabel:
+      step === "start"
+        ? productConfig.startAction
+        : step === "complete"
+          ? productConfig.completeAction
+          : funnelStepLabels[step],
     startDate,
     endDate,
     keyword,
@@ -1743,15 +1890,7 @@ export async function getCampaignPerformanceData(
           source,
           medium,
           COUNT(*) FILTER (WHERE row_no = 1) AS visitors,
-          COUNT(*) FILTER (
-            WHERE row_no = 1
-              AND (
-                landing_path LIKE '%/ai-tools/diagnosis%'
-                OR landing_path LIKE '%/events/diagnosis%'
-                OR link LIKE '%diagnosis%'
-                OR link LIKE '%진단%'
-              )
-          ) AS diagnosis_starts,
+          0::BIGINT AS diagnosis_starts,
           MAX(event_at) AS last_seen_at
         FROM traffic_ranked
         GROUP BY campaign, link, source, medium
@@ -1762,7 +1901,10 @@ export async function getCampaignPerformanceData(
           COALESCE(NULLIF(current_content, ''), NULLIF(current_term, ''), NULLIF(current_landing_path, ''), NULLIF(first_content, ''), NULLIF(first_term, ''), NULLIF(first_landing_path, ''), '-') AS link,
           COALESCE(NULLIF(current_source, ''), NULLIF(first_source, ''), 'direct') AS source,
           COALESCE(NULLIF(current_medium, ''), NULLIF(first_medium, ''), '-') AS medium,
-          COUNT(*) FILTER (WHERE event_type = 'diagnosis_start') AS diagnosis_starts,
+          COUNT(*) FILTER (
+            WHERE event_type = 'diagnosis_start'
+              AND properties->>'action' IN ('question_1_view', 'start_button_click')
+          ) AS diagnosis_starts,
           COUNT(*) FILTER (WHERE event_type = 'diagnosis_complete') AS diagnosis_completes,
           MAX(created_at) AS last_seen_at
         FROM public.product_events, ranges

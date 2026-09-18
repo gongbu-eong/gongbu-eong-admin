@@ -72,8 +72,10 @@ export type BehaviorPatternItem = {
   bounceRate: string;
   revisit: string;
   revisitRate: string;
-  action: string;
-  actionRate: string;
+  bookmark: string;
+  bookmarkRate: string;
+  apply: string;
+  applyRate: string;
   pageMove: string;
   pageMoveRate: string;
   fill: number;

@@ -47,13 +47,21 @@ export function FunnelList({
       </header>
       <div className={styles.list}>
         {items.map((item) => {
+          const helpTemplate =
+            item.label === "진단 시작"
+              ? {
+                  title: "진단 시작",
+                  description: (productLabel: string) =>
+                    `${productLabel} Q1 문항 화면에 진입한 사용자 수를 나타냅니다.`,
+                }
+              : funnelHelpTemplates[item.step];
           const content = (
             <>
               <div className={styles.top}>
                 <span className={styles.step}>{item.step}</span>
                 <span className={styles.labelCell}>
                   <strong>{item.label}</strong>
-                  {funnelHelpTemplates[item.step] ? (
+                  {helpTemplate ? (
                     <span className={styles.helpWrap}>
                       <span
                         className={styles.helpButton}
@@ -69,11 +77,9 @@ export function FunnelList({
                         id={`funnel-help-${item.step}`}
                         role="tooltip"
                       >
-                        <b>{funnelHelpTemplates[item.step].title}</b>
+                        <b>{helpTemplate.title}</b>
                         <span>
-                          {funnelHelpTemplates[item.step].description(
-                            productLabel,
-                          )}
+                          {helpTemplate.description(productLabel)}
                         </span>
                       </span>
                     </span>

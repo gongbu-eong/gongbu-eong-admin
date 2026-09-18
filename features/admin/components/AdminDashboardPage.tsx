@@ -55,6 +55,7 @@ export async function AdminDashboardPage({
     channels,
     funnelItems,
     metrics,
+    jobDetailMetrics,
     bannerClicks,
     bannerClickTotal,
     behaviorPatterns,
@@ -75,6 +76,7 @@ export async function AdminDashboardPage({
     productStartTrend,
     productVisitTrend,
     productRateTrend,
+    productHasVisitStep,
     signupTrend,
     visitorTrend,
   } = await getDashboardData({
@@ -84,22 +86,13 @@ export async function AdminDashboardPage({
     endDate,
   });
   const visitorSignupScale = createChartScale([visitorTrend, signupTrend]);
-  const productConversionScale = createChartScale([
-    productVisitTrend,
-    productStartTrend,
-    productCompleteTrend,
-  ]);
+  const productConversionSeries = productHasVisitStep
+    ? [productVisitTrend, productStartTrend, productCompleteTrend]
+    : [productStartTrend, productCompleteTrend];
+  const productConversionScale = createChartScale(productConversionSeries);
   const commonMetrics = metrics.slice(0, 2);
   const productMetrics = metrics.slice(2);
-  const signupRateTrend = visitorTrend.map((point, index) => {
-    const signups = signupTrend[index]?.value || 0;
-
-    return {
-      label: point.label,
-      value: point.value > 0 ? (signups / point.value) * 100 : 0,
-    };
-  });
-  const signupRateScale = createChartScale([signupRateTrend]);
+  const signupCountScale = createChartScale([signupTrend]);
 
   return (
     <AdminLayout
@@ -117,7 +110,7 @@ export async function AdminDashboardPage({
       }
     >
       <section className={styles.metrics} aria-label="주요 지표">
-        {commonMetrics.map((metric) => (
+        {[...commonMetrics, ...jobDetailMetrics].map((metric) => (
           <MetricCard key={metric.label} metric={metric} />
         ))}
       </section>
@@ -125,8 +118,8 @@ export async function AdminDashboardPage({
       <section className={styles.insightPanel} aria-label="주요 추이">
         <div className={styles.insightHeader}>
           <div>
-            <h2>오늘 흐름</h2>
-            <p>방문·가입 추이와 가입 전환율을 함께 봅니다.</p>
+            <h2>방문·가입 흐름</h2>
+            <p>최근 7일 방문 추이와 신규 가입자 수를 함께 봅니다.</p>
           </div>
         </div>
         <div className={styles.chartGrid}>
@@ -156,21 +149,18 @@ export async function AdminDashboardPage({
           </AdminCard>
           <AdminCard className={styles.chartCard}>
             <LineChart
-              title="가입 전환율 추이"
-              subtitle="최근 7일 · 방문자 대비 신규 가입"
-              yLabels={signupRateScale.yLabels.map((label) => `${label}%`)}
-              legends={[
-                { label: "가입 전환율", color: "#20bf7a" },
-              ]}
+              title="신규 가입자 추이"
+              subtitle="최근 7일 · 가입 완료 회원 수"
+              yLabels={signupCountScale.yLabels}
+              legends={[{ label: "가입자", color: "#20bf7a" }]}
               series={[
                 {
-                  label: "가입 전환율",
+                  label: "가입자",
                   color: "#20bf7a",
-                  data: signupRateTrend,
+                  data: signupTrend,
                 },
               ]}
-              maxValue={signupRateScale.maxValue}
-              valueSuffix="%"
+              maxValue={signupCountScale.maxValue}
             />
           </AdminCard>
         </div>
@@ -195,32 +185,60 @@ export async function AdminDashboardPage({
           <AdminCard className={styles.chartCard}>
             <LineChart
               title={`${selectedProductLabel} 전환 추이`}
-              subtitle="최근 7일 · 방문 / 시작 / 완료"
+              subtitle={
+                productHasVisitStep
+                  ? "최근 7일 · 방문 / 시작 / 완료"
+                  : "최근 7일 · 진단 시작 / 진단 완료"
+              }
               yLabels={productConversionScale.yLabels}
-              legends={[
-                { label: "방문", color: "#2f7ff0" },
-                { label: "시작", color: "#ffb000" },
-                { label: "완료", color: "#20bf7a" },
-              ]}
-              series={[
-                {
-                  label: "방문",
-                  color: "#2f7ff0",
-                  data: productVisitTrend,
-                },
-                {
-                  label: "시작",
-                  color: "#ffb000",
-                  data: productStartTrend,
-                },
-                {
-                  label: "완료",
-                  color: "#20bf7a",
-                  data: productCompleteTrend.length
-                    ? productCompleteTrend
-                    : productRateTrend,
-                },
-              ]}
+              legends={
+                productHasVisitStep
+                  ? [
+                      { label: "방문", color: "#2f7ff0" },
+                      { label: "시작", color: "#ffb000" },
+                      { label: "완료", color: "#20bf7a" },
+                    ]
+                  : [
+                      { label: "진단 시작", color: "#ffb000" },
+                      { label: "진단 완료", color: "#20bf7a" },
+                    ]
+              }
+              series={
+                productHasVisitStep
+                  ? [
+                      {
+                        label: "방문",
+                        color: "#2f7ff0",
+                        data: productVisitTrend,
+                      },
+                      {
+                        label: "시작",
+                        color: "#ffb000",
+                        data: productStartTrend,
+                      },
+                      {
+                        label: "완료",
+                        color: "#20bf7a",
+                        data: productCompleteTrend.length
+                          ? productCompleteTrend
+                          : productRateTrend,
+                      },
+                    ]
+                  : [
+                      {
+                        label: "진단 시작",
+                        color: "#ffb000",
+                        data: productStartTrend,
+                      },
+                      {
+                        label: "진단 완료",
+                        color: "#20bf7a",
+                        data: productCompleteTrend.length
+                          ? productCompleteTrend
+                          : productRateTrend,
+                      },
+                    ]
+              }
               maxValue={productConversionScale.maxValue}
             />
           </AdminCard>
