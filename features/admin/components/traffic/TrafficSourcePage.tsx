@@ -50,8 +50,8 @@ export async function TrafficSourcePage({ filters }: TrafficSourcePageProps) {
     <AdminLayout
       activeNav="traffic"
       activeSubNav="traffic-source"
-      title="유입 경로 분석"
-      description="유입·트래픽 · 유입 경로 분석"
+      title="유입 채널 상세"
+      description="대시보드의 최근 7일 요약을 기간별 채널 목록으로 확인합니다."
     >
       <section className={styles.page} aria-label="유입 경로 분석">
         <TrafficFilters

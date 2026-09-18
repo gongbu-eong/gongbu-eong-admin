@@ -54,10 +54,6 @@ export type TrafficData = {
   channels: TrafficChannel[];
   trendSeries: TrafficTrendSeries[];
   dailyRows: TrafficDailyChannelRow[];
-  screenInflows: TrafficScreenInflow[];
-  dailyScreenRows: TrafficDailyScreenInflowRow[];
-  bannerClicks: TrafficBannerClick[];
-  dailyBannerClickRows: TrafficDailyBannerClickRow[];
   yLabels: string[];
   maxValue: number;
   totalVisitors: number;

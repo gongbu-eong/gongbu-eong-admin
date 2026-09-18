@@ -3,6 +3,7 @@ import {
   BehaviorPatternItem,
   ChannelItem,
   DashboardProductOption,
+  DashboardTrendSeries,
   FunnelItem,
   LinePoint,
   MetricItem,
@@ -40,6 +41,9 @@ type DashboardData = {
   productFunnelDescription: string;
   productRateTrendTitle: string;
   productHasVisitStep: boolean;
+  trafficChannelTrend: DashboardTrendSeries[];
+  bannerClickTrend: DashboardTrendSeries[];
+  jobDetailBehaviorTrend: DashboardTrendSeries[];
 };
 
 type MetricsRow = {
@@ -59,6 +63,12 @@ type ProductRangeMetricsRow = {
 type TrendRow = {
   label: string;
   value: string;
+};
+
+type TrafficTrendRow = {
+  label: string;
+  metric_key: string;
+  count: string;
 };
 
 type ConversionTrendRow = {
@@ -367,6 +377,29 @@ function toLinePoints(rows: TrendRow[]) {
   }));
 }
 
+function createTrendSeries(
+  rows: TrafficTrendRow[],
+  definitions: Array<{ key: string; label: string; color: string }>,
+) {
+  const labels = Array.from(new Set(rows.map((row) => row.label)));
+  const values = new Map<string, Map<string, number>>();
+
+  for (const row of rows) {
+    const metricValues = values.get(row.metric_key) || new Map<string, number>();
+    metricValues.set(row.label, numberValue(row.count));
+    values.set(row.metric_key, metricValues);
+  }
+
+  return definitions.map((definition) => ({
+    label: definition.label,
+    color: definition.color,
+    data: labels.map((label) => ({
+      label,
+      value: values.get(definition.key)?.get(label) || 0,
+    })),
+  }));
+}
+
 function fillPercent(value: number, max: number) {
   if (max <= 0) return 0;
   return Math.min(100, Math.max(0, (value / max) * 100));
@@ -472,7 +505,10 @@ function createDashboardDateRange({
   endDate?: string | null;
 } = {}) {
   const today = toKstDateInput();
-  const normalizedStartDate = normalizeDateInput(startDate) || today;
+  const recentStart = new Date();
+  recentStart.setDate(recentStart.getDate() - 6);
+  const defaultStartDate = toKstDateInput(recentStart);
+  const normalizedStartDate = normalizeDateInput(startDate) || defaultStartDate;
   const normalizedEndDate = normalizeDateInput(endDate) || today;
   const [rangeStartDate, rangeEndDate] =
     normalizedStartDate <= normalizedEndDate
@@ -641,6 +677,7 @@ export async function getDashboardData({
     signupTrendResult,
     productRateTrendResult,
     productConversionTrendResult,
+    trafficTrendResult,
   ] =
     await Promise.all([
       query<TrendRow>(`
@@ -760,6 +797,230 @@ export async function getDashboardData({
         LEFT JOIN starts ON starts.day_kst = days.day_kst
         LEFT JOIN completes ON completes.day_kst = days.day_kst
         ORDER BY days.day_kst
+      `),
+      query<TrafficTrendRow>(`
+        WITH days AS (
+          SELECT generate_series(
+            date_trunc('day', NOW() AT TIME ZONE 'Asia/Seoul') - INTERVAL '6 days',
+            date_trunc('day', NOW() AT TIME ZONE 'Asia/Seoul'),
+            INTERVAL '1 day'
+          )::date AS day_kst
+        ),
+        bounds AS (
+          SELECT
+            MIN(day_kst)::timestamp AT TIME ZONE 'Asia/Seoul' AS range_start,
+            (MAX(day_kst) + 1)::timestamp AT TIME ZONE 'Asia/Seoul' AS range_end
+          FROM days
+        ),
+        traffic_events AS MATERIALIZED (
+          SELECT logs.*
+          FROM (${trafficEventsSql}) logs
+          CROSS JOIN bounds
+          WHERE logs.event_at >= bounds.range_start
+            AND logs.event_at < bounds.range_end + INTERVAL '30 minutes'
+        ),
+        metric_defs AS (
+          SELECT *
+          FROM (VALUES
+            ('channel:인스타그램'),
+            ('channel:블로그'),
+            ('channel:스레드'),
+            ('channel:검색'),
+            ('channel:직접유입'),
+            ('banner:total'),
+            ('banner:job_detail_bookmark_click'),
+            ('banner:job_detail_apply_click'),
+            ('behavior:job_detail_visitors'),
+            ('behavior:activity_visitors'),
+            ('behavior:bookmark_clicks'),
+            ('behavior:apply_clicks')
+          ) AS metrics(metric_key)
+        ),
+        raw_channel_visits AS (
+          SELECT
+            (traffic_events.event_at AT TIME ZONE 'Asia/Seoul')::date AS day_kst,
+            traffic_events.visitor_key,
+            traffic_events.event_at,
+            traffic_events.id,
+            CASE
+              WHEN traffic_events.source_value = '페이지 이동'
+                OR LOWER(traffic_events.source_value) LIKE '%page_move%'
+                OR LOWER(traffic_events.source_value) LIKE '%page move%'
+                OR LOWER(traffic_events.source_value) LIKE '%internal%'
+                THEN COALESCE(
+                  NULLIF(traffic_events.metadata #>> '{attribution,first,source}', ''),
+                  NULLIF(traffic_events.metadata #>> '{attribution,current,source}', ''),
+                  'direct'
+                )
+              ELSE traffic_events.source_value
+            END AS source_value
+          FROM traffic_events
+          WHERE traffic_events.visitor_key IS NOT NULL
+            AND traffic_events.event_at < (SELECT range_end FROM bounds)
+        ),
+        daily_channel_visits AS (
+          SELECT DISTINCT ON (day_kst, visitor_key)
+            day_kst,
+            visitor_key,
+            CASE
+              WHEN source_value = '인스타그램'
+                OR source_value ILIKE '%instagram%'
+                OR LOWER(source_value) = 'ig'
+                THEN '인스타그램'
+              WHEN source_value = '블로그'
+                OR source_value ILIKE '%blog%'
+                OR source_value ILIKE '%블로그%'
+                THEN '블로그'
+              WHEN source_value = '스레드'
+                OR source_value ILIKE '%thread%'
+                THEN '스레드'
+              WHEN source_value = '검색'
+                OR source_value ILIKE '%naver%'
+                OR source_value ILIKE '%google%'
+                OR source_value ILIKE '%daum%'
+                OR source_value ILIKE '%search%'
+                THEN '검색'
+              ELSE '직접유입'
+            END AS channel_label
+          FROM raw_channel_visits
+          ORDER BY day_kst, visitor_key, event_at, id
+        ),
+        channel_counts AS (
+          SELECT
+            day_kst,
+            'channel:' || channel_label AS metric_key,
+            COUNT(*)::TEXT AS count
+          FROM daily_channel_visits
+          GROUP BY day_kst, channel_label
+        ),
+        raw_banner_events AS (
+          SELECT
+            (events.created_at AT TIME ZONE 'Asia/Seoul')::date AS day_kst,
+            CASE
+              WHEN events.event_type = 'banner_click'
+                THEN 'banner:' || COALESCE(NULLIF(events.properties->>'banner_key', ''), 'unknown')
+              ELSE 'banner:' || events.event_type
+            END AS metric_key
+          FROM public.product_events events
+          CROSS JOIN bounds
+          WHERE events.created_at >= bounds.range_start
+            AND events.created_at < bounds.range_end
+            AND (
+              events.event_type IN ('job_detail_bookmark_click', 'job_detail_apply_click')
+              OR (
+                events.event_type = 'banner_click'
+                AND COALESCE(NULLIF(events.properties->>'banner_key', ''), 'unknown') IN (
+                  'job_detail_resume_a',
+                  'job_detail_resume_b',
+                  'job_detail_strength_a',
+                  'job_detail_strength_b'
+                )
+              )
+            )
+        ),
+        banner_counts AS (
+          SELECT day_kst, 'banner:total' AS metric_key, COUNT(*)::TEXT AS count
+          FROM raw_banner_events
+          GROUP BY day_kst
+          UNION ALL
+          SELECT day_kst, metric_key, COUNT(*)::TEXT AS count
+          FROM raw_banner_events
+          WHERE metric_key IN (
+            'banner:job_detail_bookmark_click',
+            'banner:job_detail_apply_click'
+          )
+          GROUP BY day_kst, metric_key
+        ),
+        job_detail_visits AS (
+          SELECT DISTINCT ON (
+            (logs.event_at AT TIME ZONE 'Asia/Seoul')::date,
+            logs.visitor_key
+          )
+            (logs.event_at AT TIME ZONE 'Asia/Seoul')::date AS day_kst,
+            logs.visitor_key,
+            logs.event_at
+          FROM traffic_events logs
+          WHERE logs.visitor_key IS NOT NULL
+            AND logs.event_at < (SELECT range_end FROM bounds)
+            AND (
+              logs.screen_key = 'job_detail'
+              OR split_part(logs.landing_path, '?', 1) ~ '^/jobs/[^/]+$'
+            )
+          ORDER BY
+            (logs.event_at AT TIME ZONE 'Asia/Seoul')::date,
+            logs.visitor_key,
+            logs.event_at,
+            logs.id
+        ),
+        later_page_activity AS (
+          SELECT DISTINCT visits.day_kst, visits.visitor_key
+          FROM job_detail_visits visits
+          JOIN traffic_events logs
+            ON logs.visitor_key = visits.visitor_key
+           AND logs.event_at > visits.event_at
+           AND logs.event_at <= visits.event_at + INTERVAL '30 minutes'
+        ),
+        later_action_activity AS (
+          SELECT DISTINCT visits.day_kst, visits.visitor_key
+          FROM job_detail_visits visits
+          JOIN public.product_events events
+            ON COALESCE(
+                 events.user_id::TEXT,
+                 events.anonymous_id::TEXT,
+                 NULLIF(events.properties->>'session_id', ''),
+                 NULLIF(CONCAT_WS('|', NULLIF(events.properties->>'ip_address', ''), NULLIF(events.properties->>'user_agent', '')), '')
+               ) = visits.visitor_key
+           AND events.created_at > visits.event_at
+           AND events.created_at <= visits.event_at + INTERVAL '30 minutes'
+           AND (
+             events.event_type IN ('job_detail_bookmark_click', 'job_detail_apply_click')
+             OR (
+               events.event_type = 'banner_click'
+               AND events.properties->>'placement' = 'job_detail_bottom'
+             )
+           )
+        ),
+        activity_visitors AS (
+          SELECT day_kst, visitor_key FROM later_page_activity
+          UNION
+          SELECT day_kst, visitor_key FROM later_action_activity
+        ),
+        behavior_counts AS (
+          SELECT day_kst, 'behavior:job_detail_visitors' AS metric_key, COUNT(*)::TEXT AS count
+          FROM job_detail_visits
+          GROUP BY day_kst
+          UNION ALL
+          SELECT day_kst, 'behavior:activity_visitors' AS metric_key, COUNT(*)::TEXT AS count
+          FROM activity_visitors
+          GROUP BY day_kst
+          UNION ALL
+          SELECT day_kst, 'behavior:bookmark_clicks' AS metric_key, COUNT(*)::TEXT AS count
+          FROM raw_banner_events
+          WHERE metric_key = 'banner:job_detail_bookmark_click'
+          GROUP BY day_kst
+          UNION ALL
+          SELECT day_kst, 'behavior:apply_clicks' AS metric_key, COUNT(*)::TEXT AS count
+          FROM raw_banner_events
+          WHERE metric_key = 'banner:job_detail_apply_click'
+          GROUP BY day_kst
+        ),
+        counts AS (
+          SELECT * FROM channel_counts
+          UNION ALL
+          SELECT * FROM banner_counts
+          UNION ALL
+          SELECT * FROM behavior_counts
+        )
+        SELECT
+          to_char(days.day_kst, 'MM/DD') AS label,
+          metric_defs.metric_key,
+          COALESCE(counts.count, '0') AS count
+        FROM days
+        CROSS JOIN metric_defs
+        LEFT JOIN counts
+          ON counts.day_kst = days.day_kst
+         AND counts.metric_key = metric_defs.metric_key
+        ORDER BY days.day_kst, metric_defs.metric_key
       `),
     ]);
 
@@ -1334,6 +1595,57 @@ export async function getDashboardData({
       ),
     };
   });
+  const trafficChannelTrend = createTrendSeries(
+    trafficTrendResult.rows,
+    [
+      { key: "channel:인스타그램", label: "인스타그램", color: "#2f7ff0" },
+      { key: "channel:블로그", label: "블로그", color: "#1fb573" },
+      { key: "channel:스레드", label: "스레드", color: "#a54de8" },
+      { key: "channel:검색", label: "검색", color: "#f5b91e" },
+      { key: "channel:직접유입", label: "직접유입", color: "#5a6580" },
+    ],
+  );
+  const bannerClickTrend = createTrendSeries(
+    trafficTrendResult.rows,
+    [
+      { key: "banner:total", label: "전체 클릭", color: "#2f7ff0" },
+      {
+        key: "banner:job_detail_bookmark_click",
+        label: "찜",
+        color: "#f5b91e",
+      },
+      {
+        key: "banner:job_detail_apply_click",
+        label: "지원",
+        color: "#1fb573",
+      },
+    ],
+  );
+  const jobDetailBehaviorTrend = createTrendSeries(
+    trafficTrendResult.rows,
+    [
+      {
+        key: "behavior:job_detail_visitors",
+        label: "공고 상세 방문자",
+        color: "#2f7ff0",
+      },
+      {
+        key: "behavior:activity_visitors",
+        label: "후속 행동 방문자",
+        color: "#1fb573",
+      },
+      {
+        key: "behavior:bookmark_clicks",
+        label: "찜 클릭",
+        color: "#f5b91e",
+      },
+      {
+        key: "behavior:apply_clicks",
+        label: "지원 클릭",
+        color: "#e65c5c",
+      },
+    ],
+  );
   const jobDetailVisitors = behaviorPatternResult.rows.reduce(
     (sum, row) => sum + numberValue(row.visitors),
     0,
@@ -1551,5 +1863,8 @@ export async function getDashboardData({
     productFunnelDescription: selectedProductConfig.funnelDescription,
     productRateTrendTitle: selectedProductConfig.rateTrendTitle,
     productHasVisitStep: selectedProductConfig.hasVisitStep,
+    trafficChannelTrend,
+    bannerClickTrend,
+    jobDetailBehaviorTrend,
   };
 }

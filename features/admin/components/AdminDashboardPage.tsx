@@ -79,6 +79,9 @@ export async function AdminDashboardPage({
     productHasVisitStep,
     signupTrend,
     visitorTrend,
+    trafficChannelTrend,
+    bannerClickTrend,
+    jobDetailBehaviorTrend,
   } = await getDashboardData({
     selectedChannel,
     selectedProduct,
@@ -93,12 +96,21 @@ export async function AdminDashboardPage({
   const commonMetrics = metrics.slice(0, 2);
   const productMetrics = metrics.slice(2);
   const signupCountScale = createChartScale([signupTrend]);
+  const trafficChannelScale = createChartScale(
+    trafficChannelTrend.map((series) => series.data),
+  );
+  const bannerClickScale = createChartScale(
+    bannerClickTrend.map((series) => series.data),
+  );
+  const jobDetailBehaviorScale = createChartScale(
+    jobDetailBehaviorTrend.map((series) => series.data),
+  );
 
   return (
     <AdminLayout
       activeNav="dashboard"
       title="대시보드"
-      description="오늘의 주요 지표를 확인해보세요."
+      description="최근 7일의 주요 지표와 사용자 행동을 확인해보세요."
       headerActions={
         <DashboardFilterBar
           startDate={dashboardStartDate}
@@ -248,6 +260,64 @@ export async function AdminDashboardPage({
               title={productFunnelTitle}
               description={`${productFunnelDescription} 항목을 누르면 대상자 목록을 확인합니다.`}
               productLabel={selectedProductLabel}
+            />
+          </AdminCard>
+        </div>
+      </section>
+
+      <section
+        className={styles.trafficInsightPanel}
+        aria-label="최근 7일 유입과 행동 추이"
+      >
+        <div className={styles.insightHeader}>
+          <div>
+            <h2>최근 7일 유입·행동 흐름</h2>
+            <p>
+              순방문자와 실제 클릭을 분리해 공고 상세 이후의 흐름을 확인합니다.
+            </p>
+          </div>
+        </div>
+        <div className={styles.trafficTrendGrid}>
+          <AdminCard className={styles.trafficTrendCard}>
+            <LineChart
+              title="유입 채널 순방문자"
+              subtitle="최근 7일 · 같은 방문자 중복 제외"
+              yLabels={trafficChannelScale.yLabels}
+              legends={trafficChannelTrend.map((series) => ({
+                label: series.label,
+                color: series.color,
+              }))}
+              series={trafficChannelTrend}
+              maxValue={trafficChannelScale.maxValue}
+              valueSuffix="명"
+            />
+          </AdminCard>
+          <AdminCard className={styles.trafficTrendCard}>
+            <LineChart
+              title="배너·버튼 클릭"
+              subtitle="최근 7일 · 전체 클릭 / 찜 / 지원"
+              yLabels={bannerClickScale.yLabels}
+              legends={bannerClickTrend.map((series) => ({
+                label: series.label,
+                color: series.color,
+              }))}
+              series={bannerClickTrend}
+              maxValue={bannerClickScale.maxValue}
+            />
+          </AdminCard>
+          <AdminCard
+            className={`${styles.trafficTrendCard} ${styles.behaviorTrendCard}`}
+          >
+            <LineChart
+              title="공고 상세 방문 후 행동"
+              subtitle="최근 7일 · 방문자 / 후속 행동 / 찜 / 지원"
+              yLabels={jobDetailBehaviorScale.yLabels}
+              legends={jobDetailBehaviorTrend.map((series) => ({
+                label: series.label,
+                color: series.color,
+              }))}
+              series={jobDetailBehaviorTrend}
+              maxValue={jobDetailBehaviorScale.maxValue}
             />
           </AdminCard>
         </div>

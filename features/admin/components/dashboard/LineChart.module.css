@@ -31,7 +31,10 @@
   right: 16px;
   top: 52px;
   display: flex;
+  flex-wrap: wrap;
   gap: 16px;
+  justify-content: flex-end;
+  max-width: 72%;
   color: var(--admin-muted);
   font-size: 13px;
   line-height: 16px;

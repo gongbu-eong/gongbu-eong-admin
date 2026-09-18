@@ -7,10 +7,8 @@ import {
   FunnelLogQuery,
   FunnelProductFilter,
   FunnelStepFilter,
-  TrafficBannerClick,
   TrafficChannel,
   TrafficData,
-  TrafficScreenInflow,
   TrafficLogChannelFilter,
   TrafficLogData,
   TrafficLogQuery,
@@ -50,25 +48,6 @@ type CampaignRow = {
   diagnosis_completes: string;
   signups: string;
   last_seen_at: string | null;
-};
-
-type BannerClickRow = {
-  banner_key: string | null;
-  banner_name: string | null;
-  clicks: string;
-  unique_clicks: string;
-};
-
-type DailyBannerClickRow = {
-  label: string;
-  item_key: string;
-  count: string;
-};
-
-type DailyScreenInflowRow = {
-  label: string;
-  screen_key: string;
-  count: string;
 };
 
 type TrafficLogRow = {
@@ -439,9 +418,9 @@ function formatPercent(value: number) {
 }
 
 function normalizePreset(value?: TrafficQuery["preset"]): TrafficPeriodPreset {
-  return value === "today" || value === "30d" || value === "custom"
+  return value === "today" || value === "7d" || value === "30d" || value === "custom"
     ? value
-    : "today";
+    : "7d";
 }
 
 function normalizeDate(value?: string | null) {
@@ -767,162 +746,6 @@ async function getDailyChannelTrendRows(params: unknown[]) {
   return result.rows;
 }
 
-async function getDailyScreenInflowRows(params: unknown[]) {
-  const result = await query<DailyScreenInflowRow>(
-    `
-      ${periodBoundsSql},
-      days AS (
-        SELECT generate_series(start_day, end_day, INTERVAL '1 day')::date AS day_kst
-        FROM ranges
-      ),
-      screens AS (
-        SELECT *
-        FROM (VALUES
-          ('home', 1),
-          ('jobs', 2),
-          ('job_detail', 3),
-          ('ai_tools', 4),
-          ('coaching', 5),
-          ('interview_coaching', 6),
-          ('diagnosis', 7),
-          ('community', 8),
-          ('calendar', 9),
-          ('my', 10),
-          ('login', 11),
-          ('other', 12)
-        ) AS screen(screen_key, sort_order)
-      ),
-      normalized_logs AS (
-        SELECT
-          days.day_kst,
-          logs.visitor_key,
-          CASE
-            WHEN logs.screen_key IN (
-              'home',
-              'jobs',
-              'job_detail',
-              'ai_tools',
-              'coaching',
-              'interview_coaching',
-              'diagnosis',
-              'community',
-              'calendar',
-              'my',
-              'login'
-            ) THEN logs.screen_key
-            WHEN split_part(logs.landing_path, '?', 1) = '/' THEN 'home'
-            WHEN split_part(logs.landing_path, '?', 1) = '/jobs' THEN 'jobs'
-            WHEN split_part(logs.landing_path, '?', 1) ~ '^/jobs/[^/]+$' THEN 'job_detail'
-            WHEN split_part(logs.landing_path, '?', 1) LIKE '/ai-tools/interview-coaching%' THEN 'interview_coaching'
-            WHEN split_part(logs.landing_path, '?', 1) LIKE '/ai-tools/coaching%' THEN 'coaching'
-            WHEN split_part(logs.landing_path, '?', 1) LIKE '/ai-tools/diagnosis%'
-              OR split_part(logs.landing_path, '?', 1) LIKE '/events/diagnosis%'
-              THEN 'diagnosis'
-            WHEN split_part(logs.landing_path, '?', 1) = '/ai-tools'
-              OR split_part(logs.landing_path, '?', 1) LIKE '/ai-tools/job-tools%'
-              THEN 'ai_tools'
-            WHEN split_part(logs.landing_path, '?', 1) LIKE '/community%' THEN 'community'
-            WHEN split_part(logs.landing_path, '?', 1) LIKE '/calendar%' THEN 'calendar'
-            WHEN split_part(logs.landing_path, '?', 1) LIKE '/my%' THEN 'my'
-            WHEN split_part(logs.landing_path, '?', 1) LIKE '/login%'
-              OR split_part(logs.landing_path, '?', 1) LIKE '/auth%'
-              THEN 'login'
-            ELSE 'other'
-          END AS screen_key
-        FROM days
-        JOIN (${trafficEventsSql}) logs
-          ON logs.event_at >= days.day_kst::timestamp AT TIME ZONE 'Asia/Seoul'
-         AND logs.event_at < (days.day_kst + 1)::timestamp AT TIME ZONE 'Asia/Seoul'
-        WHERE logs.event_name = 'page_view'
-      ),
-      grouped AS (
-        SELECT day_kst, screen_key, COUNT(DISTINCT visitor_key) AS count
-        FROM normalized_logs
-        GROUP BY day_kst, screen_key
-      )
-      SELECT
-        to_char(days.day_kst, 'MM/DD') AS label,
-        screens.screen_key,
-        COALESCE(grouped.count, 0) AS count
-      FROM days
-      CROSS JOIN screens
-      LEFT JOIN grouped
-        ON grouped.day_kst = days.day_kst
-       AND grouped.screen_key = screens.screen_key
-      ORDER BY days.day_kst, screens.sort_order
-    `,
-    params,
-  );
-
-  return result.rows;
-}
-
-async function getDailyBannerClickRows(params: unknown[]) {
-  const result = await query<DailyBannerClickRow>(
-    `
-      ${periodBoundsSql},
-      days AS (
-        SELECT generate_series(start_day, end_day, INTERVAL '1 day')::date AS day_kst
-        FROM ranges
-      ),
-      click_items AS (
-        SELECT *
-        FROM (VALUES
-          ('job_detail_resume_a', 'banner_click', 'job_detail_resume_a', 1),
-          ('job_detail_resume_b', 'banner_click', 'job_detail_resume_b', 2),
-          ('job_detail_strength_a', 'banner_click', 'job_detail_strength_a', 3),
-          ('job_detail_strength_b', 'banner_click', 'job_detail_strength_b', 4),
-          ('job_detail_bookmark_click', 'job_detail_bookmark_click', NULL::TEXT, 5),
-          ('job_detail_apply_click', 'job_detail_apply_click', NULL::TEXT, 6)
-        ) AS items(item_key, event_type, banner_key, sort_order)
-      ),
-      normalized_clicks AS (
-        SELECT
-          (events.created_at AT TIME ZONE 'Asia/Seoul')::date AS day_kst,
-          CASE
-            WHEN events.event_type = 'banner_click'
-            THEN COALESCE(NULLIF(events.properties->>'banner_key', ''), 'unknown')
-            ELSE events.event_type
-          END AS item_key,
-          events.id
-        FROM public.product_events events, ranges
-        WHERE events.created_at >= current_start
-          AND events.created_at < current_end
-          AND (
-            events.event_type IN ('job_detail_bookmark_click', 'job_detail_apply_click')
-            OR (
-              events.event_type = 'banner_click'
-              AND COALESCE(NULLIF(events.properties->>'banner_key', ''), 'unknown') IN (
-                'job_detail_resume_a',
-                'job_detail_resume_b',
-                'job_detail_strength_a',
-                'job_detail_strength_b'
-              )
-            )
-          )
-      ),
-      grouped AS (
-        SELECT day_kst, item_key, COUNT(*) AS count
-        FROM normalized_clicks
-        GROUP BY day_kst, item_key
-      )
-      SELECT
-        to_char(days.day_kst, 'MM/DD') AS label,
-        click_items.item_key,
-        COALESCE(grouped.count, 0) AS count
-      FROM days
-      CROSS JOIN click_items
-      LEFT JOIN grouped
-        ON grouped.day_kst = days.day_kst
-       AND grouped.item_key = click_items.item_key
-      ORDER BY days.day_kst, click_items.sort_order
-    `,
-    params,
-  );
-
-  return result.rows;
-}
-
 function createTrendData(rows: TrendRow[]) {
   const labels = Array.from(new Set(rows.map((row) => row.label)));
   const map = new Map<string, Map<string, number>>();
@@ -944,7 +767,7 @@ export async function getTrafficData(args?: TrafficQuery): Promise<TrafficData> 
   const trendParams = createParams({ preset: "7d" });
   const period = await getPeriod(params);
 
-  const currentResult = await query<ChannelCountRow>(
+  const currentResultPromise = query<ChannelCountRow>(
       `
         ${periodBoundsSql},
         acquisition_visitors AS (
@@ -974,7 +797,7 @@ export async function getTrafficData(args?: TrafficQuery): Promise<TrafficData> 
       `,
       params,
     );
-  const previousResult = await query<ChannelCountRow>(
+  const previousResultPromise = query<ChannelCountRow>(
       `
         ${periodBoundsSql},
         acquisition_visitors AS (
@@ -1004,7 +827,7 @@ export async function getTrafficData(args?: TrafficQuery): Promise<TrafficData> 
       `,
       params,
     );
-  const jobDetailInsightResult = await query<JobDetailInsightRow>(
+  const jobDetailInsightResultPromise = query<JobDetailInsightRow>(
     `
       ${periodBoundsSql},
       job_detail_visits AS (
@@ -1063,61 +886,22 @@ export async function getTrafficData(args?: TrafficQuery): Promise<TrafficData> 
     `,
     params,
   );
-  const trendRows = await getDailyChannelTrendRows(trendParams);
-  const dailyTrendRows = await getDailyChannelTrendRows(params);
-  const dailyScreenRowsResult = await getDailyScreenInflowRows(params);
-  const dailyBannerClickRowsResult = await getDailyBannerClickRows(params);
-  const bannerClickResult = await query<BannerClickRow>(
-    `
-      ${periodBoundsSql}
-      , click_items AS (
-        SELECT *
-        FROM (VALUES
-          ('job_detail_resume_a', '자소서 배너 A', 'banner_click', 'job_detail_resume_a', 1),
-          ('job_detail_resume_b', '자소서 배너 B', 'banner_click', 'job_detail_resume_b', 2),
-          ('job_detail_strength_a', '강약점 배너 A', 'banner_click', 'job_detail_strength_a', 3),
-          ('job_detail_strength_b', '강약점 배너 B', 'banner_click', 'job_detail_strength_b', 4),
-          ('job_detail_bookmark_click', '공고 찜하고 준비하기', 'job_detail_bookmark_click', NULL::TEXT, 5),
-          ('job_detail_apply_click', '지원하기/이메일 지원하기', 'job_detail_apply_click', NULL::TEXT, 6)
-        ) AS items(item_key, item_name, event_type, banner_key, sort_order)
-      ),
-      counts AS (
-        SELECT
-          CASE
-            WHEN event_type = 'banner_click'
-            THEN COALESCE(NULLIF(properties->>'banner_key', ''), 'unknown')
-            ELSE event_type
-          END AS item_key,
-          COUNT(*) AS clicks,
-          COUNT(DISTINCT COALESCE(user_id::TEXT, anonymous_id::TEXT, id::TEXT)) AS unique_clicks
-        FROM public.product_events, ranges
-        WHERE created_at >= current_start
-          AND created_at < current_end
-          AND (
-            event_type IN ('job_detail_bookmark_click', 'job_detail_apply_click')
-            OR (
-              event_type = 'banner_click'
-              AND COALESCE(NULLIF(properties->>'banner_key', ''), 'unknown') IN (
-                'job_detail_resume_a',
-                'job_detail_resume_b',
-                'job_detail_strength_a',
-                'job_detail_strength_b'
-              )
-            )
-          )
-        GROUP BY 1
-      )
-      SELECT
-        click_items.item_key AS banner_key,
-        click_items.item_name AS banner_name,
-        COALESCE(counts.clicks, 0)::TEXT AS clicks,
-        COALESCE(counts.unique_clicks, 0)::TEXT AS unique_clicks
-      FROM click_items
-      LEFT JOIN counts ON counts.item_key = click_items.item_key
-      ORDER BY click_items.sort_order
-    `,
-    params,
-  );
+  const dailyTrendRowsPromise = getDailyChannelTrendRows(params);
+  const [
+    currentResult,
+    previousResult,
+    jobDetailInsightResult,
+    dailyTrendRows,
+  ] = await Promise.all([
+    currentResultPromise,
+    previousResultPromise,
+    jobDetailInsightResultPromise,
+    dailyTrendRowsPromise,
+  ]);
+  const trendRows =
+    preset === "7d"
+      ? dailyTrendRows
+      : await getDailyChannelTrendRows(trendParams);
 
   const currentChannels = groupChannelRows(currentResult.rows);
   const previousChannels = groupChannelRows(previousResult.rows);
@@ -1176,68 +960,8 @@ export async function getTrafficData(args?: TrafficQuery): Promise<TrafficData> 
 
     return { date: day, counts, total };
   }).reverse();
-  const screenLabels = Array.from(
-    new Set(dailyScreenRowsResult.map((row) => row.label)),
-  );
-  const screenInflows: TrafficScreenInflow[] = trafficScreenDefinitions.map(
-    (screen) => ({
-      key: screen.key,
-      label: screen.label,
-    }),
-  );
-  const dailyScreenMap = new Map<string, Map<string, number>>();
-
-  for (const row of dailyScreenRowsResult) {
-    const dateMap = dailyScreenMap.get(row.label) || new Map<string, number>();
-    dateMap.set(row.screen_key, numberValue(row.count));
-    dailyScreenMap.set(row.label, dateMap);
-  }
-
-  const dailyScreenRows = screenLabels.map((day) => {
-    const counts = screenInflows.reduce<Record<string, number>>(
-      (accumulator, screen) => {
-        accumulator[screen.key] = dailyScreenMap.get(day)?.get(screen.key) || 0;
-        return accumulator;
-      },
-      {},
-    );
-    const total = Object.values(counts).reduce((sum, count) => sum + count, 0);
-
-    return { date: day, counts, total };
-  }).reverse();
   const maxValue = getNiceStep(Math.max(1, maxTrendValue * 1.15) / 4) * 4;
   const periodValue = `${period?.start_label || ""}~${period?.end_label || ""}`;
-  const bannerClicks: TrafficBannerClick[] = bannerClickResult.rows.map(
-    (row) => ({
-      key: row.banner_key || "unknown",
-      label: mapBannerLabel(row.banner_key, row.banner_name),
-      clicks: numberValue(row.clicks),
-      uniqueClicks: numberValue(row.unique_clicks),
-    }),
-  );
-  const bannerDateLabels = Array.from(
-    new Set(dailyBannerClickRowsResult.map((row) => row.label)),
-  );
-  const dailyBannerMap = new Map<string, Map<string, number>>();
-
-  for (const row of dailyBannerClickRowsResult) {
-    const dateMap = dailyBannerMap.get(row.label) || new Map<string, number>();
-    dateMap.set(row.item_key, numberValue(row.count));
-    dailyBannerMap.set(row.label, dateMap);
-  }
-
-  const dailyBannerClickRows = bannerDateLabels.map((day) => {
-    const counts = bannerClicks.reduce<Record<string, number>>(
-      (accumulator, item) => {
-        accumulator[item.key] = dailyBannerMap.get(day)?.get(item.key) || 0;
-        return accumulator;
-      },
-      {},
-    );
-    const total = Object.values(counts).reduce((sum, count) => sum + count, 0);
-
-    return { date: day, counts, total };
-  }).reverse();
 
   return {
     metrics: [
@@ -1289,10 +1013,6 @@ export async function getTrafficData(args?: TrafficQuery): Promise<TrafficData> 
       })),
     })),
     dailyRows,
-    screenInflows,
-    dailyScreenRows,
-    bannerClicks,
-    dailyBannerClickRows,
     yLabels: createYLabels(maxValue),
     maxValue,
     totalVisitors,

@@ -24,6 +24,12 @@ export type LinePoint = {
   value: number;
 };
 
+export type DashboardTrendSeries = {
+  label: string;
+  color: string;
+  data: LinePoint[];
+};
+
 export type FunnelItem = {
   step: number;
   label: string;
@@ -108,7 +114,7 @@ export const navItems: NavItem[] = [
     icon: "/admin-assets/nav-traffic.png",
     expandable: true,
     children: [
-      { label: "요약", key: "traffic-source", href: "/traffic" },
+      { label: "채널 상세", key: "traffic-source", href: "/traffic" },
       { label: "전환 퍼널", key: "traffic-funnel", href: "/traffic/funnel" },
       { label: "유입 로그", key: "traffic-logs", href: "/traffic/logs" },
       {
