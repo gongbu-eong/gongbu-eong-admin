@@ -291,6 +291,7 @@ function formatShortDateTime(value: string | Date | null | undefined) {
     day: "numeric",
     hour: "2-digit",
     minute: "2-digit",
+    second: "2-digit",
     hour12: false,
   })
     .format(date)
@@ -943,7 +944,7 @@ export async function getMemberDetailData(
           FROM public.community_comments comments
           WHERE comments.user_id = $1::uuid
         ) logs
-        ORDER BY occurred_at ASC, id ASC
+        ORDER BY occurred_at DESC, id DESC
       `,
       [memberRow.id],
     ),

@@ -309,6 +309,11 @@
   color: #159463;
 }
 
+.deviceUnknown {
+  background: var(--admin-surface-soft);
+  color: var(--admin-muted);
+}
+
 .emptyCell {
   height: 260px !important;
   color: var(--admin-light);

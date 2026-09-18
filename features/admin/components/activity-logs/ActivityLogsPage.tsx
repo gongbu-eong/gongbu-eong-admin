@@ -40,6 +40,9 @@ function makeHref(data: Awaited<ReturnType<typeof getActivityLogData>>, page: nu
   if (data.event !== "all") params.set("event", data.event);
   if (data.screen !== "all") params.set("screen", data.screen);
   if (data.keyword) params.set("keyword", data.keyword);
+  if (data.channel !== "all") params.set("channel", data.channel);
+  if (data.uniqueOnly) params.set("unique", "1");
+  if (data.from) params.set("from", data.from);
   if (selectedIp) params.set("ip", selectedIp);
   if (page > 1) params.set("page", String(page));
   return `/activity-logs?${params.toString()}`;
@@ -86,6 +89,9 @@ export async function ActivityLogsPage({ filters }: ActivityLogsPageProps) {
             <span>검색어</span>
             <input name="keyword" placeholder="이름 · 경로 · 이벤트" defaultValue={data.keyword} />
           </label>
+          {data.channel !== "all" ? <input type="hidden" name="channel" value={data.channel} /> : null}
+          {data.uniqueOnly ? <input type="hidden" name="unique" value="1" /> : null}
+          {data.from ? <input type="hidden" name="from" value={data.from} /> : null}
           {data.ip ? <input type="hidden" name="ip" value={data.ip} /> : null}
           <input type="hidden" name="page" value="1" />
           <button type="submit">조회</button>
@@ -99,7 +105,7 @@ export async function ActivityLogsPage({ filters }: ActivityLogsPageProps) {
           <div className={styles.tableTop}>
             <div>
               <h2>{data.event === "visit" ? "방문 이력" : data.event === "all" ? "전체 방문·이벤트 이력" : "이벤트 이력"}</h2>
-              <p>총 <strong>{formatCount(data.totalCount)}</strong>건 · 비회원은 IP와 익명 식별자로 확인합니다.{data.ip ? ` · ${data.ip} 로그만 조회 중` : ""}</p>
+              <p>총 <strong>{formatCount(data.totalCount)}</strong>건 · {data.uniqueOnly ? "순 방문자 기준 · " : "원본 이벤트 기준 · "}비회원은 IP와 익명 식별자로 확인합니다.{data.ip ? ` · ${data.ip} 로그만 조회 중` : ""}</p>
             </div>
             <span className={styles.tableActions}>
               {data.ip ? <Link className={styles.backButtonSecondary} href={makeHref(data, 1, "")}>전체 IP 보기</Link> : null}
@@ -107,17 +113,18 @@ export async function ActivityLogsPage({ filters }: ActivityLogsPageProps) {
           </div>
           <div className={styles.tableWrap}>
             <table className={styles.table}>
-              <thead><tr><th>접속일시</th><th>이벤트</th><th>사용자</th><th>식별 정보</th><th>IP</th><th>경로</th><th>상세</th></tr></thead>
+              <thead><tr><th>접속일시</th><th>이벤트</th><th>사용자</th><th>식별 정보</th><th>IP</th><th>기기</th><th>경로</th><th>상세</th></tr></thead>
               <tbody>{data.rows.length ? data.rows.map((row) => (
                 <tr key={row.id}>
                   <td>{row.eventAt}</td><td>{row.event}</td>
                   <td><span className={styles.userCell}><strong>{row.userName}</strong>{row.userEmail ? <em>{row.userEmail}</em> : <em>비회원</em>}</span></td>
                   <td className={styles.pathCell} title={row.identity}>{row.identity}</td>
                   <td>{row.ipAddress !== "-" ? <Link href={makeHref(data, 1, row.ipAddress)}>{row.ipAddress}</Link> : row.ipAddress}</td>
+                  <td><span className={`${styles.deviceBadge} ${row.device === "모바일" ? styles.deviceMobile : row.device === "웹" ? styles.deviceWeb : styles.deviceUnknown}`}>{row.device}</span></td>
                   <td className={styles.pathCell} title={row.path}>{row.path}</td>
                   <td className={styles.pathCell} title={row.detail}>{row.detail}</td>
                 </tr>
-              )) : <tr><td className={styles.emptyCell} colSpan={7}>조회 조건에 해당하는 로그가 없습니다.</td></tr>}</tbody>
+              )) : <tr><td className={styles.emptyCell} colSpan={8}>조회 조건에 해당하는 로그가 없습니다.</td></tr>}</tbody>
             </table>
           </div>
           <nav className={styles.pagination} aria-label="방문 이벤트 로그 페이지">

@@ -257,8 +257,8 @@ export async function AdminDashboardPage({
               valueSuffix="명"
             />
             <TrendViewCard
-              title="화면별 순 방문자 추이"
-              subtitle="최근 7일 · 같은 화면 중복 제외"
+              title="화면별 방문수 추이"
+              subtitle="최근 7일 · 페이지 이동·방문 횟수"
               listSubtitle={`목록 · ${dashboardPeriodText}`}
               yLabels={screenScale.yLabels}
               series={screenTrend}

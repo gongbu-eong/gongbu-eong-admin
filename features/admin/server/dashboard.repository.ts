@@ -247,9 +247,10 @@ const coachingCompleteEventsSql = `
 
 const coachingPageVisitEventsSql = `
   SELECT ${visitorKeySql} AS visitor_key, created_at AS event_at
-  FROM public.access_logs
-  WHERE event_name = 'page_view'
-    AND split_part(path, '?', 1) = '/ai-tools/coaching'
+  FROM public.access_logs access_logs
+  WHERE access_logs.event_name = 'page_view'
+    AND split_part(access_logs.path, '?', 1) = '/ai-tools/coaching'
+    AND ${excludedEventCondition("access_logs.user_id", "access_logs.ip_address")}
 `;
 
 const diagnosisStartEventsSql = `
@@ -275,9 +276,10 @@ const diagnosisCompleteEventsSql = `
 
 const diagnosisPageVisitEventsSql = `
   SELECT ${visitorKeySql} AS visitor_key, created_at AS event_at
-  FROM public.access_logs
-  WHERE event_name = 'page_view'
-    AND split_part(path, '?', 1) IN ('/ai-tools/diagnosis', '/events/diagnosis')
+  FROM public.access_logs access_logs
+  WHERE access_logs.event_name = 'page_view'
+    AND split_part(access_logs.path, '?', 1) IN ('/ai-tools/diagnosis', '/events/diagnosis')
+    AND ${excludedEventCondition("access_logs.user_id", "access_logs.ip_address")}
 `;
 
 const interviewStartEventsSql = `
@@ -301,9 +303,10 @@ const interviewCompleteEventsSql = `
 
 const interviewPageVisitEventsSql = `
   SELECT ${visitorKeySql} AS visitor_key, created_at AS event_at
-  FROM public.access_logs
-  WHERE event_name = 'page_view'
-    AND split_part(path, '?', 1) = '/ai-tools/interview-coaching'
+  FROM public.access_logs access_logs
+  WHERE access_logs.event_name = 'page_view'
+    AND split_part(access_logs.path, '?', 1) = '/ai-tools/interview-coaching'
+    AND ${excludedEventCondition("access_logs.user_id", "access_logs.ip_address")}
 `;
 
 type DashboardProductConfig = {
@@ -684,24 +687,44 @@ export async function getDashboardData({
       ${dashboardRangeSql}
       SELECT
         (
-          SELECT COUNT(DISTINCT visitor_key)
-          FROM (${selectedProductConfig.startEventsSql}) starts, ranges
-          WHERE event_at >= range_start AND event_at < range_end
+          SELECT COALESCE(SUM(daily_count), 0)
+          FROM (
+            SELECT (starts.event_at AT TIME ZONE 'Asia/Seoul')::date AS day_kst,
+              COUNT(DISTINCT starts.visitor_key) AS daily_count
+            FROM (${selectedProductConfig.startEventsSql}) starts, ranges
+            WHERE starts.event_at >= range_start AND starts.event_at < range_end
+            GROUP BY 1
+          ) daily_starts
         ) AS current_starts,
         (
-          SELECT COUNT(DISTINCT visitor_key)
-          FROM (${selectedProductConfig.startEventsSql}) starts, ranges
-          WHERE event_at >= previous_start AND event_at < previous_end
+          SELECT COALESCE(SUM(daily_count), 0)
+          FROM (
+            SELECT (starts.event_at AT TIME ZONE 'Asia/Seoul')::date AS day_kst,
+              COUNT(DISTINCT starts.visitor_key) AS daily_count
+            FROM (${selectedProductConfig.startEventsSql}) starts, ranges
+            WHERE starts.event_at >= previous_start AND starts.event_at < previous_end
+            GROUP BY 1
+          ) daily_starts
         ) AS previous_starts,
         (
-          SELECT COUNT(DISTINCT visitor_key)
-          FROM (${selectedProductConfig.completeEventsSql}) completes, ranges
-          WHERE event_at >= range_start AND event_at < range_end
+          SELECT COALESCE(SUM(daily_count), 0)
+          FROM (
+            SELECT (completes.event_at AT TIME ZONE 'Asia/Seoul')::date AS day_kst,
+              COUNT(DISTINCT completes.visitor_key) AS daily_count
+            FROM (${selectedProductConfig.completeEventsSql}) completes, ranges
+            WHERE completes.event_at >= range_start AND completes.event_at < range_end
+            GROUP BY 1
+          ) daily_completes
         ) AS current_completes,
         (
-          SELECT COUNT(DISTINCT visitor_key)
-          FROM (${selectedProductConfig.completeEventsSql}) completes, ranges
-          WHERE event_at >= previous_start AND event_at < previous_end
+          SELECT COALESCE(SUM(daily_count), 0)
+          FROM (
+            SELECT (completes.event_at AT TIME ZONE 'Asia/Seoul')::date AS day_kst,
+              COUNT(DISTINCT completes.visitor_key) AS daily_count
+            FROM (${selectedProductConfig.completeEventsSql}) completes, ranges
+            WHERE completes.event_at >= previous_start AND completes.event_at < previous_end
+            GROUP BY 1
+          ) daily_completes
         ) AS previous_completes
       FROM ranges
     `,
@@ -970,11 +993,8 @@ export async function getDashboardData({
           FROM daily_channel_visits
           GROUP BY day_kst, channel_label
         ),
-        screen_visits AS (
-          SELECT DISTINCT ON (
-            (traffic_events.event_at AT TIME ZONE 'Asia/Seoul')::date,
-            traffic_events.visitor_key
-          )
+      screen_visits AS (
+        SELECT
             (traffic_events.event_at AT TIME ZONE 'Asia/Seoul')::date AS day_kst,
             traffic_events.visitor_key,
             CASE
@@ -994,12 +1014,7 @@ export async function getDashboardData({
           FROM traffic_events
           WHERE traffic_events.visitor_key IS NOT NULL
             AND traffic_events.event_at < (SELECT range_end FROM bounds)
-          ORDER BY
-            (traffic_events.event_at AT TIME ZONE 'Asia/Seoul')::date,
-            traffic_events.visitor_key,
-            traffic_events.event_at,
-            traffic_events.id
-        ),
+      ),
         screen_counts AS (
           SELECT
             day_kst,
@@ -1047,37 +1062,59 @@ export async function getDashboardData({
           )
           GROUP BY day_kst, metric_key
         ),
+        page_event_gaps AS (
+          SELECT
+            traffic_events.*,
+            LAG(traffic_events.event_at) OVER (
+              PARTITION BY traffic_events.visitor_key
+              ORDER BY traffic_events.event_at, traffic_events.id
+            ) AS previous_event_at
+          FROM traffic_events
+          WHERE traffic_events.visitor_key IS NOT NULL
+        ),
+        page_event_sessions AS (
+          SELECT
+            page_event_gaps.*,
+            SUM(
+              CASE
+                WHEN previous_event_at IS NULL
+                  OR event_at > previous_event_at + INTERVAL '30 minutes'
+                  THEN 1
+                ELSE 0
+              END
+            ) OVER (
+              PARTITION BY visitor_key
+              ORDER BY event_at, id
+              ROWS UNBOUNDED PRECEDING
+            ) AS session_no
+          FROM page_event_gaps
+        ),
         job_detail_visits AS (
-          SELECT DISTINCT ON (
-            (logs.event_at AT TIME ZONE 'Asia/Seoul')::date,
-            logs.visitor_key
-          )
+          SELECT DISTINCT ON (logs.visitor_key, logs.session_no)
             (logs.event_at AT TIME ZONE 'Asia/Seoul')::date AS day_kst,
             logs.visitor_key,
+            logs.visitor_key || ':' || logs.session_no::TEXT AS session_key,
             logs.event_at
-          FROM traffic_events logs
-          WHERE logs.visitor_key IS NOT NULL
-            AND logs.event_at < (SELECT range_end FROM bounds)
-            AND (
+          FROM page_event_sessions logs
+          WHERE
               logs.screen_key = 'job_detail'
               OR split_part(logs.landing_path, '?', 1) ~ '^/jobs/[^/]+$'
-            )
-          ORDER BY
-            (logs.event_at AT TIME ZONE 'Asia/Seoul')::date,
-            logs.visitor_key,
-            logs.event_at,
-            logs.id
+          ORDER BY logs.visitor_key, logs.session_no, logs.event_at, logs.id
         ),
         later_page_activity AS (
-          SELECT DISTINCT visits.day_kst, visits.visitor_key
+          SELECT DISTINCT visits.day_kst, visits.visitor_key, visits.session_key
           FROM job_detail_visits visits
-          JOIN traffic_events logs
+          JOIN page_event_sessions logs
             ON logs.visitor_key = visits.visitor_key
            AND logs.event_at > visits.event_at
            AND logs.event_at <= visits.event_at + INTERVAL '30 minutes'
         ),
         later_action_activity AS (
-          SELECT DISTINCT visits.day_kst, visits.visitor_key
+          SELECT DISTINCT
+            visits.day_kst,
+            visits.visitor_key,
+            visits.session_key,
+            events.event_type
           FROM job_detail_visits visits
           JOIN public.product_events events
             ON COALESCE(
@@ -1088,13 +1125,18 @@ export async function getDashboardData({
                ) = visits.visitor_key
            AND events.created_at > visits.event_at
            AND events.created_at <= visits.event_at + INTERVAL '30 minutes'
+           AND events.created_at < (SELECT range_end FROM bounds)
            AND (
              events.event_type IN ('job_detail_bookmark_click', 'job_detail_apply_click')
              OR (
                events.event_type = 'banner_click'
                AND events.properties->>'placement' = 'job_detail_bottom'
              )
-           )
+            )
+        ),
+        later_action_events AS (
+          SELECT day_kst, session_key, event_type
+          FROM later_action_activity
         ),
         activity_visitors AS (
           SELECT day_kst, visitor_key FROM later_page_activity
@@ -1102,22 +1144,22 @@ export async function getDashboardData({
           SELECT day_kst, visitor_key FROM later_action_activity
         ),
         behavior_counts AS (
-          SELECT day_kst, 'behavior:job_detail_visitors' AS metric_key, COUNT(*)::TEXT AS count
+          SELECT day_kst, 'behavior:job_detail_visitors' AS metric_key, COUNT(DISTINCT visitor_key)::TEXT AS count
           FROM job_detail_visits
           GROUP BY day_kst
           UNION ALL
-          SELECT day_kst, 'behavior:activity_visitors' AS metric_key, COUNT(*)::TEXT AS count
+          SELECT day_kst, 'behavior:activity_visitors' AS metric_key, COUNT(DISTINCT visitor_key)::TEXT AS count
           FROM activity_visitors
           GROUP BY day_kst
           UNION ALL
           SELECT day_kst, 'behavior:bookmark_clicks' AS metric_key, COUNT(*)::TEXT AS count
-          FROM raw_banner_events
-          WHERE metric_key = 'banner:job_detail_bookmark_click'
+          FROM later_action_events
+          WHERE event_type = 'job_detail_bookmark_click'
           GROUP BY day_kst
           UNION ALL
           SELECT day_kst, 'behavior:apply_clicks' AS metric_key, COUNT(*)::TEXT AS count
-          FROM raw_banner_events
-          WHERE metric_key = 'banner:job_detail_apply_click'
+          FROM later_action_events
+          WHERE event_type = 'job_detail_apply_click'
           GROUP BY day_kst
         ),
         counts AS (
@@ -1285,10 +1327,7 @@ export async function getDashboardData({
         GROUP BY day_kst, channel_label
       ),
       screen_visits AS (
-        SELECT DISTINCT ON (
-          (events.event_at AT TIME ZONE 'Asia/Seoul')::date,
-          events.visitor_key
-        )
+        SELECT
           (events.event_at AT TIME ZONE 'Asia/Seoul')::date AS day_kst,
           events.visitor_key,
           CASE
@@ -1309,11 +1348,6 @@ export async function getDashboardData({
         WHERE events.visitor_key IS NOT NULL
           AND events.event_at >= range_start
           AND events.event_at < range_end
-        ORDER BY
-          (events.event_at AT TIME ZONE 'Asia/Seoul')::date,
-          events.visitor_key,
-          events.event_at,
-          events.id
       ),
       screen_counts AS (
         SELECT
@@ -1465,19 +1499,34 @@ export async function getDashboardData({
       ${dashboardRangeSql}
       SELECT
         (
-          SELECT COUNT(DISTINCT visitor_key)
-          FROM (${selectedProductConfig.pageVisitEventsSql}) page_visits, ranges
-          WHERE event_at >= range_start AND event_at < range_end
+          SELECT COALESCE(SUM(daily_count), 0)
+          FROM (
+            SELECT (page_visits.event_at AT TIME ZONE 'Asia/Seoul')::date AS day_kst,
+              COUNT(DISTINCT page_visits.visitor_key) AS daily_count
+            FROM (${selectedProductConfig.pageVisitEventsSql}) page_visits, ranges
+            WHERE page_visits.event_at >= range_start AND page_visits.event_at < range_end
+            GROUP BY 1
+          ) daily_page_visits
         ) AS page_visits,
         (
-          SELECT COUNT(DISTINCT visitor_key)
-          FROM (${selectedProductConfig.startEventsSql}) starts, ranges
-          WHERE event_at >= range_start AND event_at < range_end
+          SELECT COALESCE(SUM(daily_count), 0)
+          FROM (
+            SELECT (starts.event_at AT TIME ZONE 'Asia/Seoul')::date AS day_kst,
+              COUNT(DISTINCT starts.visitor_key) AS daily_count
+            FROM (${selectedProductConfig.startEventsSql}) starts, ranges
+            WHERE starts.event_at >= range_start AND starts.event_at < range_end
+            GROUP BY 1
+          ) daily_starts
         ) AS coaching_started,
         (
-          SELECT COUNT(DISTINCT visitor_key)
-          FROM (${selectedProductConfig.completeEventsSql}) completes, ranges
-          WHERE event_at >= range_start AND event_at < range_end
+          SELECT COALESCE(SUM(daily_count), 0)
+          FROM (
+            SELECT (completes.event_at AT TIME ZONE 'Asia/Seoul')::date AS day_kst,
+              COUNT(DISTINCT completes.visitor_key) AS daily_count
+            FROM (${selectedProductConfig.completeEventsSql}) completes, ranges
+            WHERE completes.event_at >= range_start AND completes.event_at < range_end
+            GROUP BY 1
+          ) daily_completes
         ) AS coaching_completed
     `,
     dashboardDateParams,
@@ -1662,7 +1711,7 @@ export async function getDashboardData({
     SELECT
       source_value AS channel_source,
       normalized_screen_key AS screen_key,
-      COUNT(DISTINCT visitor_key) AS inflow_count
+      COUNT(*) AS inflow_count
     FROM normalized_events
     GROUP BY source_value, normalized_screen_key
     `,
@@ -1691,6 +1740,40 @@ export async function getDashboardData({
           AND event_at >= range_start
           AND event_at < range_end
         ORDER BY visitor_key, event_at, id
+      ),
+      page_event_source AS (
+        SELECT traffic_events.*
+        FROM (${trafficEventsSql}) traffic_events
+        CROSS JOIN ranges
+        WHERE traffic_events.visitor_key IS NOT NULL
+          AND traffic_events.event_at >= ranges.range_start - INTERVAL '30 days'
+          AND traffic_events.event_at < ranges.range_end + INTERVAL '30 days'
+      ),
+      page_event_gaps AS (
+        SELECT
+          page_event_source.*,
+          LAG(page_event_source.event_at) OVER (
+            PARTITION BY page_event_source.visitor_key
+            ORDER BY page_event_source.event_at, page_event_source.id
+          ) AS previous_event_at
+        FROM page_event_source
+      ),
+      page_event_sessions AS (
+        SELECT
+          page_event_gaps.*,
+          SUM(
+            CASE
+              WHEN previous_event_at IS NULL
+                OR event_at > previous_event_at + INTERVAL '30 minutes'
+                THEN 1
+              ELSE 0
+            END
+          ) OVER (
+            PARTITION BY visitor_key
+            ORDER BY event_at, id
+            ROWS UNBOUNDED PRECEDING
+          ) AS session_no
+        FROM page_event_gaps
       ),
       page_events AS (
         SELECT
@@ -1726,7 +1809,8 @@ export async function getDashboardData({
           END AS source_label,
           traffic_events.landing_path,
           traffic_events.screen_key,
-          traffic_events.event_at
+          traffic_events.event_at,
+          traffic_events.visitor_key || ':' || traffic_events.session_no::TEXT AS session_key
         FROM (
           SELECT
             traffic_events.id,
@@ -1734,14 +1818,11 @@ export async function getDashboardData({
             traffic_events.landing_path,
             traffic_events.screen_key,
             traffic_events.event_at,
+            traffic_events.session_no,
             COALESCE(acquisition_channels.source_value, traffic_events.source_value) AS source_value
-          FROM (${trafficEventsSql}) traffic_events
+          FROM page_event_sessions traffic_events
           LEFT JOIN acquisition_channels
             ON acquisition_channels.visitor_key = traffic_events.visitor_key
-          CROSS JOIN ranges
-          WHERE traffic_events.visitor_key IS NOT NULL
-            AND traffic_events.event_at >= ranges.range_start
-            AND traffic_events.event_at < ranges.range_end
         ) traffic_events
       ),
       all_page_events AS (
@@ -1754,8 +1835,8 @@ export async function getDashboardData({
         FROM (${trafficEventsSql}) traffic_events
         CROSS JOIN ranges
         WHERE traffic_events.visitor_key IS NOT NULL
-          AND traffic_events.event_at >= ranges.range_start
-          AND traffic_events.event_at < ranges.range_end + INTERVAL '7 days'
+          AND traffic_events.event_at >= ranges.range_start - INTERVAL '30 days'
+          AND traffic_events.event_at < ranges.range_end + INTERVAL '30 days'
       ),
       channel_defs AS (
         SELECT *
@@ -1772,19 +1853,24 @@ export async function getDashboardData({
           page_events.visit_id,
           page_events.visitor_key,
           page_events.source_label,
-          page_events.event_at
+          page_events.event_at,
+          page_events.session_key
         FROM page_events
         WHERE page_events.screen_key = 'job_detail'
           OR split_part(page_events.landing_path, '?', 1) ~ '^/jobs/[^/]+$'
       ),
       job_detail_channel_visitors AS (
-        SELECT DISTINCT ON (visitor_key)
+        SELECT DISTINCT ON (session_key)
           visit_id,
           visitor_key,
           source_label,
-          event_at
+          event_at,
+          session_key
         FROM job_detail_visits
-        ORDER BY visitor_key, event_at DESC, visit_id DESC
+        CROSS JOIN ranges
+        WHERE event_at >= ranges.range_start
+          AND event_at < ranges.range_end
+        ORDER BY session_key, event_at DESC, visit_id DESC
       ),
       product_actions AS (
         SELECT
@@ -1890,7 +1976,7 @@ export async function getDashboardData({
           source_label,
           COUNT(*) FILTER (WHERE event_type = 'job_detail_bookmark_click') AS bookmark_count,
           COUNT(*) FILTER (WHERE event_type = 'job_detail_apply_click') AS apply_count
-        FROM normalized_action_events
+        FROM attributed_action_events
         GROUP BY source_label
       ),
       other_page_move_counts AS (
@@ -1915,16 +2001,26 @@ export async function getDashboardData({
         )
         GROUP BY source_label
       ),
+      recognized_action_or_page_visitors AS (
+        SELECT DISTINCT source_label, visitor_key
+        FROM attributed_action_events
+        UNION
+        SELECT DISTINCT source_label, visitor_key
+        FROM attributed_page_events
+        WHERE NOT (
+             screen_key = 'job_detail'
+          OR split_part(landing_path, '?', 1) ~ '^/jobs/[^/]+$'
+        )
+      ),
       revisit_events AS (
         SELECT DISTINCT
-          job_detail_visits.source_label,
-          job_detail_visits.visitor_key
-        FROM job_detail_channel_visitors job_detail_visits
+          current_visit.source_label,
+          current_visit.visitor_key
+        FROM job_detail_channel_visitors current_visit
         JOIN all_page_events page_events
-          ON page_events.visitor_key = job_detail_visits.visitor_key
-         AND page_events.event_at > job_detail_visits.event_at
-         AND page_events.event_at >= job_detail_visits.event_at + INTERVAL '1 day'
-         AND page_events.event_at <= job_detail_visits.event_at + INTERVAL '7 days'
+          ON page_events.visitor_key = current_visit.visitor_key
+         AND page_events.event_at > current_visit.event_at + INTERVAL '30 minutes'
+         AND page_events.event_at <= current_visit.event_at + INTERVAL '30 days'
       ),
       stats AS (
         SELECT
@@ -1948,7 +2044,7 @@ export async function getDashboardData({
                   WHERE later_page_events.visitor_key IS NULL
                     AND later_action_events.visitor_key IS NULL
                 )
-              - COALESCE(other_page_visitors.visitor_count, 0),
+              - COUNT(DISTINCT recognized_action_or_page_visitors.visitor_key),
               0
             ) AS unknown_count
         FROM job_detail_channel_visitors
@@ -1967,6 +2063,9 @@ export async function getDashboardData({
           ON other_page_move_counts.source_label = job_detail_channel_visitors.source_label
         LEFT JOIN other_page_visitors
           ON other_page_visitors.source_label = job_detail_channel_visitors.source_label
+        LEFT JOIN recognized_action_or_page_visitors
+          ON recognized_action_or_page_visitors.source_label = job_detail_channel_visitors.source_label
+         AND recognized_action_or_page_visitors.visitor_key = job_detail_channel_visitors.visitor_key
         GROUP BY job_detail_channel_visitors.source_label
           , bookmark_counts.bookmark_count
           , bookmark_counts.apply_count
@@ -2417,7 +2516,13 @@ export async function getDashboardData({
         label: screen.label,
         count: `${formatCount(count)}건`,
         fill: fillPercent(count, maxScreenInflowCount),
-        href: createDatedLogHref("/activity-logs", { screen: screen.key }),
+        href: createDatedLogHref("/activity-logs", {
+          screen: screen.key,
+          event: "visit",
+          ...(selectedChannelKey !== "all"
+            ? { channel: selectedChannelKey }
+            : {}),
+        }),
       };
     }),
     screenInflowTotal: formatCount(totalScreenInflowCount),

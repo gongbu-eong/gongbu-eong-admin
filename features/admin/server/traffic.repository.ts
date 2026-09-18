@@ -18,6 +18,10 @@ import {
   trafficChannelOrder,
 } from "@/features/admin/data/traffic";
 import { query } from "@/features/admin/server/db";
+import {
+  ensureAnalyticsExclusionSchema,
+  excludedEventCondition,
+} from "@/features/admin/server/analytics-exclusion.repository";
 
 type ChannelCountRow = {
   source_value: string | null;
@@ -192,6 +196,7 @@ const trafficEventsSql = `
     created_at
   FROM public.access_logs
   WHERE event_name = 'page_view'
+    AND ${excludedEventCondition("user_id", "ip_address")}
 `;
 
 const campaignTrafficEventsSql = `
@@ -1202,6 +1207,7 @@ export async function getTrafficLogData(
 export async function getFunnelLogData(
   args?: FunnelLogQuery,
 ): Promise<FunnelLogData> {
+  await ensureAnalyticsExclusionSchema();
   const { startDate, endDate } = createDefaultLogDates(args);
   const product = normalizeFunnelProduct(args?.product);
   const step = normalizeDiagnosisFunnelStep(
@@ -1251,12 +1257,14 @@ export async function getFunnelLogData(
       FROM (${productConfig.startSql}) start_events, ranges
       WHERE start_events.event_at >= ranges.current_start
         AND start_events.event_at < ranges.current_end
+        AND ${excludedEventCondition("start_events.user_id", "start_events.ip_address")}
     ),
     completes AS (
       SELECT complete_events.*
       FROM (${productConfig.completeSql}) complete_events, ranges
       WHERE complete_events.event_at >= ranges.current_start
         AND complete_events.event_at < ranges.current_end
+        AND ${excludedEventCondition("complete_events.user_id", "complete_events.ip_address")}
     ),
     selected_events AS (
       SELECT visits.*, '방문' AS last_action
@@ -1291,7 +1299,9 @@ export async function getFunnelLogData(
         SELECT
           selected_events.*,
           ROW_NUMBER() OVER (
-            PARTITION BY selected_events.visitor_key
+            PARTITION BY
+              (selected_events.event_at AT TIME ZONE 'Asia/Seoul')::date,
+              selected_events.visitor_key
             ORDER BY selected_events.event_at DESC, selected_events.id DESC
           ) AS row_no
         FROM selected_events
@@ -1794,6 +1804,7 @@ function formatLogDateTime(value?: string | null) {
     day: "2-digit",
     hour: "2-digit",
     minute: "2-digit",
+    second: "2-digit",
     hour12: false,
   })
     .format(date)
