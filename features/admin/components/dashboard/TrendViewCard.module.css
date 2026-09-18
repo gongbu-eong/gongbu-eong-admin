@@ -45,31 +45,6 @@
   cursor: pointer;
 }
 
-.legends {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: 10px 14px;
-  min-height: 18px;
-  margin-top: 8px;
-  color: var(--admin-muted);
-  font-size: 11px;
-}
-
-.legends span {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  white-space: nowrap;
-}
-
-.legends i {
-  display: block;
-  width: 9px;
-  height: 9px;
-  border-radius: 50%;
-}
-
 .tableWrap {
   height: 305px;
   margin-top: 18px;
@@ -78,16 +53,22 @@
 
 .tableWrap table {
   width: 100%;
-  min-width: 520px;
+  min-width: 0;
   border-collapse: collapse;
+  table-layout: fixed;
   font-size: 12px;
+}
+
+.tableWrap th:first-child,
+.tableWrap td:first-child {
+  width: 16%;
 }
 
 .tableWrap th,
 .tableWrap td {
   border-bottom: 1px solid #edf1f6;
   padding: 12px 8px;
-  text-align: right;
+  text-align: center;
   white-space: nowrap;
 }
 
@@ -139,12 +120,13 @@
     line-height: 1.45;
   }
 
-  .legends {
-    justify-content: flex-start;
-  }
-
   .tableWrap {
     height: 270px;
+    overflow-x: auto;
+  }
+
+  .tableWrap table {
+    min-width: 520px;
   }
 
   .chartSlot {

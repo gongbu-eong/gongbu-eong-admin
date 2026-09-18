@@ -92,12 +92,28 @@
   width: 100%;
 }
 
+.trafficPairGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  width: 100%;
+}
+
 .trafficTrendCard {
   height: 400px;
   overflow: hidden;
 }
 
 .behaviorTrendCard {
+  grid-column: auto;
+}
+
+.trafficPairGrid > .behaviorTrendCard,
+.trafficPairGrid > .behaviorCard {
+  grid-column: span 1;
+}
+
+.trafficPairGrid > .screenClickCard {
   grid-column: 1 / -1;
 }
 
@@ -136,6 +152,7 @@
 
   .chartGrid,
   .trafficTrendGrid,
+  .trafficPairGrid,
   .analysisGrid,
   .lowerGrid {
     grid-template-columns: 1fr;

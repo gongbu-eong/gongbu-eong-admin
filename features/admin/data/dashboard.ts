@@ -108,23 +108,6 @@ export const navItems: NavItem[] = [
     icon: "/admin-assets/nav-dashboard.png",
   },
   {
-    label: "유입 · 트래픽",
-    key: "traffic",
-    href: "/traffic",
-    icon: "/admin-assets/nav-traffic.png",
-    expandable: true,
-    children: [
-      { label: "대시보드 통합 보기", key: "traffic-source", href: "/?period=today" },
-      { label: "전환 퍼널", key: "traffic-funnel", href: "/traffic/funnel" },
-      { label: "유입 로그", key: "traffic-logs", href: "/traffic/logs" },
-      {
-        label: "배너/CTA 클릭",
-        key: "traffic-banner-clicks",
-        href: "/traffic/banner-clicks",
-      },
-    ],
-  },
-  {
     label: "회원 관리",
     key: "members",
     href: "/members",

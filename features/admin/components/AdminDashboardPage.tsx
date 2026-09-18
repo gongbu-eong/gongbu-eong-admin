@@ -72,19 +72,25 @@ export async function AdminDashboardPage({
     dashboardStartDate,
     dashboardEndDate,
     dashboardPeriodLabel,
+    dashboardPeriodText,
     productOptions,
     productFunnelTitle,
     productFunnelDescription,
     productCompleteTrend,
+    productConversionTrend,
+    productConversionListTrend,
     productStartTrend,
     productVisitTrend,
-    productRateTrend,
     productHasVisitStep,
     signupTrend,
     visitorTrend,
+    visitorSignupListTrend,
     trafficChannelTrend,
+    trafficChannelListTrend,
     bannerClickTrend,
+    bannerClickListTrend,
     jobDetailBehaviorTrend,
+    jobDetailBehaviorListTrend,
   } = await getDashboardData({
     period,
     selectedChannel,
@@ -117,6 +123,7 @@ export async function AdminDashboardPage({
       description="주요 지표와 유입·사용자 행동을 한 곳에서 확인해보세요."
       headerActions={
         <DashboardFilterBar
+          key={`${dashboardPreset}-${dashboardStartDate}-${dashboardEndDate}`}
           startDate={dashboardStartDate}
           endDate={dashboardEndDate}
           preset={dashboardPreset}
@@ -136,14 +143,18 @@ export async function AdminDashboardPage({
         <div className={styles.insightHeader}>
           <div>
             <h2>방문·가입 흐름</h2>
-            <p>최근 7일 방문 추이와 신규 가입자 수를 함께 봅니다.</p>
+            <p>
+              그래프는 최근 7일, 목록은 {dashboardPeriodText} 기준으로 봅니다.
+            </p>
           </div>
         </div>
         <div className={styles.chartGrid}>
           <TrendViewCard
               title="방문자 및 신규 가입 추이"
               subtitle="최근 7일"
+              listSubtitle={`목록 · ${dashboardPeriodText}`}
               yLabels={visitorSignupScale.yLabels}
+              listSeries={visitorSignupListTrend}
               series={[
                 {
                   label: "방문자",
@@ -161,7 +172,9 @@ export async function AdminDashboardPage({
           <TrendViewCard
               title="신규 가입자 추이"
               subtitle="최근 7일 · 가입 완료 회원 수"
+              listSubtitle={`목록 · ${dashboardPeriodText}`}
               yLabels={signupCountScale.yLabels}
+              listSeries={visitorSignupListTrend.slice(1)}
               series={[
                 {
                   label: "가입자",
@@ -179,7 +192,7 @@ export async function AdminDashboardPage({
           <div>
             <h2>전환 분석</h2>
             <p>
-              선택한 기간({dashboardPeriodLabel})의 전환, 유입, 클릭 대상자
+              선택한 기간({dashboardPeriodText})의 전환, 유입, 클릭 대상자
               목록을 확인합니다.
             </p>
           </div>
@@ -197,43 +210,10 @@ export async function AdminDashboardPage({
                   ? "최근 7일 · 방문 / 시작 / 완료"
                   : "최근 7일 · 진단 시작 / 진단 완료"
               }
+              listSubtitle={`목록 · ${dashboardPeriodText}`}
               yLabels={productConversionScale.yLabels}
-              series={
-                productHasVisitStep
-                  ? [
-                      {
-                        label: "방문",
-                        color: "#2f7ff0",
-                        data: productVisitTrend,
-                      },
-                      {
-                        label: "시작",
-                        color: "#ffb000",
-                        data: productStartTrend,
-                      },
-                      {
-                        label: "완료",
-                        color: "#20bf7a",
-                        data: productCompleteTrend.length
-                          ? productCompleteTrend
-                          : productRateTrend,
-                      },
-                    ]
-                  : [
-                      {
-                        label: "진단 시작",
-                        color: "#ffb000",
-                        data: productStartTrend,
-                      },
-                      {
-                        label: "진단 완료",
-                        color: "#20bf7a",
-                        data: productCompleteTrend.length
-                          ? productCompleteTrend
-                          : productRateTrend,
-                      },
-                    ]
-              }
+              series={productConversionTrend}
+              listSeries={productConversionListTrend}
               maxValue={productConversionScale.maxValue}
           />
           <AdminCard className={styles.funnelCard}>
@@ -253,63 +233,66 @@ export async function AdminDashboardPage({
       >
         <div className={styles.insightHeader}>
           <div>
-            <h2>최근 7일 유입·행동 흐름</h2>
+            <h2>유입·행동 흐름</h2>
             <p>
-              순방문자와 실제 클릭을 분리해 공고 상세 이후의 흐름을 확인합니다.
+              그래프는 최근 7일, 목록은 {dashboardPeriodText} 기준입니다.
             </p>
           </div>
         </div>
-        <div className={styles.trafficTrendGrid}>
+        <div className={styles.trafficPairGrid}>
           <TrendViewCard
               title="유입 채널 순방문자"
               subtitle="최근 7일 · 같은 방문자 중복 제외"
+              listSubtitle={`목록 · ${dashboardPeriodText}`}
               yLabels={trafficChannelScale.yLabels}
               series={trafficChannelTrend}
+              listSeries={trafficChannelListTrend}
               maxValue={trafficChannelScale.maxValue}
               valueSuffix="명"
           />
+          <AdminCard className={styles.channelCard}>
+            <ChannelList
+              items={channels}
+              total={channelTotal}
+              selectedChannel={selectedChannelKey}
+            />
+          </AdminCard>
           <TrendViewCard
               title="배너·버튼 클릭"
               subtitle="최근 7일 · 전체 클릭 / 찜 / 지원"
+              listSubtitle={`목록 · ${dashboardPeriodText}`}
               yLabels={bannerClickScale.yLabels}
               series={bannerClickTrend}
+              listSeries={bannerClickListTrend}
               maxValue={bannerClickScale.maxValue}
           />
+          <AdminCard className={styles.bannerCard}>
+            <BannerClickList items={bannerClicks} total={bannerClickTotal} />
+          </AdminCard>
           <TrendViewCard
             className={styles.behaviorTrendCard}
               title="공고 상세 방문 후 행동"
               subtitle="최근 7일 · 방문자 / 후속 행동 / 찜 / 지원"
+              listSubtitle={`목록 · ${dashboardPeriodText}`}
               yLabels={jobDetailBehaviorScale.yLabels}
               series={jobDetailBehaviorTrend}
+              listSeries={jobDetailBehaviorListTrend}
               maxValue={jobDetailBehaviorScale.maxValue}
           />
-        </div>
-      </section>
-
-      <section className={styles.lowerGrid}>
-        <AdminCard className={styles.channelCard}>
-          <ChannelList
-            items={channels}
-            total={channelTotal}
-            selectedChannel={selectedChannelKey}
-          />
-        </AdminCard>
-        <AdminCard className={styles.screenClickCard}>
-          <ScreenClickList
-            items={screenInflows}
-            total={screenInflowTotal}
-            channelLabel={selectedChannelLabel}
-          />
-        </AdminCard>
-        <AdminCard className={styles.bannerCard}>
-          <BannerClickList items={bannerClicks} total={bannerClickTotal} />
-        </AdminCard>
         <AdminCard className={styles.behaviorCard}>
           <BehaviorPatternList
             items={behaviorPatterns}
             periodLabel={dashboardPeriodLabel}
           />
         </AdminCard>
+          <AdminCard className={styles.screenClickCard}>
+            <ScreenClickList
+              items={screenInflows}
+              total={screenInflowTotal}
+              channelLabel={selectedChannelLabel}
+            />
+          </AdminCard>
+        </div>
       </section>
     </AdminLayout>
   );

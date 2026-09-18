@@ -200,7 +200,7 @@ export function LineChart({
           <p>{subtitle}</p>
         </div>
       ) : null}
-      {!hideHeader && legends ? (
+      {legends ? (
         <div className={styles.legends}>
           {legends.map((legend) => (
             <span key={legend.label}>

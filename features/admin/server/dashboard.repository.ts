@@ -17,10 +17,13 @@ type DashboardData = {
   visitorTrend: LinePoint[];
   coachingTrend: LinePoint[];
   signupTrend: LinePoint[];
+  visitorSignupListTrend: DashboardTrendSeries[];
   productRateTrend: LinePoint[];
   productVisitTrend: LinePoint[];
   productStartTrend: LinePoint[];
   productCompleteTrend: LinePoint[];
+  productConversionTrend: DashboardTrendSeries[];
+  productConversionListTrend: DashboardTrendSeries[];
   funnelItems: FunnelItem[];
   channels: ChannelItem[];
   channelTotal: string;
@@ -37,14 +40,18 @@ type DashboardData = {
   dashboardEndDate: string;
   dashboardPreset: string;
   dashboardPeriodLabel: string;
+  dashboardPeriodText: string;
   productOptions: DashboardProductOption[];
   productFunnelTitle: string;
   productFunnelDescription: string;
   productRateTrendTitle: string;
   productHasVisitStep: boolean;
   trafficChannelTrend: DashboardTrendSeries[];
+  trafficChannelListTrend: DashboardTrendSeries[];
   bannerClickTrend: DashboardTrendSeries[];
+  bannerClickListTrend: DashboardTrendSeries[];
   jobDetailBehaviorTrend: DashboardTrendSeries[];
+  jobDetailBehaviorListTrend: DashboardTrendSeries[];
 };
 
 type MetricsRow = {
@@ -71,6 +78,8 @@ type TrafficTrendRow = {
   metric_key: string;
   count: string;
 };
+
+type DashboardListTrendRow = TrafficTrendRow;
 
 type ConversionTrendRow = {
   label: string;
@@ -1053,6 +1062,274 @@ export async function getDashboardData({
       `),
     ]);
 
+  const listTrendResult = await query<DashboardListTrendRow>(
+    `
+      ${dashboardRangeSql},
+      days AS (
+        SELECT generate_series(
+          (SELECT requested_start FROM input_range),
+          (SELECT requested_end FROM input_range),
+          INTERVAL '1 day'
+        )::date AS day_kst
+      ),
+      metric_defs AS (
+        SELECT *
+        FROM (VALUES
+          ('visitor'),
+          ('signup'),
+          ('product:visit'),
+          ('product:start'),
+          ('product:complete'),
+          ('channel:인스타그램'),
+          ('channel:블로그'),
+          ('channel:스레드'),
+          ('channel:검색'),
+          ('channel:직접유입'),
+          ('banner:total'),
+          ('banner:job_detail_bookmark_click'),
+          ('banner:job_detail_apply_click'),
+          ('behavior:job_detail_visitors'),
+          ('behavior:activity_visitors'),
+          ('behavior:bookmark_clicks'),
+          ('behavior:apply_clicks')
+        ) AS metrics(metric_key)
+      ),
+      visitor_counts AS (
+        SELECT
+          (events.event_at AT TIME ZONE 'Asia/Seoul')::date AS day_kst,
+          'visitor' AS metric_key,
+          COUNT(DISTINCT events.visitor_key)::TEXT AS count
+        FROM (${trafficEventsSql}) events, ranges
+        WHERE events.event_at >= range_start AND events.event_at < range_end
+        GROUP BY 1
+      ),
+      signup_counts AS (
+        SELECT
+          (COALESCE(users.signup_completed_at, users.created_at) AT TIME ZONE 'Asia/Seoul')::date AS day_kst,
+          'signup' AS metric_key,
+          COUNT(*)::TEXT AS count
+        FROM public.users users, ranges
+        WHERE users.status = 'active'
+          AND COALESCE(users.signup_completed_at, users.created_at) >= range_start
+          AND COALESCE(users.signup_completed_at, users.created_at) < range_end
+        GROUP BY 1
+      ),
+      product_visit_counts AS (
+        SELECT
+          (events.event_at AT TIME ZONE 'Asia/Seoul')::date AS day_kst,
+          'product:visit' AS metric_key,
+          COUNT(DISTINCT events.visitor_key)::TEXT AS count
+        FROM (${selectedProductConfig.pageVisitEventsSql}) events, ranges
+        WHERE events.event_at >= range_start AND events.event_at < range_end
+        GROUP BY 1
+      ),
+      product_start_counts AS (
+        SELECT
+          (events.event_at AT TIME ZONE 'Asia/Seoul')::date AS day_kst,
+          'product:start' AS metric_key,
+          COUNT(DISTINCT events.visitor_key)::TEXT AS count
+        FROM (${selectedProductConfig.startEventsSql}) events, ranges
+        WHERE events.event_at >= range_start AND events.event_at < range_end
+        GROUP BY 1
+      ),
+      product_complete_counts AS (
+        SELECT
+          (events.event_at AT TIME ZONE 'Asia/Seoul')::date AS day_kst,
+          'product:complete' AS metric_key,
+          COUNT(DISTINCT events.visitor_key)::TEXT AS count
+        FROM (${selectedProductConfig.completeEventsSql}) events, ranges
+        WHERE events.event_at >= range_start AND events.event_at < range_end
+        GROUP BY 1
+      ),
+      raw_channel_visits AS (
+        SELECT
+          (events.event_at AT TIME ZONE 'Asia/Seoul')::date AS day_kst,
+          events.visitor_key,
+          events.event_at,
+          events.id,
+          CASE
+            WHEN events.source_value = '페이지 이동'
+              OR LOWER(events.source_value) LIKE '%page_move%'
+              OR LOWER(events.source_value) LIKE '%page move%'
+              OR LOWER(events.source_value) LIKE '%internal%'
+              THEN COALESCE(
+                NULLIF(events.metadata #>> '{attribution,first,source}', ''),
+                NULLIF(events.metadata #>> '{attribution,current,source}', ''),
+                'direct'
+              )
+            ELSE events.source_value
+          END AS source_value
+        FROM (${trafficEventsSql}) events, ranges
+        WHERE events.visitor_key IS NOT NULL
+          AND events.event_at >= range_start
+          AND events.event_at < range_end
+      ),
+      daily_channel_visits AS (
+        SELECT DISTINCT ON (day_kst, visitor_key)
+          day_kst,
+          visitor_key,
+          CASE
+            WHEN source_value = '인스타그램'
+              OR source_value ILIKE '%instagram%'
+              OR LOWER(source_value) = 'ig' THEN '인스타그램'
+            WHEN source_value = '블로그'
+              OR source_value ILIKE '%blog%'
+              OR source_value ILIKE '%블로그%' THEN '블로그'
+            WHEN source_value = '스레드'
+              OR source_value ILIKE '%thread%' THEN '스레드'
+            WHEN source_value = '검색'
+              OR source_value ILIKE '%naver%'
+              OR source_value ILIKE '%google%'
+              OR source_value ILIKE '%daum%'
+              OR source_value ILIKE '%search%' THEN '검색'
+            ELSE '직접유입'
+          END AS channel_label
+        FROM raw_channel_visits
+        ORDER BY day_kst, visitor_key, event_at, id
+      ),
+      channel_counts AS (
+        SELECT
+          day_kst,
+          'channel:' || channel_label AS metric_key,
+          COUNT(*)::TEXT AS count
+        FROM daily_channel_visits
+        GROUP BY day_kst, channel_label
+      ),
+      raw_banner_events AS (
+        SELECT
+          (events.created_at AT TIME ZONE 'Asia/Seoul')::date AS day_kst,
+          CASE
+            WHEN events.event_type = 'banner_click'
+              THEN 'banner:' || COALESCE(NULLIF(events.properties->>'banner_key', ''), 'unknown')
+            ELSE 'banner:' || events.event_type
+          END AS metric_key
+        FROM public.product_events events, ranges
+        WHERE events.created_at >= range_start
+          AND events.created_at < range_end
+          AND (
+            events.event_type IN ('job_detail_bookmark_click', 'job_detail_apply_click')
+            OR (
+              events.event_type = 'banner_click'
+              AND COALESCE(NULLIF(events.properties->>'banner_key', ''), 'unknown') IN (
+                'job_detail_resume_a',
+                'job_detail_resume_b',
+                'job_detail_strength_a',
+                'job_detail_strength_b'
+              )
+            )
+          )
+      ),
+      banner_counts AS (
+        SELECT day_kst, 'banner:total' AS metric_key, COUNT(*)::TEXT AS count
+        FROM raw_banner_events
+        GROUP BY day_kst
+        UNION ALL
+        SELECT day_kst, metric_key, COUNT(*)::TEXT AS count
+        FROM raw_banner_events
+        WHERE metric_key IN ('banner:job_detail_bookmark_click', 'banner:job_detail_apply_click')
+        GROUP BY day_kst, metric_key
+      ),
+      all_page_events AS (
+        SELECT * FROM (${trafficEventsSql}) events
+      ),
+      job_detail_visits AS (
+        SELECT DISTINCT ON (
+          (events.event_at AT TIME ZONE 'Asia/Seoul')::date,
+          events.visitor_key
+        )
+          (events.event_at AT TIME ZONE 'Asia/Seoul')::date AS day_kst,
+          events.visitor_key,
+          events.event_at
+        FROM all_page_events events, ranges
+        WHERE events.visitor_key IS NOT NULL
+          AND events.event_at >= range_start
+          AND events.event_at < range_end
+          AND (
+            events.screen_key = 'job_detail'
+            OR split_part(events.landing_path, '?', 1) ~ '^/jobs/[^/]+$'
+          )
+        ORDER BY
+          (events.event_at AT TIME ZONE 'Asia/Seoul')::date,
+          events.visitor_key,
+          events.event_at,
+          events.id
+      ),
+      later_page_activity AS (
+        SELECT DISTINCT visits.day_kst, visits.visitor_key
+        FROM job_detail_visits visits
+        JOIN all_page_events events
+          ON events.visitor_key = visits.visitor_key
+         AND events.event_at > visits.event_at
+         AND events.event_at <= visits.event_at + INTERVAL '30 minutes'
+      ),
+      later_action_activity AS (
+        SELECT DISTINCT visits.day_kst, visits.visitor_key
+        FROM job_detail_visits visits
+        JOIN public.product_events events
+          ON COALESCE(
+               events.user_id::TEXT,
+               events.anonymous_id::TEXT,
+               NULLIF(events.properties->>'session_id', ''),
+               NULLIF(CONCAT_WS('|', NULLIF(events.properties->>'ip_address', ''), NULLIF(events.properties->>'user_agent', '')), '')
+             ) = visits.visitor_key
+         AND events.created_at > visits.event_at
+         AND events.created_at <= visits.event_at + INTERVAL '30 minutes'
+         AND (
+           events.event_type IN ('job_detail_bookmark_click', 'job_detail_apply_click')
+           OR (
+             events.event_type = 'banner_click'
+             AND events.properties->>'placement' = 'job_detail_bottom'
+           )
+         )
+      ),
+      activity_visitors AS (
+        SELECT day_kst, visitor_key FROM later_page_activity
+        UNION
+        SELECT day_kst, visitor_key FROM later_action_activity
+      ),
+      behavior_counts AS (
+        SELECT day_kst, 'behavior:job_detail_visitors' AS metric_key, COUNT(*)::TEXT AS count
+        FROM job_detail_visits
+        GROUP BY day_kst
+        UNION ALL
+        SELECT day_kst, 'behavior:activity_visitors' AS metric_key, COUNT(*)::TEXT AS count
+        FROM activity_visitors
+        GROUP BY day_kst
+        UNION ALL
+        SELECT day_kst, 'behavior:bookmark_clicks' AS metric_key, COUNT(*)::TEXT AS count
+        FROM raw_banner_events
+        WHERE metric_key = 'banner:job_detail_bookmark_click'
+        GROUP BY day_kst
+        UNION ALL
+        SELECT day_kst, 'behavior:apply_clicks' AS metric_key, COUNT(*)::TEXT AS count
+        FROM raw_banner_events
+        WHERE metric_key = 'banner:job_detail_apply_click'
+        GROUP BY day_kst
+      ),
+      counts AS (
+        SELECT * FROM visitor_counts
+        UNION ALL SELECT * FROM signup_counts
+        UNION ALL SELECT * FROM product_visit_counts
+        UNION ALL SELECT * FROM product_start_counts
+        UNION ALL SELECT * FROM product_complete_counts
+        UNION ALL SELECT * FROM channel_counts
+        UNION ALL SELECT * FROM banner_counts
+        UNION ALL SELECT * FROM behavior_counts
+      )
+      SELECT
+        to_char(days.day_kst, 'MM/DD') AS label,
+        metric_defs.metric_key,
+        COALESCE(counts.count, '0') AS count
+      FROM days
+      CROSS JOIN metric_defs
+      LEFT JOIN counts
+        ON counts.day_kst = days.day_kst
+       AND counts.metric_key = metric_defs.metric_key
+      ORDER BY days.day_kst, metric_defs.metric_key
+    `,
+    dashboardDateParams,
+  );
+
   const funnelResult = await query<FunnelRow>(
     `
       ${dashboardRangeSql}
@@ -1624,6 +1901,20 @@ export async function getDashboardData({
       ),
     };
   });
+  const productVisitTrend = productConversionTrendResult.rows.map((row) => ({
+    label: row.label,
+    value: numberValue(row.visits),
+  }));
+  const productStartTrend = productConversionTrendResult.rows.map((row) => ({
+    label: row.label,
+    value: numberValue(row.starts),
+  }));
+  const productCompleteTrend = productConversionTrendResult.rows.map((row) => ({
+    label: row.label,
+    value: numberValue(row.completes),
+  }));
+  const productRateTrend = toLinePoints(productRateTrendResult.rows);
+  const productHasVisitStep = selectedProductConfig.hasVisitStep;
   const trafficChannelTrend = createTrendSeries(
     trafficTrendResult.rows,
     [
@@ -1652,6 +1943,95 @@ export async function getDashboardData({
   );
   const jobDetailBehaviorTrend = createTrendSeries(
     trafficTrendResult.rows,
+    [
+      {
+        key: "behavior:job_detail_visitors",
+        label: "공고 상세 방문자",
+        color: "#2f7ff0",
+      },
+      {
+        key: "behavior:activity_visitors",
+        label: "후속 행동 방문자",
+        color: "#1fb573",
+      },
+      {
+        key: "behavior:bookmark_clicks",
+        label: "찜 클릭",
+        color: "#f5b91e",
+      },
+      {
+        key: "behavior:apply_clicks",
+        label: "지원 클릭",
+        color: "#e65c5c",
+      },
+    ],
+  );
+  const visitorSignupListTrend = createTrendSeries(
+    listTrendResult.rows,
+    [
+      { key: "visitor", label: "방문자", color: "#2f7ff0" },
+      { key: "signup", label: "전체 신규 가입", color: "#ffb000" },
+    ],
+  );
+  const productConversionTrend = productHasVisitStep
+    ? [
+        { label: "방문", color: "#2f7ff0", data: productVisitTrend },
+        { label: "시작", color: "#ffb000", data: productStartTrend },
+        {
+          label: "완료",
+          color: "#20bf7a",
+          data: productCompleteTrend.length ? productCompleteTrend : productRateTrend,
+        },
+      ]
+    : [
+        { label: "진단 시작", color: "#ffb000", data: productStartTrend },
+        {
+          label: "진단 완료",
+          color: "#20bf7a",
+          data: productCompleteTrend.length ? productCompleteTrend : productRateTrend,
+        },
+      ];
+  const productConversionListTrend = createTrendSeries(
+    listTrendResult.rows,
+    productHasVisitStep
+      ? [
+          { key: "product:visit", label: "방문", color: "#2f7ff0" },
+          { key: "product:start", label: "시작", color: "#ffb000" },
+          { key: "product:complete", label: "완료", color: "#20bf7a" },
+        ]
+      : [
+          { key: "product:start", label: "진단 시작", color: "#ffb000" },
+          { key: "product:complete", label: "진단 완료", color: "#20bf7a" },
+        ],
+  );
+  const trafficChannelListTrend = createTrendSeries(
+    listTrendResult.rows,
+    [
+      { key: "channel:인스타그램", label: "인스타그램", color: "#2f7ff0" },
+      { key: "channel:블로그", label: "블로그", color: "#1fb573" },
+      { key: "channel:스레드", label: "스레드", color: "#a54de8" },
+      { key: "channel:검색", label: "검색", color: "#f5b91e" },
+      { key: "channel:직접유입", label: "직접유입", color: "#5a6580" },
+    ],
+  );
+  const bannerClickListTrend = createTrendSeries(
+    listTrendResult.rows,
+    [
+      { key: "banner:total", label: "전체 클릭", color: "#2f7ff0" },
+      {
+        key: "banner:job_detail_bookmark_click",
+        label: "찜",
+        color: "#f5b91e",
+      },
+      {
+        key: "banner:job_detail_apply_click",
+        label: "지원",
+        color: "#1fb573",
+      },
+    ],
+  );
+  const jobDetailBehaviorListTrend = createTrendSeries(
+    listTrendResult.rows,
     [
       {
         key: "behavior:job_detail_visitors",
@@ -1762,19 +2142,13 @@ export async function getDashboardData({
     visitorTrend: toLinePoints(visitorTrendResult.rows),
     coachingTrend: toLinePoints(coachingTrendResult.rows),
     signupTrend: toLinePoints(signupTrendResult.rows),
-    productRateTrend: toLinePoints(productRateTrendResult.rows),
-    productVisitTrend: productConversionTrendResult.rows.map((row) => ({
-      label: row.label,
-      value: numberValue(row.visits),
-    })),
-    productStartTrend: productConversionTrendResult.rows.map((row) => ({
-      label: row.label,
-      value: numberValue(row.starts),
-    })),
-    productCompleteTrend: productConversionTrendResult.rows.map((row) => ({
-      label: row.label,
-      value: numberValue(row.completes),
-    })),
+    visitorSignupListTrend,
+    productRateTrend,
+    productVisitTrend,
+    productStartTrend,
+    productCompleteTrend,
+    productConversionTrend,
+    productConversionListTrend,
     funnelItems: selectedProductConfig.hasVisitStep
       ? [
           createFunnel(
@@ -1887,6 +2261,14 @@ export async function getDashboardData({
     dashboardStartDate: dashboardDateRange.startDate,
     dashboardEndDate: dashboardDateRange.endDate,
     dashboardPeriodLabel: dashboardDateRange.label,
+    dashboardPeriodText:
+      dashboardDateRange.preset === "today"
+        ? "오늘"
+        : dashboardDateRange.preset === "7d"
+          ? "최근 7일"
+          : dashboardDateRange.preset === "30d"
+            ? "최근 30일"
+            : `직접 설정 · ${dashboardDateRange.label}`,
     dashboardPreset: dashboardDateRange.preset,
     productOptions: dashboardProductOptions,
     productFunnelTitle: selectedProductConfig.funnelTitle,
@@ -1894,7 +2276,10 @@ export async function getDashboardData({
     productRateTrendTitle: selectedProductConfig.rateTrendTitle,
     productHasVisitStep: selectedProductConfig.hasVisitStep,
     trafficChannelTrend,
+    trafficChannelListTrend,
     bannerClickTrend,
+    bannerClickListTrend,
     jobDetailBehaviorTrend,
+    jobDetailBehaviorListTrend,
   };
 }
