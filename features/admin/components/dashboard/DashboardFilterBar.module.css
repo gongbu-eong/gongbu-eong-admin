@@ -1,8 +1,7 @@
 .bar {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(250px, 1fr) auto;
   align-items: flex-end;
-  justify-content: flex-end;
-  flex-wrap: wrap;
   gap: 14px;
   width: 100%;
   margin: 0;
@@ -14,8 +13,10 @@
 .rangeControls {
   display: flex;
   align-items: flex-end;
+  justify-content: flex-end;
   flex-wrap: wrap;
   gap: 12px;
+  min-width: 500px;
 }
 
 .presetGroup {
@@ -108,6 +109,7 @@
   display: flex;
   align-items: center;
   gap: 12px;
+  justify-self: start;
   color: var(--admin-muted);
   font-size: 13px;
   font-weight: 800;
@@ -122,6 +124,12 @@
 }
 
 @media (max-width: 640px) {
+  .bar {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+  }
+
   .bar,
   .rangeControls,
   .presetGroup,
@@ -134,7 +142,12 @@
     width: 100%;
   }
 
+  .rangeControls {
+    min-width: 0;
+  }
+
   .productSelect {
+    justify-self: stretch;
     align-items: stretch;
     gap: 8px;
   }

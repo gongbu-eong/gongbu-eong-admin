@@ -92,7 +92,29 @@ export function DashboardFilterBar({
 
   return (
     <section className={styles.bar} aria-label="대시보드 조회 조건">
+      <label className={styles.productSelect}>
+        <span>분석 대상</span>
+        <AdminSelect
+          aria-label="대시보드 분석 대상"
+          value={selectedProduct}
+          onChange={(event) => changeProduct(event.target.value)}
+        >
+          {options.map((option) => (
+            <option key={option.key} value={option.key}>
+              {option.label}
+            </option>
+          ))}
+        </AdminSelect>
+      </label>
       <div className={styles.rangeControls}>
+        <label className={styles.customToggle}>
+          <input
+            type="checkbox"
+            checked={showCustomRange}
+            onChange={(event) => toggleCustomRange(event.target.checked)}
+          />
+          <span>직접 기간 조회</span>
+        </label>
         {!showCustomRange ? (
           <div className={styles.presetGroup} aria-label="조회 기간">
             {[
@@ -111,14 +133,6 @@ export function DashboardFilterBar({
             ))}
           </div>
         ) : null}
-        <label className={styles.customToggle}>
-          <input
-            type="checkbox"
-            checked={showCustomRange}
-            onChange={(event) => toggleCustomRange(event.target.checked)}
-          />
-          <span>직접 기간 조회</span>
-        </label>
         {showCustomRange ? (
           <form className={styles.dateForm} onSubmit={applyDateRange}>
             <label>
@@ -141,20 +155,6 @@ export function DashboardFilterBar({
           </form>
         ) : null}
       </div>
-      <label className={styles.productSelect}>
-        <span>분석 대상</span>
-        <AdminSelect
-          aria-label="대시보드 분석 대상"
-          value={selectedProduct}
-          onChange={(event) => changeProduct(event.target.value)}
-        >
-          {options.map((option) => (
-            <option key={option.key} value={option.key}>
-              {option.label}
-            </option>
-          ))}
-        </AdminSelect>
-      </label>
     </section>
   );
 }

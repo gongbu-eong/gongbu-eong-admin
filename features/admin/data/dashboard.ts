@@ -84,6 +84,8 @@ export type BehaviorPatternItem = {
   applyRate: string;
   pageMove: string;
   pageMoveRate: string;
+  unknown: string;
+  unknownRate: string;
   fill: number;
 };
 
@@ -108,15 +110,15 @@ export const navItems: NavItem[] = [
     icon: "/admin-assets/nav-dashboard.png",
   },
   {
-    label: "회원 관리",
-    key: "members",
-    href: "/members",
-    icon: "/admin-assets/nav-user.png",
-  },
-  {
     label: "방문·이벤트 로그",
     key: "activity-logs",
     href: "/activity-logs",
     icon: "/admin-assets/nav-traffic.png",
+  },
+  {
+    label: "회원 관리",
+    key: "members",
+    href: "/members",
+    icon: "/admin-assets/nav-user.png",
   },
 ];

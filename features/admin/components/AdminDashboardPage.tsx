@@ -155,7 +155,7 @@ export async function AdminDashboardPage({
         </div>
         <div className={styles.chartGrid}>
           <TrendViewCard
-              title="방문자 및 신규 가입 추이"
+              title="방문자 및 전체 가입자 추이"
               subtitle="최근 7일"
               listSubtitle={`목록 · ${dashboardPeriodText}`}
               yLabels={visitorSignupScale.yLabels}
@@ -167,7 +167,7 @@ export async function AdminDashboardPage({
                   data: visitorTrend,
                 },
                 {
-                  label: "전체 신규 가입",
+                  label: "전체 가입자",
                   color: "#ffb000",
                   data: signupTrend,
                 },
@@ -175,14 +175,14 @@ export async function AdminDashboardPage({
               maxValue={visitorSignupScale.maxValue}
           />
           <TrendViewCard
-              title="신규 가입자 추이"
-              subtitle="최근 7일 · 가입 완료 회원 수"
+              title="전체 가입자 추이"
+              subtitle="최근 7일 · 테스트 계정·제외 IP 제외 가입 완료 회원 수"
               listSubtitle={`목록 · ${dashboardPeriodText}`}
               yLabels={signupCountScale.yLabels}
               listSeries={visitorSignupListTrend.slice(1)}
               series={[
                 {
-                  label: "가입자",
+                  label: "전체 가입자",
                   color: "#20bf7a",
                   data: signupTrend,
                 },

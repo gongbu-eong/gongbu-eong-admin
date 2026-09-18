@@ -1,4 +1,8 @@
 import { query } from "@/features/admin/server/db";
+import {
+  ensureAnalyticsExclusionSchema,
+  excludedEventCondition,
+} from "@/features/admin/server/analytics-exclusion.repository";
 
 export type ActivityLogQuery = {
   startDate?: string;
@@ -6,6 +10,7 @@ export type ActivityLogQuery = {
   event?: string;
   screen?: string;
   keyword?: string;
+  ip?: string;
   page?: string;
 };
 
@@ -15,6 +20,7 @@ export type ActivityLogData = {
   event: string;
   screen: string;
   keyword: string;
+  ip: string;
   page: number;
   totalPages: number;
   totalCount: number;
@@ -100,9 +106,11 @@ export async function getActivityLogData(args?: ActivityLogQuery): Promise<Activ
   const event = args?.event || "all";
   const screen = args?.screen || "all";
   const keyword = (args?.keyword || "").trim();
+  const ip = (args?.ip || "").trim();
   const page = Math.max(1, Number(args?.page || 1));
   const pattern = keyword ? `%${keyword}%` : "";
   const offset = (page - 1) * pageSize;
+  await ensureAnalyticsExclusionSchema();
 
   const eventsSql = `
     WITH raw_events AS (
@@ -120,6 +128,7 @@ export async function getActivityLogData(args?: ActivityLogQuery): Promise<Activ
       FROM public.access_logs access
       WHERE access.created_at >= ($1::date AT TIME ZONE 'Asia/Seoul')
         AND access.created_at < (($2::date + 1) AT TIME ZONE 'Asia/Seoul')
+        AND ${excludedEventCondition("access.user_id", "access.ip_address")}
       UNION ALL
       SELECT
         events.id::text,
@@ -135,6 +144,7 @@ export async function getActivityLogData(args?: ActivityLogQuery): Promise<Activ
       FROM public.product_events events
       WHERE events.created_at >= ($1::date AT TIME ZONE 'Asia/Seoul')
         AND events.created_at < (($2::date + 1) AT TIME ZONE 'Asia/Seoul')
+        AND ${excludedEventCondition("events.user_id", "NULLIF(events.properties->>'ip_address', '')")}
       UNION ALL
       SELECT
         events.id::text,
@@ -150,6 +160,7 @@ export async function getActivityLogData(args?: ActivityLogQuery): Promise<Activ
       FROM public.attribution_events events
       WHERE events.created_at >= ($1::date AT TIME ZONE 'Asia/Seoul')
         AND events.created_at < (($2::date + 1) AT TIME ZONE 'Asia/Seoul')
+        AND ${excludedEventCondition("events.user_id", "events.ip_address")}
       UNION ALL
       SELECT
         events.id::text,
@@ -165,6 +176,7 @@ export async function getActivityLogData(args?: ActivityLogQuery): Promise<Activ
       FROM public.auth_login_events events
       WHERE events.created_at >= ($1::date AT TIME ZONE 'Asia/Seoul')
         AND events.created_at < (($2::date + 1) AT TIME ZONE 'Asia/Seoul')
+        AND ${excludedEventCondition("events.user_id", "events.ip_address")}
       UNION ALL
       SELECT
         events.id::text,
@@ -180,6 +192,7 @@ export async function getActivityLogData(args?: ActivityLogQuery): Promise<Activ
       FROM public.user_entry_events events
       WHERE events.created_at >= ($1::date AT TIME ZONE 'Asia/Seoul')
         AND events.created_at < (($2::date + 1) AT TIME ZONE 'Asia/Seoul')
+        AND ${excludedEventCondition("events.user_id", "events.ip_address")}
     ), normalized AS (
       SELECT
         raw_events.*,
@@ -204,10 +217,11 @@ export async function getActivityLogData(args?: ActivityLogQuery): Promise<Activ
       ip_address ILIKE $5::text OR identity ILIKE $5::text OR
       nickname ILIKE $5::text OR display_name ILIKE $5::text OR email ILIKE $5::text
     )
+    AND ($6::text = '' OR ip_address = $6::text)
   `;
   const [countResult, rowsResult] = await Promise.all([
-    query<{ count: string }>(`${eventsSql} SELECT COUNT(*)::text AS count FROM normalized ${whereSql}`, [startDate, endDate, event, screen, pattern]),
-    query<ActivityLogDbRow>(`${eventsSql} SELECT id, event_at, event_type, COALESCE(nickname, display_name) AS user_name, email AS user_email, anonymous_id, session_id, ip_address, path, detail FROM normalized ${whereSql} ORDER BY event_at DESC LIMIT $6 OFFSET $7`, [startDate, endDate, event, screen, pattern, pageSize, offset]),
+    query<{ count: string }>(`${eventsSql} SELECT COUNT(*)::text AS count FROM normalized ${whereSql}`, [startDate, endDate, event, screen, pattern, ip]),
+    query<ActivityLogDbRow>(`${eventsSql} SELECT id, event_at, event_type, COALESCE(nickname, display_name) AS user_name, email AS user_email, anonymous_id, session_id, ip_address, path, detail FROM normalized ${whereSql} ORDER BY event_at DESC LIMIT $7 OFFSET $8`, [startDate, endDate, event, screen, pattern, ip, pageSize, offset]),
   ]);
   const totalCount = Number(countResult.rows[0]?.count || 0);
 
@@ -217,6 +231,7 @@ export async function getActivityLogData(args?: ActivityLogQuery): Promise<Activ
     event,
     screen,
     keyword,
+    ip,
     page,
     totalPages: Math.max(1, Math.ceil(totalCount / pageSize)),
     totalCount,

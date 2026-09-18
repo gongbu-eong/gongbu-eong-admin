@@ -10,6 +10,11 @@ import {
   ScreenInflowItem,
 } from "@/features/admin/data/dashboard";
 import { query } from "@/features/admin/server/db";
+import {
+  ensureAnalyticsExclusionSchema,
+  excludedEventCondition,
+  excludedUserCondition,
+} from "@/features/admin/server/analytics-exclusion.repository";
 
 type DashboardData = {
   metrics: MetricItem[];
@@ -123,6 +128,7 @@ type BehaviorPatternRow = {
   bookmark_count: string;
   apply_count: string;
   page_move_count: string;
+  unknown_count: string;
 };
 
 const channelAssets: Record<string, Pick<ChannelItem, "icon" | "iconClass">> = {
@@ -187,39 +193,41 @@ const visitorKeySql =
 
 const trafficEventsSql = `
   SELECT
-    user_id,
-    anonymous_id,
-    session_id,
-    ip_address,
-    id,
-    event_name,
-    user_agent,
-    metadata,
+    access_logs.user_id,
+    access_logs.anonymous_id,
+    access_logs.session_id,
+    access_logs.ip_address,
+    access_logs.id,
+    access_logs.event_name,
+    access_logs.user_agent,
+    access_logs.metadata,
     COALESCE(
-      NULLIF(traffic_channel, ''),
-      NULLIF(metadata->>'trafficChannel', ''),
-      NULLIF(substring(path from '[?&]utm_source=([^&]+)'), ''),
+      NULLIF(access_logs.traffic_channel, ''),
+      NULLIF(access_logs.metadata->>'trafficChannel', ''),
+      NULLIF(substring(access_logs.path from '[?&]utm_source=([^&]+)'), ''),
       CASE
-        WHEN referrer ILIKE '%gongbueong.career.co.kr%' OR referrer ILIKE '%localhost%' THEN NULL
-        ELSE NULLIF(referrer, '')
+        WHEN access_logs.referrer ILIKE '%gongbueong.career.co.kr%' OR access_logs.referrer ILIKE '%localhost%' THEN NULL
+        ELSE NULLIF(access_logs.referrer, '')
       END,
       'direct'
     ) AS source_value,
-    path AS landing_path,
-    COALESCE(NULLIF(screen_key, ''), NULLIF(metadata->>'screenKey', '')) AS screen_key,
-    COALESCE(NULLIF(canonical_path, ''), NULLIF(metadata->>'canonicalPath', '')) AS canonical_path,
-    COALESCE(NULLIF(previous_path, ''), NULLIF(metadata->>'previousPath', '')) AS previous_path,
+    access_logs.path AS landing_path,
+    COALESCE(NULLIF(access_logs.screen_key, ''), NULLIF(access_logs.metadata->>'screenKey', '')) AS screen_key,
+    COALESCE(NULLIF(access_logs.canonical_path, ''), NULLIF(access_logs.metadata->>'canonicalPath', '')) AS canonical_path,
+    COALESCE(NULLIF(access_logs.previous_path, ''), NULLIF(access_logs.metadata->>'previousPath', '')) AS previous_path,
     ${visitorKeySql} AS visitor_key,
-    referrer,
-    created_at AS event_at,
-    created_at
-  FROM public.access_logs
-  WHERE event_name = 'page_view'
+    access_logs.referrer,
+    access_logs.created_at AS event_at,
+    access_logs.created_at
+  FROM public.access_logs access_logs
+  WHERE access_logs.event_name = 'page_view'
+    AND ${excludedEventCondition("access_logs.user_id", "access_logs.ip_address")}
 `;
 
 const coachingStartEventsSql = `
   SELECT id::TEXT AS request_key, COALESCE(user_id::TEXT, anonymous_id::TEXT, id::TEXT) AS visitor_key, created_at AS event_at
   FROM public.resume_coaching_requests
+  WHERE ${excludedEventCondition("user_id", "ip_address")}
 `;
 
 const coachingCompleteEventsSql = `
@@ -234,6 +242,7 @@ const coachingCompleteEventsSql = `
   FROM public.resume_coaching_results results
   JOIN public.resume_coaching_requests requests
     ON requests.id = results.request_id
+  WHERE ${excludedEventCondition("requests.user_id", "requests.ip_address")}
 `;
 
 const coachingPageVisitEventsSql = `
@@ -251,6 +260,7 @@ const diagnosisStartEventsSql = `
   FROM public.product_events
   WHERE event_type = 'diagnosis_start'
     AND properties->>'action' IN ('question_1_view', 'start_button_click')
+    AND ${excludedEventCondition("user_id", "NULLIF(properties->>'ip_address', '')")}
 `;
 
 const diagnosisCompleteEventsSql = `
@@ -260,6 +270,7 @@ const diagnosisCompleteEventsSql = `
     COALESCE(runs.completed_at, results.created_at) AS event_at
   FROM public.diagnosis_results results
   JOIN public.diagnosis_runs runs ON runs.id = results.diagnosis_run_id
+  WHERE ${excludedEventCondition("results.user_id", "runs.ip_address")}
 `;
 
 const diagnosisPageVisitEventsSql = `
@@ -275,6 +286,7 @@ const interviewStartEventsSql = `
     COALESCE(sessions.user_id::TEXT, sessions.anonymous_id::TEXT, sessions.id::TEXT) AS visitor_key,
     sessions.started_at AS event_at
   FROM public.interview_coaching_sessions sessions
+  WHERE ${excludedEventCondition("sessions.user_id", "sessions.ip_address")}
 `;
 
 const interviewCompleteEventsSql = `
@@ -283,7 +295,8 @@ const interviewCompleteEventsSql = `
     COALESCE(sessions.user_id::TEXT, sessions.anonymous_id::TEXT, sessions.id::TEXT) AS visitor_key,
     COALESCE(sessions.completed_at, sessions.updated_at, sessions.started_at) AS event_at
   FROM public.interview_coaching_sessions sessions
-  WHERE sessions.completed_at IS NOT NULL OR sessions.result IS NOT NULL
+  WHERE (sessions.completed_at IS NOT NULL OR sessions.result IS NOT NULL)
+    AND ${excludedEventCondition("sessions.user_id", "sessions.ip_address")}
 `;
 
 const interviewPageVisitEventsSql = `
@@ -612,6 +625,7 @@ export async function getDashboardData({
   startDate?: string | null;
   endDate?: string | null;
 } = {}): Promise<DashboardData> {
+  await ensureAnalyticsExclusionSchema();
   const selectedChannelKey = normalizeDashboardChannel(selectedChannel);
   const selectedChannelLabel =
     dashboardChannelOptions.find((item) => item.key === selectedChannelKey)
@@ -645,6 +659,7 @@ export async function getDashboardData({
         SELECT COUNT(*)
         FROM public.users, ranges
         WHERE status = 'active'
+          AND ${excludedUserCondition("users.id")}
           AND COALESCE(signup_completed_at, created_at) >= range_start
           AND COALESCE(signup_completed_at, created_at) < range_end
       ) AS today_signups,
@@ -652,6 +667,7 @@ export async function getDashboardData({
         SELECT COUNT(*)
         FROM public.users, ranges
         WHERE status = 'active'
+          AND ${excludedUserCondition("users.id")}
           AND COALESCE(signup_completed_at, created_at) >= previous_start
           AND COALESCE(signup_completed_at, created_at) < previous_end
       ) AS yesterday_signups
@@ -778,8 +794,8 @@ export async function getDashboardData({
         SELECT to_char(days.day_kst, 'MM/DD') AS label, COUNT(users.id) AS value
         FROM days
         LEFT JOIN public.users users
-          ON users.status = 'active'
-         AND COALESCE(users.signup_completed_at, users.created_at) >= days.day_kst AT TIME ZONE 'Asia/Seoul'
+          ON users.status <> 'withdrawn'
+         AND ${excludedUserCondition("users.id")}
          AND COALESCE(users.signup_completed_at, users.created_at) < (days.day_kst + INTERVAL '1 day') AT TIME ZONE 'Asia/Seoul'
         GROUP BY days.day_kst
         ORDER BY days.day_kst
@@ -1004,6 +1020,7 @@ export async function getDashboardData({
           CROSS JOIN bounds
           WHERE events.created_at >= bounds.range_start
             AND events.created_at < bounds.range_end
+            AND ${excludedEventCondition("events.user_id", "NULLIF(events.properties->>'ip_address', '')")}
             AND (
               events.event_type IN ('job_detail_bookmark_click', 'job_detail_apply_click')
               OR (
@@ -1176,14 +1193,15 @@ export async function getDashboardData({
       ),
       signup_counts AS (
         SELECT
-          (COALESCE(users.signup_completed_at, users.created_at) AT TIME ZONE 'Asia/Seoul')::date AS day_kst,
+          days.day_kst,
           'signup' AS metric_key,
           COUNT(*)::TEXT AS count
-        FROM public.users users, ranges
-        WHERE users.status = 'active'
-          AND COALESCE(users.signup_completed_at, users.created_at) >= range_start
-          AND COALESCE(users.signup_completed_at, users.created_at) < range_end
-        GROUP BY 1
+        FROM days
+        LEFT JOIN public.users users
+          ON users.status <> 'withdrawn'
+         AND ${excludedUserCondition("users.id")}
+         AND COALESCE(users.signup_completed_at, users.created_at) < (days.day_kst + INTERVAL '1 day') AT TIME ZONE 'Asia/Seoul'
+        GROUP BY days.day_kst
       ),
       product_visit_counts AS (
         SELECT
@@ -1316,6 +1334,7 @@ export async function getDashboardData({
         FROM public.product_events events, ranges
         WHERE events.created_at >= range_start
           AND events.created_at < range_end
+          AND ${excludedEventCondition("events.user_id", "NULLIF(events.properties->>'ip_address', '')")}
           AND (
             events.event_type IN ('job_detail_bookmark_click', 'job_detail_apply_click')
             OR (
@@ -1560,9 +1579,10 @@ export async function getDashboardData({
         END AS item_key,
         COUNT(*) AS click_count,
         COUNT(DISTINCT COALESCE(user_id::TEXT, anonymous_id::TEXT, id::TEXT)) AS unique_count
-      FROM public.product_events, ranges
-      WHERE created_at >= range_start
-        AND created_at < range_end
+      FROM public.product_events events, ranges
+      WHERE events.created_at >= range_start
+        AND events.created_at < range_end
+        AND ${excludedEventCondition("events.user_id", "NULLIF(events.properties->>'ip_address', '')")}
         AND (
           event_type IN ('job_detail_bookmark_click', 'job_detail_apply_click')
           OR (
@@ -1788,6 +1808,7 @@ export async function getDashboardData({
           CROSS JOIN ranges
           WHERE product_events.created_at >= ranges.range_start
             AND product_events.created_at < ranges.range_end
+            AND ${excludedEventCondition("product_events.user_id", "NULLIF(product_events.properties->>'ip_address', '')")}
             AND (
               product_events.event_type IN ('job_detail_bookmark_click', 'job_detail_apply_click')
               OR (
@@ -1883,6 +1904,17 @@ export async function getDashboardData({
         )
         GROUP BY source_label
       ),
+      other_page_visitors AS (
+        SELECT
+          source_label,
+          COUNT(DISTINCT visitor_key) AS visitor_count
+        FROM attributed_page_events
+        WHERE NOT (
+             screen_key = 'job_detail'
+          OR split_part(landing_path, '?', 1) ~ '^/jobs/[^/]+$'
+        )
+        GROUP BY source_label
+      ),
       revisit_events AS (
         SELECT DISTINCT
           job_detail_visits.source_label,
@@ -1910,6 +1942,15 @@ export async function getDashboardData({
           COALESCE(bookmark_counts.bookmark_count, 0) AS bookmark_count,
           COALESCE(bookmark_counts.apply_count, 0) AS apply_count,
           COALESCE(other_page_move_counts.page_move_count, 0) AS page_move_count
+          , GREATEST(
+              COUNT(DISTINCT job_detail_channel_visitors.visitor_key)
+              - COUNT(DISTINCT job_detail_channel_visitors.visitor_key) FILTER (
+                  WHERE later_page_events.visitor_key IS NULL
+                    AND later_action_events.visitor_key IS NULL
+                )
+              - COALESCE(other_page_visitors.visitor_count, 0),
+              0
+            ) AS unknown_count
         FROM job_detail_channel_visitors
         LEFT JOIN later_page_events
           ON later_page_events.source_label = job_detail_channel_visitors.source_label
@@ -1924,10 +1965,13 @@ export async function getDashboardData({
           ON bookmark_counts.source_label = job_detail_channel_visitors.source_label
         LEFT JOIN other_page_move_counts
           ON other_page_move_counts.source_label = job_detail_channel_visitors.source_label
+        LEFT JOIN other_page_visitors
+          ON other_page_visitors.source_label = job_detail_channel_visitors.source_label
         GROUP BY job_detail_channel_visitors.source_label
           , bookmark_counts.bookmark_count
           , bookmark_counts.apply_count
           , other_page_move_counts.page_move_count
+          , other_page_visitors.visitor_count
       )
       SELECT
         channel_defs.label AS channel_label,
@@ -1938,6 +1982,7 @@ export async function getDashboardData({
         COALESCE(stats.bookmark_count, 0)::TEXT AS bookmark_count,
         COALESCE(stats.apply_count, 0)::TEXT AS apply_count,
         COALESCE(stats.page_move_count, 0)::TEXT AS page_move_count
+        , COALESCE(stats.unknown_count, 0)::TEXT AS unknown_count
       FROM channel_defs
       LEFT JOIN stats ON stats.source_label = channel_defs.label
       ORDER BY channel_defs.sort_order
@@ -1984,6 +2029,7 @@ export async function getDashboardData({
     const bookmark = numberValue(row.bookmark_count);
     const apply = numberValue(row.apply_count);
     const pageMove = numberValue(row.page_move_count);
+    const unknown = numberValue(row.unknown_count);
     const formatBehaviorRate = (value: number) =>
       visitors > 0 ? formatPercent((value / visitors) * 100) : "0%";
 
@@ -2001,6 +2047,8 @@ export async function getDashboardData({
       applyRate: visitors > 0 ? formatPercent((apply / visitors) * 100) : "0%",
       pageMove: `${formatCount(pageMove)}건`,
       pageMoveRate: formatBehaviorRate(pageMove),
+      unknown: `${formatCount(unknown)}명`,
+      unknownRate: formatBehaviorRate(unknown),
       fill: fillPercent(
         visitors,
         Math.max(

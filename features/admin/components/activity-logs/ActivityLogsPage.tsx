@@ -35,11 +35,12 @@ function formatCount(value: number) {
   return value.toLocaleString("ko-KR");
 }
 
-function makeHref(data: Awaited<ReturnType<typeof getActivityLogData>>, page: number) {
+function makeHref(data: Awaited<ReturnType<typeof getActivityLogData>>, page: number, selectedIp = data.ip) {
   const params = new URLSearchParams({ startDate: data.startDate, endDate: data.endDate });
   if (data.event !== "all") params.set("event", data.event);
   if (data.screen !== "all") params.set("screen", data.screen);
   if (data.keyword) params.set("keyword", data.keyword);
+  if (selectedIp) params.set("ip", selectedIp);
   if (page > 1) params.set("page", String(page));
   return `/activity-logs?${params.toString()}`;
 }
@@ -55,28 +56,55 @@ export async function ActivityLogsPage({ filters }: ActivityLogsPageProps) {
   const pageItems = pages(data.page, data.totalPages);
 
   return (
-    <AdminLayout activeNav="activity-logs" title="방문·이벤트 로그" description="가입자와 비회원의 방문 및 기능 이용 이력을 한 곳에서 확인합니다.">
+    <AdminLayout
+      activeNav="activity-logs"
+      title="방문·이벤트 로그"
+      description="가입자와 비회원의 방문 및 기능 이용 이력을 한 곳에서 확인합니다."
+      headerActions={
+        <form className={styles.headerFilters} action="/activity-logs">
+          <label className={styles.headerDateField}>
+            <span>시작일</span>
+            <input type="date" name="startDate" defaultValue={data.startDate} />
+          </label>
+          <label className={styles.headerDateField}>
+            <span>종료일</span>
+            <input type="date" name="endDate" defaultValue={data.endDate} />
+          </label>
+          <label className={styles.headerSelectField}>
+            <span>이벤트</span>
+            <select name="event" defaultValue={data.event}>
+              {eventOptions.map(([value, label]) => <option value={value} key={value}>{label}</option>)}
+            </select>
+          </label>
+          <label className={styles.headerSelectField}>
+            <span>화면</span>
+            <select name="screen" defaultValue={data.screen}>
+              {screenOptions.map(([value, label]) => <option value={value} key={value}>{label}</option>)}
+            </select>
+          </label>
+          <label className={styles.headerKeywordField}>
+            <span>검색어</span>
+            <input name="keyword" placeholder="이름 · 경로 · 이벤트" defaultValue={data.keyword} />
+          </label>
+          {data.ip ? <input type="hidden" name="ip" value={data.ip} /> : null}
+          <input type="hidden" name="page" value="1" />
+          <button type="submit">조회</button>
+        </form>
+      }
+    >
       <section className={styles.page} aria-label="방문·이벤트 로그">
         <Link className={styles.backButton} href="/">← 대시보드로 돌아가기</Link>
-        <AdminCard className={styles.searchCard}>
-          <form className={styles.filters} action="/activity-logs">
-            <label className={styles.dateField}><span>시작일</span><input type="date" name="startDate" defaultValue={data.startDate} /></label>
-            <label className={styles.dateField}><span>종료일</span><input type="date" name="endDate" defaultValue={data.endDate} /></label>
-            <label className={styles.selectField}><span>이벤트</span><select name="event" defaultValue={data.event}>{eventOptions.map(([value, label]) => <option value={value} key={value}>{label}</option>)}</select></label>
-            <label className={styles.selectField}><span>화면</span><select name="screen" defaultValue={data.screen}>{screenOptions.map(([value, label]) => <option value={value} key={value}>{label}</option>)}</select></label>
-            <label className={styles.keywordField}><span>검색어</span><input name="keyword" placeholder="이름 · IP · 경로 · 이벤트" defaultValue={data.keyword} /></label>
-            <input type="hidden" name="page" value="1" />
-            <button type="submit">조회</button>
-          </form>
-        </AdminCard>
 
         <AdminCard className={styles.tableCard}>
           <div className={styles.tableTop}>
             <div>
               <h2>전체 방문·이벤트 이력</h2>
-              <p>총 <strong>{formatCount(data.totalCount)}</strong>건 · 비회원은 IP와 익명 식별자로 확인합니다.</p>
+              <p>총 <strong>{formatCount(data.totalCount)}</strong>건 · 비회원은 IP와 익명 식별자로 확인합니다.{data.ip ? ` · ${data.ip} 로그만 조회 중` : ""}</p>
             </div>
-            <Link className={styles.backButtonSecondary} href="/">대시보드</Link>
+            <span className={styles.tableActions}>
+              {data.ip ? <Link className={styles.backButtonSecondary} href={makeHref(data, 1, "")}>전체 IP 보기</Link> : null}
+              <Link className={styles.backButtonSecondary} href="/">대시보드</Link>
+            </span>
           </div>
           <div className={styles.tableWrap}>
             <table className={styles.table}>
@@ -86,7 +114,7 @@ export async function ActivityLogsPage({ filters }: ActivityLogsPageProps) {
                   <td>{row.eventAt}</td><td>{row.event}</td>
                   <td><span className={styles.userCell}><strong>{row.userName}</strong>{row.userEmail ? <em>{row.userEmail}</em> : <em>비회원</em>}</span></td>
                   <td className={styles.pathCell} title={row.identity}>{row.identity}</td>
-                  <td>{row.ipAddress}</td>
+                  <td>{row.ipAddress !== "-" ? <Link href={makeHref(data, 1, row.ipAddress)}>{row.ipAddress}</Link> : row.ipAddress}</td>
                   <td className={styles.pathCell} title={row.path}>{row.path}</td>
                   <td className={styles.pathCell} title={row.detail}>{row.detail}</td>
                 </tr>

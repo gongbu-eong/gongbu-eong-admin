@@ -29,6 +29,7 @@ export function BehaviorPatternList({
           <span>찜</span>
           <span>지원</span>
           <span>다른 페이지</span>
+          <span>확인불가</span>
         </div>
         {items.map((item) => (
           <div className={styles.tableRow} key={item.key}>
@@ -59,6 +60,10 @@ export function BehaviorPatternList({
               <b>{item.pageMove}</b>
               <em>{item.pageMoveRate}</em>
             </span>
+            <span>
+              <b>{item.unknown}</b>
+              <em>{item.unknownRate}</em>
+            </span>
           </div>
         ))}
       </div>
@@ -69,6 +74,7 @@ export function BehaviorPatternList({
         <span>이탈: 30분 내 다음 페이지/클릭 없음</span>
         <span>찜·지원: 버튼 클릭 횟수</span>
         <span>다른 페이지: 공고 상세 외 화면으로 이동</span>
+        <span>확인불가: 이탈·다른 페이지로 분류되지 않은 후속 행동</span>
       </div>
     </section>
   );
