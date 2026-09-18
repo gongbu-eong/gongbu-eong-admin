@@ -6,6 +6,7 @@ type PageProps = {
   searchParams?: Promise<{
     channel?: string;
     product?: string;
+    period?: string;
     startDate?: string;
     endDate?: string;
   }>;
@@ -18,6 +19,7 @@ export default async function Page({ searchParams }: PageProps) {
     <AdminDashboardPage
       selectedChannel={params?.channel}
       selectedProduct={params?.product}
+      period={params?.period}
       startDate={params?.startDate}
       endDate={params?.endDate}
     />

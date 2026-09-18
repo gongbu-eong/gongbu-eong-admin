@@ -1,17 +1,5 @@
-import { TrafficSourcePage } from "@/features/admin/components/traffic/TrafficSourcePage";
+import { redirect } from "next/navigation";
 
-export const dynamic = "force-dynamic";
-
-type TrafficPageProps = {
-  searchParams?: Promise<{
-    period?: string;
-    startDate?: string;
-    endDate?: string;
-  }>;
-};
-
-export default async function Page({ searchParams }: TrafficPageProps) {
-  const resolvedSearchParams = await searchParams;
-
-  return <TrafficSourcePage filters={resolvedSearchParams} />;
+export default function Page() {
+  redirect("/?period=today");
 }

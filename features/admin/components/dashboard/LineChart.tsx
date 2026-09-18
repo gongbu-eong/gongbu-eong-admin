@@ -23,6 +23,7 @@ type LineChartProps = {
   maxValue: number;
   legends?: Array<{ label: string; color: string }>;
   valueSuffix?: string;
+  hideHeader?: boolean;
 };
 
 const chartWidth = 754;
@@ -78,6 +79,7 @@ export function LineChart({
   maxValue,
   legends,
   valueSuffix = "건",
+  hideHeader = false,
 }: LineChartProps) {
   const svgRef = useRef<SVGSVGElement | null>(null);
   const [selectedPoint, setSelectedPoint] = useState<SelectedPointGroup | null>(
@@ -192,11 +194,13 @@ export function LineChart({
 
   return (
     <div className={styles.wrap}>
-      <div className={styles.titleBlock}>
-        <h2>{title}</h2>
-        <p>{subtitle}</p>
-      </div>
-      {legends ? (
+      {!hideHeader ? (
+        <div className={styles.titleBlock}>
+          <h2>{title}</h2>
+          <p>{subtitle}</p>
+        </div>
+      ) : null}
+      {!hideHeader && legends ? (
         <div className={styles.legends}>
           {legends.map((legend) => (
             <span key={legend.label}>
@@ -207,7 +211,7 @@ export function LineChart({
         </div>
       ) : null}
       <div
-        className={styles.chart}
+        className={`${styles.chart} ${hideHeader ? styles.compactChart : ""}`}
         style={{ height: chartHeight }}
         onMouseLeave={() => setSelectedPoint(null)}
       >

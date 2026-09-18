@@ -62,6 +62,10 @@
   min-width: 0;
 }
 
+.compactChart {
+  top: 0;
+}
+
 .svg {
   position: absolute;
   left: 0;

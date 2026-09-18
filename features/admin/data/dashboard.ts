@@ -114,7 +114,7 @@ export const navItems: NavItem[] = [
     icon: "/admin-assets/nav-traffic.png",
     expandable: true,
     children: [
-      { label: "채널 상세", key: "traffic-source", href: "/traffic" },
+      { label: "대시보드 통합 보기", key: "traffic-source", href: "/?period=today" },
       { label: "전환 퍼널", key: "traffic-funnel", href: "/traffic/funnel" },
       { label: "유입 로그", key: "traffic-logs", href: "/traffic/logs" },
       {

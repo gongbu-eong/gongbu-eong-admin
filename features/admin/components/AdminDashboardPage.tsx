@@ -5,9 +5,9 @@ import { BehaviorPatternList } from "@/features/admin/components/dashboard/Behav
 import { ChannelList } from "@/features/admin/components/dashboard/ChannelList";
 import { DashboardFilterBar } from "@/features/admin/components/dashboard/DashboardFilterBar";
 import { FunnelList } from "@/features/admin/components/dashboard/FunnelList";
-import { LineChart } from "@/features/admin/components/dashboard/LineChart";
 import { MetricCard } from "@/features/admin/components/dashboard/MetricCard";
 import { ScreenClickList } from "@/features/admin/components/dashboard/ScreenClickList";
+import { TrendViewCard } from "@/features/admin/components/dashboard/TrendViewCard";
 import type { LinePoint } from "@/features/admin/data/dashboard";
 import { getDashboardData } from "@/features/admin/server/dashboard.repository";
 import styles from "./AdminDashboardPage.module.css";
@@ -41,6 +41,7 @@ function getNiceStep(value: number) {
 type AdminDashboardPageProps = {
   selectedChannel?: string | null;
   selectedProduct?: string | null;
+  period?: string | null;
   startDate?: string | null;
   endDate?: string | null;
 };
@@ -48,6 +49,7 @@ type AdminDashboardPageProps = {
 export async function AdminDashboardPage({
   selectedChannel,
   selectedProduct,
+  period,
   startDate,
   endDate,
 }: AdminDashboardPageProps = {}) {
@@ -66,6 +68,7 @@ export async function AdminDashboardPage({
     selectedChannelLabel,
     selectedProductKey,
     selectedProductLabel,
+    dashboardPreset,
     dashboardStartDate,
     dashboardEndDate,
     dashboardPeriodLabel,
@@ -83,6 +86,7 @@ export async function AdminDashboardPage({
     bannerClickTrend,
     jobDetailBehaviorTrend,
   } = await getDashboardData({
+    period,
     selectedChannel,
     selectedProduct,
     startDate,
@@ -110,11 +114,12 @@ export async function AdminDashboardPage({
     <AdminLayout
       activeNav="dashboard"
       title="대시보드"
-      description="최근 7일의 주요 지표와 사용자 행동을 확인해보세요."
+      description="주요 지표와 유입·사용자 행동을 한 곳에서 확인해보세요."
       headerActions={
         <DashboardFilterBar
           startDate={dashboardStartDate}
           endDate={dashboardEndDate}
+          preset={dashboardPreset}
           selectedChannel={selectedChannelKey}
           selectedProduct={selectedProductKey}
           options={productOptions}
@@ -135,15 +140,10 @@ export async function AdminDashboardPage({
           </div>
         </div>
         <div className={styles.chartGrid}>
-          <AdminCard className={styles.chartCard}>
-            <LineChart
+          <TrendViewCard
               title="방문자 및 신규 가입 추이"
               subtitle="최근 7일"
               yLabels={visitorSignupScale.yLabels}
-              legends={[
-                { label: "방문자", color: "#2f7ff0" },
-                { label: "전체 신규 가입", color: "#ffb000" },
-              ]}
               series={[
                 {
                   label: "방문자",
@@ -157,14 +157,11 @@ export async function AdminDashboardPage({
                 },
               ]}
               maxValue={visitorSignupScale.maxValue}
-            />
-          </AdminCard>
-          <AdminCard className={styles.chartCard}>
-            <LineChart
+          />
+          <TrendViewCard
               title="신규 가입자 추이"
               subtitle="최근 7일 · 가입 완료 회원 수"
               yLabels={signupCountScale.yLabels}
-              legends={[{ label: "가입자", color: "#20bf7a" }]}
               series={[
                 {
                   label: "가입자",
@@ -173,8 +170,7 @@ export async function AdminDashboardPage({
                 },
               ]}
               maxValue={signupCountScale.maxValue}
-            />
-          </AdminCard>
+          />
         </div>
       </section>
 
@@ -194,8 +190,7 @@ export async function AdminDashboardPage({
           ))}
         </div>
         <div className={styles.analysisGrid}>
-          <AdminCard className={styles.chartCard}>
-            <LineChart
+          <TrendViewCard
               title={`${selectedProductLabel} 전환 추이`}
               subtitle={
                 productHasVisitStep
@@ -203,18 +198,6 @@ export async function AdminDashboardPage({
                   : "최근 7일 · 진단 시작 / 진단 완료"
               }
               yLabels={productConversionScale.yLabels}
-              legends={
-                productHasVisitStep
-                  ? [
-                      { label: "방문", color: "#2f7ff0" },
-                      { label: "시작", color: "#ffb000" },
-                      { label: "완료", color: "#20bf7a" },
-                    ]
-                  : [
-                      { label: "진단 시작", color: "#ffb000" },
-                      { label: "진단 완료", color: "#20bf7a" },
-                    ]
-              }
               series={
                 productHasVisitStep
                   ? [
@@ -252,8 +235,7 @@ export async function AdminDashboardPage({
                     ]
               }
               maxValue={productConversionScale.maxValue}
-            />
-          </AdminCard>
+          />
           <AdminCard className={styles.funnelCard}>
             <FunnelList
               items={funnelItems}
@@ -278,48 +260,29 @@ export async function AdminDashboardPage({
           </div>
         </div>
         <div className={styles.trafficTrendGrid}>
-          <AdminCard className={styles.trafficTrendCard}>
-            <LineChart
+          <TrendViewCard
               title="유입 채널 순방문자"
               subtitle="최근 7일 · 같은 방문자 중복 제외"
               yLabels={trafficChannelScale.yLabels}
-              legends={trafficChannelTrend.map((series) => ({
-                label: series.label,
-                color: series.color,
-              }))}
               series={trafficChannelTrend}
               maxValue={trafficChannelScale.maxValue}
               valueSuffix="명"
-            />
-          </AdminCard>
-          <AdminCard className={styles.trafficTrendCard}>
-            <LineChart
+          />
+          <TrendViewCard
               title="배너·버튼 클릭"
               subtitle="최근 7일 · 전체 클릭 / 찜 / 지원"
               yLabels={bannerClickScale.yLabels}
-              legends={bannerClickTrend.map((series) => ({
-                label: series.label,
-                color: series.color,
-              }))}
               series={bannerClickTrend}
               maxValue={bannerClickScale.maxValue}
-            />
-          </AdminCard>
-          <AdminCard
-            className={`${styles.trafficTrendCard} ${styles.behaviorTrendCard}`}
-          >
-            <LineChart
+          />
+          <TrendViewCard
+            className={styles.behaviorTrendCard}
               title="공고 상세 방문 후 행동"
               subtitle="최근 7일 · 방문자 / 후속 행동 / 찜 / 지원"
               yLabels={jobDetailBehaviorScale.yLabels}
-              legends={jobDetailBehaviorTrend.map((series) => ({
-                label: series.label,
-                color: series.color,
-              }))}
               series={jobDetailBehaviorTrend}
               maxValue={jobDetailBehaviorScale.maxValue}
-            />
-          </AdminCard>
+          />
         </div>
       </section>
 

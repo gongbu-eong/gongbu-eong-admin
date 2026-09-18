@@ -1,0 +1,153 @@
+.card {
+  display: flex;
+  flex-direction: column;
+  height: 400px;
+  overflow: hidden;
+  padding: 20px 22px;
+}
+
+.chartSlot {
+  position: relative;
+  flex: 1;
+  min-height: 270px;
+}
+
+.header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 48px;
+}
+
+.header h2 {
+  margin: 0;
+  color: var(--admin-text);
+  font-size: 17px;
+  font-weight: 800;
+}
+
+.header p {
+  margin: 5px 0 0;
+  color: var(--admin-muted);
+  font-size: 12px;
+}
+
+.viewSelect select {
+  height: 34px;
+  border: 1px solid #d8e0ed;
+  border-radius: 8px;
+  padding: 0 28px 0 10px;
+  color: var(--admin-text);
+  font-size: 12px;
+  font-weight: 800;
+  background: #fff;
+  cursor: pointer;
+}
+
+.legends {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px 14px;
+  min-height: 18px;
+  margin-top: 8px;
+  color: var(--admin-muted);
+  font-size: 11px;
+}
+
+.legends span {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+
+.legends i {
+  display: block;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+}
+
+.tableWrap {
+  height: 305px;
+  margin-top: 18px;
+  overflow: auto;
+}
+
+.tableWrap table {
+  width: 100%;
+  min-width: 520px;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.tableWrap th,
+.tableWrap td {
+  border-bottom: 1px solid #edf1f6;
+  padding: 12px 8px;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.tableWrap thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  color: var(--admin-muted);
+  font-size: 11px;
+  background: var(--admin-surface);
+}
+
+.tableWrap th:first-child,
+.tableWrap td:first-child {
+  text-align: left;
+}
+
+.tableWrap tbody th {
+  color: var(--admin-text);
+  font-weight: 800;
+}
+
+.tableWrap td {
+  color: var(--admin-muted);
+  font-weight: 700;
+}
+
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+}
+
+@media (max-width: 640px) {
+  .card {
+    height: auto;
+    min-height: 360px;
+    padding: 18px 16px;
+  }
+
+  .header h2 {
+    font-size: 16px;
+  }
+
+  .header p {
+    line-height: 1.45;
+  }
+
+  .legends {
+    justify-content: flex-start;
+  }
+
+  .tableWrap {
+    height: 270px;
+  }
+
+  .chartSlot {
+    min-height: 270px;
+  }
+}

@@ -11,6 +11,34 @@
   background: transparent;
 }
 
+.presetGroup {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px;
+  border: 1px solid #d8e0ed;
+  border-radius: 10px;
+  background: #f7f9fc;
+}
+
+.preset,
+.presetActive {
+  height: 34px;
+  border: 0;
+  border-radius: 7px;
+  padding: 0 11px;
+  color: var(--admin-muted);
+  font-size: 12px;
+  font-weight: 800;
+  background: transparent;
+  cursor: pointer;
+}
+
+.presetActive {
+  color: #fff;
+  background: #2f7ff0;
+}
+
 .dateForm {
   display: flex;
   align-items: flex-end;
@@ -69,6 +97,7 @@
 
 @media (max-width: 640px) {
   .bar,
+  .presetGroup,
   .productSelect,
   .dateForm,
   .dateForm label,

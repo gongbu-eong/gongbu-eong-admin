@@ -9,6 +9,7 @@ import styles from "./DashboardFilterBar.module.css";
 type DashboardFilterBarProps = {
   startDate: string;
   endDate: string;
+  preset: string;
   selectedChannel: string;
   selectedProduct: string;
   options: DashboardProductOption[];
@@ -17,6 +18,7 @@ type DashboardFilterBarProps = {
 export function DashboardFilterBar({
   startDate,
   endDate,
+  preset,
   selectedChannel,
   selectedProduct,
   options,
@@ -37,6 +39,7 @@ export function DashboardFilterBar({
 
     params.set("startDate", draftStartDate);
     params.set("endDate", draftEndDate);
+    params.set("period", "custom");
 
     if (selectedChannel !== "all") {
       params.set("channel", selectedChannel);
@@ -50,6 +53,14 @@ export function DashboardFilterBar({
       params.delete("product");
     }
 
+    pushDashboard(params);
+  };
+
+  const changePreset = (nextPreset: "today" | "7d" | "30d") => {
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("period", nextPreset);
+    params.delete("startDate");
+    params.delete("endDate");
     pushDashboard(params);
   };
 
@@ -70,6 +81,22 @@ export function DashboardFilterBar({
 
   return (
     <section className={styles.bar} aria-label="대시보드 조회 조건">
+      <div className={styles.presetGroup} aria-label="조회 기간">
+        {[
+          ["today", "오늘"],
+          ["7d", "최근 7일"],
+          ["30d", "최근 30일"],
+        ].map(([key, label]) => (
+          <button
+            className={preset === key ? styles.presetActive : styles.preset}
+            key={key}
+            type="button"
+            onClick={() => changePreset(key as "today" | "7d" | "30d")}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
       <form className={styles.dateForm} onSubmit={applyDateRange}>
         <label>
           <span>조회 시작</span>

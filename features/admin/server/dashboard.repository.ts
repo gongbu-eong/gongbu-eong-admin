@@ -35,6 +35,7 @@ type DashboardData = {
   selectedProductLabel: string;
   dashboardStartDate: string;
   dashboardEndDate: string;
+  dashboardPreset: string;
   dashboardPeriodLabel: string;
   productOptions: DashboardProductOption[];
   productFunnelTitle: string;
@@ -498,18 +499,39 @@ function normalizeDateInput(value: string | null | undefined) {
 }
 
 function createDashboardDateRange({
+  preset,
   startDate,
   endDate,
 }: {
+  preset?: string | null;
   startDate?: string | null;
   endDate?: string | null;
 } = {}) {
   const today = toKstDateInput();
-  const recentStart = new Date();
-  recentStart.setDate(recentStart.getDate() - 6);
-  const defaultStartDate = toKstDateInput(recentStart);
-  const normalizedStartDate = normalizeDateInput(startDate) || defaultStartDate;
-  const normalizedEndDate = normalizeDateInput(endDate) || today;
+  const recentStart = (days: number) => {
+    const date = new Date();
+    date.setDate(date.getDate() - days);
+    return toKstDateInput(date);
+  };
+  const normalizedPreset = ["today", "7d", "30d", "custom"].includes(
+    preset || "",
+  )
+    ? preset
+    : startDate || endDate
+      ? "custom"
+      : "today";
+  const defaultStartDate =
+    normalizedPreset === "7d"
+      ? recentStart(6)
+      : normalizedPreset === "30d"
+        ? recentStart(29)
+        : today;
+  const normalizedStartDate =
+    normalizedPreset === "custom"
+      ? normalizeDateInput(startDate) || today
+      : defaultStartDate;
+  const normalizedEndDate =
+    normalizedPreset === "custom" ? normalizeDateInput(endDate) || today : today;
   const [rangeStartDate, rangeEndDate] =
     normalizedStartDate <= normalizedEndDate
       ? [normalizedStartDate, normalizedEndDate]
@@ -518,6 +540,7 @@ function createDashboardDateRange({
   return {
     startDate: rangeStartDate,
     endDate: rangeEndDate,
+    preset: normalizedPreset || "today",
     label:
       rangeStartDate === rangeEndDate
         ? rangeStartDate
@@ -553,11 +576,13 @@ function mapBannerLabel(key: string | null, name: string | null) {
 }
 
 export async function getDashboardData({
+  period,
   selectedChannel,
   selectedProduct,
   startDate,
   endDate,
 }: {
+  period?: string | null;
   selectedChannel?: string | null;
   selectedProduct?: string | null;
   startDate?: string | null;
@@ -569,7 +594,11 @@ export async function getDashboardData({
       ?.label || "전체";
   const selectedProductKey = normalizeDashboardProduct(selectedProduct);
   const selectedProductConfig = productAnalyticsConfigs[selectedProductKey];
-  const dashboardDateRange = createDashboardDateRange({ startDate, endDate });
+  const dashboardDateRange = createDashboardDateRange({
+    preset: period,
+    startDate,
+    endDate,
+  });
   const dashboardDateParams = [
     dashboardDateRange.startDate,
     dashboardDateRange.endDate,
@@ -1858,6 +1887,7 @@ export async function getDashboardData({
     dashboardStartDate: dashboardDateRange.startDate,
     dashboardEndDate: dashboardDateRange.endDate,
     dashboardPeriodLabel: dashboardDateRange.label,
+    dashboardPreset: dashboardDateRange.preset,
     productOptions: dashboardProductOptions,
     productFunnelTitle: selectedProductConfig.funnelTitle,
     productFunnelDescription: selectedProductConfig.funnelDescription,
