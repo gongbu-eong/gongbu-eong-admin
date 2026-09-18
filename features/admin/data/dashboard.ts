@@ -113,4 +113,10 @@ export const navItems: NavItem[] = [
     href: "/members",
     icon: "/admin-assets/nav-user.png",
   },
+  {
+    label: "방문·이벤트 로그",
+    key: "activity-logs",
+    href: "/activity-logs",
+    icon: "/admin-assets/nav-traffic.png",
+  },
 ];

@@ -11,6 +11,13 @@
   background: transparent;
 }
 
+.rangeControls {
+  display: flex;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
 .presetGroup {
   display: flex;
   align-items: center;
@@ -116,6 +123,7 @@
 
 @media (max-width: 640px) {
   .bar,
+  .rangeControls,
   .presetGroup,
   .customToggle,
   .productSelect,

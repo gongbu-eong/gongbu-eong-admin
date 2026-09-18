@@ -92,51 +92,55 @@ export function DashboardFilterBar({
 
   return (
     <section className={styles.bar} aria-label="대시보드 조회 조건">
-      <div className={styles.presetGroup} aria-label="조회 기간">
-        {[
-          ["today", "오늘"],
-          ["7d", "최근 7일"],
-          ["30d", "최근 30일"],
-        ].map(([key, label]) => (
-          <button
-            className={preset === key ? styles.presetActive : styles.preset}
-            key={key}
-            type="button"
-            onClick={() => changePreset(key as "today" | "7d" | "30d")}
-          >
-            {label}
-          </button>
-        ))}
+      <div className={styles.rangeControls}>
+        {!showCustomRange ? (
+          <div className={styles.presetGroup} aria-label="조회 기간">
+            {[
+              ["today", "오늘"],
+              ["7d", "최근 7일"],
+              ["30d", "최근 30일"],
+            ].map(([key, label]) => (
+              <button
+                className={preset === key ? styles.presetActive : styles.preset}
+                key={key}
+                type="button"
+                onClick={() => changePreset(key as "today" | "7d" | "30d")}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        ) : null}
+        <label className={styles.customToggle}>
+          <input
+            type="checkbox"
+            checked={showCustomRange}
+            onChange={(event) => toggleCustomRange(event.target.checked)}
+          />
+          <span>직접 기간 조회</span>
+        </label>
+        {showCustomRange ? (
+          <form className={styles.dateForm} onSubmit={applyDateRange}>
+            <label>
+              <span>조회 시작</span>
+              <input
+                type="date"
+                value={draftStartDate}
+                onChange={(event) => setDraftStartDate(event.target.value)}
+              />
+            </label>
+            <label>
+              <span>조회 종료</span>
+              <input
+                type="date"
+                value={draftEndDate}
+                onChange={(event) => setDraftEndDate(event.target.value)}
+              />
+            </label>
+            <button type="submit">적용</button>
+          </form>
+        ) : null}
       </div>
-      <label className={styles.customToggle}>
-        <input
-          type="checkbox"
-          checked={showCustomRange}
-          onChange={(event) => toggleCustomRange(event.target.checked)}
-        />
-        <span>직접 기간 조회</span>
-      </label>
-      {showCustomRange ? (
-        <form className={styles.dateForm} onSubmit={applyDateRange}>
-          <label>
-            <span>조회 시작</span>
-            <input
-              type="date"
-              value={draftStartDate}
-              onChange={(event) => setDraftStartDate(event.target.value)}
-            />
-          </label>
-          <label>
-            <span>조회 종료</span>
-            <input
-              type="date"
-              value={draftEndDate}
-              onChange={(event) => setDraftEndDate(event.target.value)}
-            />
-          </label>
-          <button type="submit">적용</button>
-        </form>
-      ) : null}
       <label className={styles.productSelect}>
         <span>분석 대상</span>
         <AdminSelect

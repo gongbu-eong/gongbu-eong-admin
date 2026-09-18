@@ -14,7 +14,7 @@ export function BehaviorPatternList({
     <section className={styles.wrap}>
       <header className={styles.header}>
         <div>
-          <h2>공고 상세 방문 후 행동</h2>
+          <h2>공고 상세 방문 후 행동 상세</h2>
           <p>
             {periodLabel} 기준 · 순방문자별 30분 내 후속 행동 / 7일 내 재방문
           </p>

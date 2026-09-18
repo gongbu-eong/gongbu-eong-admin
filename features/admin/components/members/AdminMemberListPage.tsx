@@ -12,9 +12,7 @@ import styles from "./AdminMemberListPage.module.css";
 const statusFilters: Array<{ label: string; value: MemberStatusFilter }> = [
   { label: "전체", value: "all" },
   { label: "활동중", value: "active" },
-  { label: "유료", value: "paid" },
   { label: "정지", value: "blocked" },
-  { label: "메모 있음", value: "memo" },
 ];
 
 const channelFilters: Array<{ label: string; value: MemberChannelFilter }> = [
@@ -46,12 +44,7 @@ function createQuery(params: Record<string, string | number | null | undefined>)
   return queryString ? `/members?${queryString}` : "/members";
 }
 
-function formatWon(value: number) {
-  return `${value.toLocaleString("ko-KR")}원`;
-}
-
 function badgeClass(label: string) {
-  if (label === "유료") return styles.paidBadge;
   if (label === "정지") return styles.blockedBadge;
   return styles.statusBadge;
 }
@@ -126,8 +119,8 @@ export async function AdminMemberListPage({ filters }: AdminMemberListPageProps)
               <span>회원</span>
               <span>성별 · 연령</span>
               <span>유입 경로</span>
-              <span>{selected ? "남은쿠폰" : "진단"}</span>
-              <span>{selected ? "구매내역" : "구매"}</span>
+              <span>진단</span>
+              <span>AI 코칭</span>
               <span>상태</span>
               <span>가입일</span>
               <span />
@@ -172,13 +165,11 @@ export async function AdminMemberListPage({ filters }: AdminMemberListPageProps)
                   <span>
                     {member.source} · {member.campaign}
                   </span>
+                  <span>{member.diagnosisCount.toLocaleString("ko-KR")}회</span>
                   <span>
-                    {selected
-                      ? `${member.remainingCredits.toLocaleString("ko-KR")}개`
-                      : `${member.diagnosisCount.toLocaleString("ko-KR")}회`}
-                  </span>
-                  <span>
-                    <i className={styles.paidBadge}>{member.paidLabel}</i>
+                    {(
+                      member.resumeCoachingCount + member.interviewCoachingCount
+                    ).toLocaleString("ko-KR")}회
                   </span>
                   <span>
                     <i className={badgeClass(member.statusLabel)}>
@@ -253,7 +244,6 @@ export async function AdminMemberListPage({ filters }: AdminMemberListPageProps)
               </span>
               <strong>{selected.name}</strong>
               <span className={styles.previewBadges}>
-                <i className={styles.paidBadge}>{selected.paidLabel}</i>
                 <i className={badgeClass(selected.statusLabel)}>
                   {selected.statusLabel}
                 </i>
@@ -278,18 +268,11 @@ export async function AdminMemberListPage({ filters }: AdminMemberListPageProps)
               ]}
             />
             <PreviewSection
-              title="쿠폰·구매"
-              rows={[
-                ["남은 쿠폰", `${selected.remainingCredits.toLocaleString("ko-KR")}개`],
-                ["총 구매 횟수", `${selected.purchaseCount.toLocaleString("ko-KR")}회`],
-                ["총 결제 금액", formatWon(selected.paymentTotal)],
-              ]}
-            />
-            <PreviewSection
               title="활동 요약"
               rows={[
                 ["진단 이력", `${selected.diagnosisCount.toLocaleString("ko-KR")}회`],
                 ["자소서 코칭", `${selected.resumeCoachingCount.toLocaleString("ko-KR")}회`],
+                ["면접 코칭", `${selected.interviewCoachingCount.toLocaleString("ko-KR")}회`],
               ]}
             />
             <PreviewSection

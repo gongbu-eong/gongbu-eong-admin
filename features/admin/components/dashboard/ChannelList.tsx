@@ -18,10 +18,9 @@ export function ChannelList({
     <section className={styles.wrap}>
       <header className={styles.header}>
         <div>
-          <h2>유입 채널</h2>
+          <h2>유입 채널 순 방문자</h2>
           <p>조회 기간 순방문자 기준 · 총 {total}명</p>
         </div>
-        <Link href="/traffic/logs?from=dashboard">로그보기 &gt;</Link>
       </header>
       <div className={styles.list}>
         {items.map((item) => (

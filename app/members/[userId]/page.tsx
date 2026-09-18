@@ -8,6 +8,7 @@ type MemberDetailPageProps = {
   }>;
   searchParams?: Promise<{
     tab?: string;
+    item?: string;
   }>;
 };
 
@@ -22,6 +23,7 @@ export default async function MemberDetailPage({
     <AdminMemberDetailPage
       userId={resolvedParams.userId}
       activeTab={resolvedSearchParams?.tab}
+      selectedItem={resolvedSearchParams?.item}
     />
   );
 }

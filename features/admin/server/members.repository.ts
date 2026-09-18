@@ -1,6 +1,6 @@
 import { query } from "@/features/admin/server/db";
 
-export type MemberStatusFilter = "all" | "active" | "paid" | "blocked" | "memo";
+export type MemberStatusFilter = "all" | "active" | "blocked";
 export type MemberChannelFilter =
   | "all"
   | "instagram"
@@ -11,11 +11,10 @@ export type MemberChannelFilter =
 
 export type MemberDetailTab =
   | "overview"
-  | "purchases"
   | "diagnosis"
   | "resume-coaching"
+  | "interview-coaching"
   | "community"
-  | "memo"
   | "logs";
 
 export type MemberListQuery = {
@@ -52,10 +51,6 @@ export type MemberSummary = {
   statusLabel: string;
   blockedUntil: string;
   rejoinBlockedUntil: string;
-  paidLabel: string;
-  remainingCredits: number;
-  purchaseCount: number;
-  paymentTotal: number;
   diagnosisCount: number;
   resumeCoachingCount: number;
   interviewCoachingCount: number;
@@ -63,44 +58,54 @@ export type MemberSummary = {
   commentCount: number;
 };
 
-export type MemberPurchase = {
-  date: string;
-  product: string;
-  quantity: string;
-  amount: string;
-  credit: string;
-};
-
 export type MemberDiagnosis = {
+  id: string;
   date: string;
   title: string;
   result: string;
+  detail: unknown;
 };
 
 export type MemberResumeCoaching = {
+  id: string;
   date: string;
   title: string;
   result: string;
+  inputText: string;
+  inputType: string;
+  sourceFilename: string;
+  sourceFileUrl: string;
+  detail: unknown;
+};
+
+export type MemberInterviewCoaching = {
+  id: string;
+  date: string;
+  title: string;
+  result: string;
+  status: string;
+  materialFilename: string;
+  materialFileAvailable: boolean;
+  detail: unknown;
 };
 
 export type MemberCommunityActivity = {
+  id: string;
+  postId: string;
   date: string;
   kind: string;
   title: string;
+  content: string;
   status: string;
-};
-
-export type MemberMemo = {
-  id: string;
-  adminName: string;
-  memo: string;
-  createdAt: string;
+  href: string;
 };
 
 export type MemberLog = {
+  id: string;
   actor: string;
   kind: string;
   target: string;
+  detail: string;
   occurredAt: string;
 };
 
@@ -119,13 +124,11 @@ export type MemberListData = {
 
 export type MemberDetailData = {
   member: MemberSummary | null;
-  purchases: MemberPurchase[];
   diagnosis: MemberDiagnosis[];
   resumeCoachings: MemberResumeCoaching[];
+  interviewCoachings: MemberInterviewCoaching[];
   community: MemberCommunityActivity[];
-  memos: MemberMemo[];
   logs: MemberLog[];
-  memoTableAvailable: boolean;
 };
 
 type MemberRow = {
@@ -146,9 +149,6 @@ type MemberRow = {
   provider_email: string | null;
   first_source: string | null;
   first_campaign: string | null;
-  remaining_credits: string | number | null;
-  purchase_count: string | number | null;
-  payment_total: string | number | null;
   diagnosis_count: string | number | null;
   resume_coaching_count: string | number | null;
   interview_coaching_count: string | number | null;
@@ -163,62 +163,66 @@ type MetricRow = {
   blocked_members: string;
   new_week_members: string;
   diagnosis_members: string;
-  paid_members: string;
-};
-
-type PurchaseRow = {
-  date_value: string | Date | null;
-  product: string | null;
-  amount_krw: string | number | null;
-  credit_amount: string | number | null;
+  coaching_members: string;
 };
 
 type DiagnosisRow = {
+  id: string;
   date_value: string | Date | null;
   title: string | null;
   result: string | null;
+  detail: unknown;
 };
 
 type ResumeCoachingRow = {
+  id: string;
   date_value: string | Date | null;
   title: string | null;
   score: string | number | null;
+  input_text: string | null;
+  input_type: string | null;
+  source_filename: string | null;
+  source_file_url: string | null;
+  detail: unknown;
 };
 
 type CommunityRow = {
+  id: string;
+  post_id: string;
   date_value: string | Date | null;
   kind: string | null;
   title: string | null;
+  content: string | null;
   status: string | null;
 };
 
-type MemoRow = {
+type InterviewCoachingRow = {
   id: string;
-  admin_name: string | null;
-  memo: string | null;
-  created_at: string | Date | null;
+  date_value: string | Date | null;
+  title: string | null;
+  status: string | null;
+  material_filename: string | null;
+  material_file_available: boolean | null;
+  detail: unknown;
 };
 
 type LogRow = {
+  id: string;
   actor: string | null;
   kind: string | null;
   target: string | null;
+  detail: string | null;
   occurred_at: string | Date | null;
-};
-
-type TableExistsRow = {
-  exists: boolean;
 };
 
 const pageSize = 10;
 
 export function normalizeMemberTab(value?: string | null): MemberDetailTab {
   if (
-    value === "purchases" ||
     value === "diagnosis" ||
     value === "resume-coaching" ||
+    value === "interview-coaching" ||
     value === "community" ||
-    value === "memo" ||
     value === "logs"
   ) {
     return value;
@@ -242,10 +246,6 @@ function numberValue(value: string | number | null | undefined) {
 
 function formatNumber(value: number) {
   return value.toLocaleString("ko-KR");
-}
-
-function formatWon(value: number) {
-  return `${formatNumber(value)}원`;
 }
 
 function formatDate(value: string | Date | null | undefined) {
@@ -347,6 +347,14 @@ function formatStatus(value: string) {
   return "탈퇴";
 }
 
+function formatInterviewStatus(value: string | null) {
+  if (value === "completed") return "완료";
+  if (value === "ready") return "질문 준비 완료";
+  if (value === "draft") return "작성 중";
+  if (value === "failed") return "실패";
+  return value || "-";
+}
+
 function formatCommunityStatus(value: string | null) {
   if (value === "active" || value === "published") return "게시중";
   if (value === "hidden") return "숨김";
@@ -386,7 +394,7 @@ function maskEmail(value: string | null) {
 }
 
 function normalizeStatus(value?: string | null): MemberStatusFilter {
-  if (value === "active" || value === "paid" || value === "blocked" || value === "memo") {
+  if (value === "active" || value === "blocked") {
     return value;
   }
 
@@ -411,8 +419,6 @@ function toMemberSummary(row: MemberRow): MemberSummary {
   const email = row.email || row.provider_email || "-";
   const name = row.nickname || row.display_name || maskEmail(email) || "이름 없음";
   const avatarKey = row.profile_avatar_key || "fox";
-  const purchaseCount = numberValue(row.purchase_count);
-
   return {
     id: row.id,
     name,
@@ -432,10 +438,6 @@ function toMemberSummary(row: MemberRow): MemberSummary {
     statusLabel: formatStatus(row.status),
     blockedUntil: formatDateTime(row.blocked_until),
     rejoinBlockedUntil: formatDateTime(row.rejoin_blocked_until),
-    paidLabel: purchaseCount > 0 ? "유료" : "무료",
-    remainingCredits: numberValue(row.remaining_credits),
-    purchaseCount,
-    paymentTotal: numberValue(row.payment_total),
     diagnosisCount: numberValue(row.diagnosis_count),
     resumeCoachingCount: numberValue(row.resume_coaching_count),
     interviewCoachingCount: numberValue(row.interview_coaching_count),
@@ -464,9 +466,6 @@ function createMemberSelectSql(whereClause: string) {
       oauth.provider_email::TEXT,
       attribution.first_source,
       attribution.first_campaign,
-      COALESCE(credits.balance_after, 0) AS remaining_credits,
-      COALESCE(purchases.purchase_count, 0) AS purchase_count,
-      COALESCE(purchases.payment_total, 0) AS payment_total,
       COALESCE(diagnosis.diagnosis_count, 0) AS diagnosis_count,
       COALESCE(resume_coaching.resume_coaching_count, 0) AS resume_coaching_count,
       COALESCE(interview_coaching.interview_coaching_count, 0) AS interview_coaching_count,
@@ -482,19 +481,6 @@ function createMemberSelectSql(whereClause: string) {
       LIMIT 1
     ) oauth ON TRUE
     LEFT JOIN public.user_attributions attribution ON attribution.user_id = users.id
-    LEFT JOIN LATERAL (
-      SELECT balance_after
-      FROM public.credit_transactions transactions
-      WHERE transactions.user_id = users.id
-      ORDER BY transactions.created_at DESC
-      LIMIT 1
-    ) credits ON TRUE
-    LEFT JOIN LATERAL (
-      SELECT COUNT(*) AS purchase_count, COALESCE(SUM(amount_krw), 0) AS payment_total
-      FROM public.payments payments
-      WHERE payments.user_id = users.id
-        AND payments.status = 'paid'
-    ) purchases ON TRUE
     LEFT JOIN LATERAL (
       SELECT COUNT(*) AS diagnosis_count
       FROM public.diagnosis_results results
@@ -514,15 +500,11 @@ function createMemberSelectSql(whereClause: string) {
       SELECT COUNT(*) AS post_count
       FROM public.community_posts posts
       WHERE posts.user_id = users.id
-        AND posts.deleted_at IS NULL
-        AND posts.status <> 'deleted'
     ) posts ON TRUE
     LEFT JOIN LATERAL (
       SELECT COUNT(*) AS comment_count
       FROM public.community_comments comments
       WHERE comments.user_id = users.id
-        AND comments.deleted_at IS NULL
-        AND comments.status <> 'deleted'
     ) comments ON TRUE
     ${whereClause}
   `;
@@ -541,8 +523,6 @@ const memberFilterSql = `
       $2::text = 'all'
       OR ($2::text = 'active' AND users.status = 'active')
       OR ($2::text = 'blocked' AND users.status = 'blocked')
-      OR ($2::text = 'paid' AND purchases.purchase_count > 0)
-      OR ($2::text = 'memo')
     )
     AND (
       $3::text = 'all'
@@ -563,14 +543,6 @@ const memberFilterSql = `
       END = $3::text
     )
 `;
-
-async function hasAdminMemoTable() {
-  const result = await query<TableExistsRow>(
-    "SELECT to_regclass('public.admin_member_memos') IS NOT NULL AS exists",
-  );
-
-  return Boolean(result.rows[0]?.exists);
-}
 
 export async function getMemberListData(
   args?: MemberListQuery,
@@ -595,12 +567,14 @@ export async function getMemberListData(
               AND COALESCE(users.signup_completed_at, users.created_at) >= NOW() - INTERVAL '7 days'
           ) AS new_week_members,
           COUNT(DISTINCT diagnosis.user_id) AS diagnosis_members,
-          COUNT(DISTINCT payments.user_id) AS paid_members
+          COUNT(DISTINCT coaching.user_id) AS coaching_members
         FROM public.users users
         LEFT JOIN public.diagnosis_results diagnosis ON diagnosis.user_id = users.id
-        LEFT JOIN public.payments payments
-          ON payments.user_id = users.id
-         AND payments.status = 'paid'
+        LEFT JOIN (
+          SELECT user_id FROM public.resume_coaching_requests WHERE user_id IS NOT NULL
+          UNION
+          SELECT user_id FROM public.interview_coaching_sessions WHERE user_id IS NOT NULL
+        ) coaching ON coaching.user_id = users.id
       `,
     ),
     query<MemberRow>(
@@ -629,7 +603,7 @@ export async function getMemberListData(
   const activeMembers = numberValue(metrics?.active_members);
   const blockedMembers = numberValue(metrics?.blocked_members);
   const diagnosisMembers = numberValue(metrics?.diagnosis_members);
-  const paidMembers = numberValue(metrics?.paid_members);
+  const coachingMembers = numberValue(metrics?.coaching_members);
   const totalCount = numberValue(memberResult.rows[0]?.total_filtered);
   const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
   const members = memberResult.rows.map(toMemberSummary);
@@ -655,10 +629,10 @@ export async function getMemberListData(
         note: `전체의 ${totalMembers > 0 ? Math.round((diagnosisMembers / totalMembers) * 100) : 0}%`,
       },
       {
-        label: "유료 전환 회원",
-        value: formatNumber(paidMembers),
+        label: "AI 코칭 경험 회원",
+        value: formatNumber(coachingMembers),
         unit: "명",
-        note: `전환율 ${totalMembers > 0 ? Math.round((paidMembers / totalMembers) * 100) : 0}%`,
+        note: `전체의 ${totalMembers > 0 ? Math.round((coachingMembers / totalMembers) * 100) : 0}%`,
       },
     ],
     members,
@@ -678,13 +652,11 @@ export async function getMemberDetailData(
 ): Promise<MemberDetailData> {
   const empty: MemberDetailData = {
     member: null,
-    purchases: [],
     diagnosis: [],
     resumeCoachings: [],
+    interviewCoachings: [],
     community: [],
-    memos: [],
     logs: [],
-    memoTableAvailable: false,
   };
 
   const memberResult = await query<MemberRow>(
@@ -706,56 +678,37 @@ export async function getMemberDetailData(
     return empty;
   }
 
-  const memoTableAvailable = await hasAdminMemoTable();
-  const memoQuery = memoTableAvailable
-    ? query<MemoRow>(
-        `
-          SELECT id, admin_name, memo, created_at
-          FROM public.admin_member_memos
-          WHERE user_id = $1::uuid
-          ORDER BY created_at DESC
-          LIMIT 5
-        `,
-        [memberRow.id],
-      )
-    : Promise.resolve({ rows: [] } as unknown as Awaited<ReturnType<typeof query<MemoRow>>>);
-
   const [
-    purchaseResult,
     diagnosisResult,
     resumeCoachingResult,
     communityResult,
-    memoResult,
+    interviewCoachingResult,
     logResult,
   ] = await Promise.all([
-    query<PurchaseRow>(
-      `
-        SELECT
-          COALESCE(payments.paid_at, payments.created_at) AS date_value,
-          COALESCE(packages.name, '진단권') AS product,
-          payments.amount_krw,
-          COALESCE(packages.credit_amount + packages.bonus_credit_amount, credits.amount, 0) AS credit_amount
-        FROM public.payments payments
-        LEFT JOIN public.credit_packages packages ON packages.id = payments.credit_package_id
-        LEFT JOIN public.credit_transactions credits ON credits.payment_id = payments.id
-        WHERE payments.user_id = $1::uuid
-          AND payments.status = 'paid'
-        ORDER BY COALESCE(payments.paid_at, payments.created_at) DESC
-        LIMIT 5
-      `,
-      [memberRow.id],
-    ),
     query<DiagnosisRow>(
       `
         SELECT
+          results.id,
           results.created_at AS date_value,
           COALESCE(types.name, '강점·성향 진단') AS title,
-          COALESCE(results.summary, types.name, '결과 확인') AS result
+          COALESCE(results.summary, types.name, '결과 확인') AS result,
+          jsonb_build_object(
+            'totalScore', results.total_score,
+            'stabilityScore', results.stability_score,
+            'challengeScore', results.challenge_score,
+            'analyticalScore', results.analytical_score,
+            'collaborationScore', results.collaboration_score,
+            'leadershipScore', results.leadership_score,
+            'publicServiceScore', results.public_service_score,
+            'strengths', results.strengths,
+            'weaknesses', results.weaknesses,
+            'summary', results.summary,
+            'rawResult', results.raw_result
+          ) AS detail
         FROM public.diagnosis_results results
         LEFT JOIN public.personality_types types ON types.id = results.personality_type_id
         WHERE results.user_id = $1::uuid
         ORDER BY results.created_at DESC
-        LIMIT 5
       `,
       [memberRow.id],
     ),
@@ -769,46 +722,113 @@ export async function getMemberDetailData(
             LEFT(requests.input_text, 32),
             '자소서 코칭'
           ) AS title,
-          results.score
+          results.score,
+          requests.input_text,
+          requests.input_type,
+          COALESCE(requests.source_filename, files.original_filename) AS source_filename,
+          COALESCE(files.public_url, '') AS source_file_url,
+          jsonb_build_object(
+            'feedback', results.feedback,
+            'correctedText', results.corrected_text,
+            'job', requests.job_posting_snapshot,
+            'model', results.model_name
+          ) AS detail,
+          results.id
         FROM public.resume_coaching_requests requests
         LEFT JOIN public.resume_coaching_results results ON results.request_id = requests.id
+        LEFT JOIN public.user_files files ON files.id = requests.source_file_id
         WHERE requests.user_id = $1::uuid
-        ORDER BY requests.created_at DESC
-        LIMIT 5
+        ORDER BY requests.created_at DESC, results.created_at DESC NULLS LAST
       `,
       [memberRow.id],
     ),
     query<CommunityRow>(
       `
         SELECT created_at AS date_value, '게시글' AS kind, title, status
+        , id, id AS post_id, content
         FROM public.community_posts
         WHERE user_id = $1::uuid
-          AND deleted_at IS NULL
         UNION ALL
-        SELECT comments.created_at AS date_value, '댓글' AS kind, posts.title, comments.status
+        SELECT comments.created_at AS date_value,
+          CASE WHEN comments.parent_comment_id IS NULL THEN '댓글' ELSE '대댓글' END AS kind,
+          posts.title, comments.status, comments.id, comments.post_id, comments.content
         FROM public.community_comments comments
         JOIN public.community_posts posts ON posts.id = comments.post_id
         WHERE comments.user_id = $1::uuid
-          AND comments.deleted_at IS NULL
         ORDER BY date_value DESC
-        LIMIT 5
       `,
       [memberRow.id],
     ),
-    memoQuery,
+    query<InterviewCoachingRow>(
+      `
+        SELECT
+          sessions.id,
+          sessions.started_at AS date_value,
+          COALESCE(NULLIF(CONCAT_WS(' · ', sessions.company_name, sessions.position_name), ''), 'AI NCS 면접 코칭') AS title,
+          sessions.status,
+          sessions.material_filename,
+          (sessions.material_file_data IS NOT NULL) AS material_file_available,
+          jsonb_build_object(
+            'company', sessions.company_name,
+            'position', sessions.position_name,
+            'duty', sessions.duty_text,
+            'status', sessions.status,
+            'analysis', sessions.analysis,
+            'questions', sessions.questions,
+            'result', sessions.result,
+            'messages', COALESCE((
+              SELECT jsonb_agg(to_jsonb(messages) ORDER BY messages.message_order)
+              FROM public.interview_coaching_messages messages
+              WHERE messages.session_id = sessions.id
+            ), '[]'::jsonb)
+          ) AS detail
+        FROM public.interview_coaching_sessions sessions
+        WHERE sessions.user_id = $1::uuid
+        ORDER BY sessions.started_at DESC
+      `,
+      [memberRow.id],
+    ),
     query<LogRow>(
       `
         SELECT *
         FROM (
           SELECT
+            users.id::text AS id,
+            '시스템' AS actor,
+            'signup' AS kind,
+            '/signup' AS target,
+            users.email::text AS detail,
+            COALESCE(users.signup_completed_at, users.created_at) AS occurred_at
+          FROM public.users users
+          WHERE users.id = $1::uuid
+          UNION ALL
+          SELECT id::text, '사용자', CASE WHEN success THEN 'login_success' ELSE 'login_failed' END,
+            COALESCE(entry_source::text, 'login'), COALESCE(failure_reason, provider::text), created_at
+          FROM public.auth_login_events
+          WHERE user_id = $1::uuid
+          UNION ALL
+          SELECT id::text, '사용자', event_name, COALESCE(canonical_path, path),
+            COALESCE(title, screen_key, traffic_channel), created_at
+          FROM public.access_logs
+          WHERE user_id = $1::uuid
+          UNION ALL
+          SELECT id::text, '사용자', 'entry', COALESCE(landing_path, entry_source::text),
+            campaign_source, created_at
+          FROM public.user_entry_events
+          WHERE user_id = $1::uuid
+          UNION ALL
+          SELECT
+            id::text,
             '시스템' AS actor,
             event_name AS kind,
             COALESCE(landing_path, landing_url, referrer) AS target,
+            COALESCE(source, medium, campaign) AS detail,
             created_at AS occurred_at
           FROM public.attribution_events
           WHERE user_id = $1::uuid
           UNION ALL
           SELECT
+            id::text,
             '시스템' AS actor,
             event_type AS kind,
             COALESCE(
@@ -817,12 +837,40 @@ export async function getMemberDetailData(
               diagnosis_result_id::TEXT,
               diagnosis_run_id::TEXT
             ) AS target,
+            properties::text AS detail,
             created_at AS occurred_at
           FROM public.product_events
           WHERE user_id = $1::uuid
+          UNION ALL
+          SELECT results.id::text, '시스템', 'diagnosis_complete', results.id::text,
+            COALESCE(results.summary, types.name), results.created_at
+          FROM public.diagnosis_results results
+          LEFT JOIN public.personality_types types ON types.id = results.personality_type_id
+          WHERE results.user_id = $1::uuid
+          UNION ALL
+          SELECT results.id::text, '시스템', 'resume_coaching_complete', results.id::text,
+            requests.source_filename, results.created_at
+          FROM public.resume_coaching_results results
+          JOIN public.resume_coaching_requests requests ON requests.id = results.request_id
+          WHERE requests.user_id = $1::uuid
+          UNION ALL
+          SELECT sessions.id::text, '시스템', 'interview_coaching', sessions.id::text,
+            COALESCE(sessions.position_name, sessions.company_name), sessions.started_at
+          FROM public.interview_coaching_sessions sessions
+          WHERE sessions.user_id = $1::uuid
+          UNION ALL
+          SELECT posts.id::text, '사용자', 'community_post', posts.id::text,
+            posts.title, posts.created_at
+          FROM public.community_posts posts
+          WHERE posts.user_id = $1::uuid
+          UNION ALL
+          SELECT comments.id::text, '사용자',
+            CASE WHEN comments.parent_comment_id IS NULL THEN 'community_comment' ELSE 'community_reply' END,
+            comments.post_id::text, comments.content, comments.created_at
+          FROM public.community_comments comments
+          WHERE comments.user_id = $1::uuid
         ) logs
-        ORDER BY occurred_at DESC
-        LIMIT 5
+        ORDER BY occurred_at ASC, id ASC
       `,
       [memberRow.id],
     ),
@@ -830,42 +878,52 @@ export async function getMemberDetailData(
 
   return {
     member: toMemberSummary(memberRow),
-    purchases: purchaseResult.rows.map((row) => ({
-      date: formatShortDate(row.date_value),
-      product: row.product || "진단권",
-      quantity: "1",
-      amount: formatWon(numberValue(row.amount_krw)),
-      credit: `+${formatNumber(numberValue(row.credit_amount))}`,
-    })),
     diagnosis: diagnosisResult.rows.map((row) => ({
+      id: row.id,
       date: formatShortDate(row.date_value),
       title: row.title || "강점·성향 진단",
       result: row.result || "결과 확인",
+      detail: row.detail,
     })),
     resumeCoachings: resumeCoachingResult.rows.map((row) => ({
+      id: row.id,
       date: formatShortDate(row.date_value),
       title: row.title || "자소서 코칭",
       result: row.score === null || row.score === undefined ? "결과 확인" : `${row.score}점`,
+      inputText: row.input_text || "",
+      inputType: row.input_type || "text",
+      sourceFilename: row.source_filename || "",
+      sourceFileUrl: row.source_file_url || "",
+      detail: row.detail,
+    })),
+    interviewCoachings: interviewCoachingResult.rows.map((row) => ({
+      id: row.id,
+      date: formatShortDate(row.date_value),
+      title: row.title || "AI NCS 면접 코칭",
+      result: row.status === "completed" ? "완료" : formatInterviewStatus(row.status),
+      status: row.status || "-",
+      materialFilename: row.material_filename || "",
+      materialFileAvailable: Boolean(row.material_file_available),
+      detail: row.detail,
     })),
     community: communityResult.rows.map((row) => ({
+      id: row.id,
+      postId: row.post_id,
       date: formatShortDate(row.date_value),
       kind: row.kind || "-",
       title: row.title || "-",
+      content: row.content || "",
       status: formatCommunityStatus(row.status),
-    })),
-    memos: memoResult.rows.map((row) => ({
-      id: row.id,
-      adminName: row.admin_name || "관리자",
-      memo: row.memo || "",
-      createdAt: formatDateTime(row.created_at),
+      href: `/community/${row.post_id}${row.kind === "게시글" ? "" : `#comment-${row.id}`}`,
     })),
     logs: logResult.rows.map((row) => ({
+      id: row.id,
       actor: row.actor || "시스템",
       kind: formatKind(row.kind),
       target: formatTarget(row.target),
+      detail: row.detail || "",
       occurredAt: formatDateTime(row.occurred_at),
     })),
-    memoTableAvailable,
   };
 }
 

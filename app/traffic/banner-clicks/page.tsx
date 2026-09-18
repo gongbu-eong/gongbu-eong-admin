@@ -1,21 +1,5 @@
-import { BannerClickLogsPage } from "@/features/admin/components/traffic/BannerClickLogsPage";
+import { redirect } from "next/navigation";
 
-export const dynamic = "force-dynamic";
-
-type BannerClickLogsRouteProps = {
-  searchParams?: Promise<{
-    startDate?: string;
-    endDate?: string;
-    keyword?: string;
-    page?: string;
-    from?: string;
-  }>;
-};
-
-export default async function Page({
-  searchParams,
-}: BannerClickLogsRouteProps) {
-  const resolvedSearchParams = await searchParams;
-
-  return <BannerClickLogsPage filters={resolvedSearchParams} />;
+export default function Page() {
+  redirect("/activity-logs");
 }

@@ -34,7 +34,11 @@ export function TrendViewCard({
   className = "",
 }: TrendViewCardProps) {
   const [view, setView] = useState<"chart" | "list">("chart");
-  const labels = listSeries[0]?.data.map((point) => point.label) ?? [];
+  const displayListSeries = listSeries.map((item) => ({
+    ...item,
+    data: [...item.data].reverse(),
+  }));
+  const labels = displayListSeries[0]?.data.map((point) => point.label) ?? [];
 
   return (
     <AdminCard className={`${styles.card} ${className}`}>
@@ -78,7 +82,7 @@ export function TrendViewCard({
             <thead>
               <tr>
                 <th scope="col">날짜</th>
-                {listSeries.map((item) => (
+                {displayListSeries.map((item) => (
                   <th scope="col" key={item.label}>
                     {item.label}
                   </th>
@@ -89,7 +93,7 @@ export function TrendViewCard({
               {labels.map((label, index) => (
                 <tr key={label}>
                   <th scope="row">{label}</th>
-                  {listSeries.map((item) => (
+                  {displayListSeries.map((item) => (
                     <td key={`${item.label}-${label}`}>
                       {formatValue(item.data[index]?.value ?? 0, valueSuffix)}
                     </td>

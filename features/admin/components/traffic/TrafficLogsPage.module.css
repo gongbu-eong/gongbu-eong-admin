@@ -6,6 +6,33 @@
   margin-top: 16px;
 }
 
+.backButton,
+.backButtonSecondary {
+  display: inline-flex;
+  align-items: center;
+  align-self: flex-start;
+  min-height: 42px;
+  padding: 0 16px;
+  border: 1px solid var(--admin-border);
+  border-radius: var(--admin-radius);
+  background: var(--admin-surface);
+  color: var(--admin-text);
+  font-size: 14px;
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.backButton:hover,
+.backButtonSecondary:hover {
+  border-color: var(--admin-primary);
+  color: var(--admin-primary);
+}
+
+.backButtonSecondary {
+  min-height: 36px;
+  color: var(--admin-primary);
+}
+
 .searchCard {
   padding: 20px 16px;
   overflow: hidden;

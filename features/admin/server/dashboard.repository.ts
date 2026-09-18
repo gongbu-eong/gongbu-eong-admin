@@ -48,6 +48,8 @@ type DashboardData = {
   productHasVisitStep: boolean;
   trafficChannelTrend: DashboardTrendSeries[];
   trafficChannelListTrend: DashboardTrendSeries[];
+  screenTrend: DashboardTrendSeries[];
+  screenListTrend: DashboardTrendSeries[];
   bannerClickTrend: DashboardTrendSeries[];
   bannerClickListTrend: DashboardTrendSeries[];
   jobDetailBehaviorTrend: DashboardTrendSeries[];
@@ -166,6 +168,19 @@ const dashboardScreenKeys = [
   { key: "login", label: "로그인" },
   { key: "other", label: "기타" },
 ];
+
+const screenTrendDefinitions = [
+  { key: "screen:home", label: "홈", color: "#2f7ff0" },
+  { key: "screen:job_detail", label: "공고상세", color: "#1fb573" },
+  { key: "screen:diagnosis", label: "강약점", color: "#a54de8" },
+  { key: "screen:community", label: "커뮤니티", color: "#f5b91e" },
+  { key: "screen:my", label: "마이페이지", color: "#e65c5c" },
+  { key: "screen:calendar", label: "캘린더", color: "#5a6580" },
+  { key: "screen:login", label: "로그인", color: "#22a6b3" },
+  { key: "screen:other", label: "기타", color: "#9aa7bb" },
+];
+
+const screenChartDefinitions = screenTrendDefinitions.slice(0, 4);
 
 const visitorKeySql =
   "COALESCE(user_id::TEXT, anonymous_id::TEXT, session_id::TEXT, NULLIF(CONCAT_WS('|', ip_address::TEXT, NULLIF(user_agent, '')), ''))";
@@ -865,6 +880,14 @@ export async function getDashboardData({
             ('channel:스레드'),
             ('channel:검색'),
             ('channel:직접유입'),
+            ('screen:home'),
+            ('screen:job_detail'),
+            ('screen:diagnosis'),
+            ('screen:community'),
+            ('screen:my'),
+            ('screen:calendar'),
+            ('screen:login'),
+            ('screen:other'),
             ('banner:total'),
             ('banner:job_detail_bookmark_click'),
             ('banner:job_detail_apply_click'),
@@ -930,6 +953,44 @@ export async function getDashboardData({
             COUNT(*)::TEXT AS count
           FROM daily_channel_visits
           GROUP BY day_kst, channel_label
+        ),
+        screen_visits AS (
+          SELECT DISTINCT ON (
+            (traffic_events.event_at AT TIME ZONE 'Asia/Seoul')::date,
+            traffic_events.visitor_key
+          )
+            (traffic_events.event_at AT TIME ZONE 'Asia/Seoul')::date AS day_kst,
+            traffic_events.visitor_key,
+            CASE
+              WHEN traffic_events.screen_key IN ('home', 'job_detail', 'diagnosis', 'community', 'my', 'calendar', 'login')
+                THEN traffic_events.screen_key
+              WHEN split_part(traffic_events.landing_path, '?', 1) = '/' THEN 'home'
+              WHEN split_part(traffic_events.landing_path, '?', 1) ~ '^/jobs/[^/]+$' THEN 'job_detail'
+              WHEN split_part(traffic_events.landing_path, '?', 1) LIKE '/ai-tools/diagnosis%'
+                OR split_part(traffic_events.landing_path, '?', 1) LIKE '/events/diagnosis%' THEN 'diagnosis'
+              WHEN split_part(traffic_events.landing_path, '?', 1) LIKE '/community%' THEN 'community'
+              WHEN split_part(traffic_events.landing_path, '?', 1) LIKE '/my%' THEN 'my'
+              WHEN split_part(traffic_events.landing_path, '?', 1) LIKE '/calendar%' THEN 'calendar'
+              WHEN split_part(traffic_events.landing_path, '?', 1) LIKE '/login%'
+                OR split_part(traffic_events.landing_path, '?', 1) LIKE '/auth%' THEN 'login'
+              ELSE 'other'
+            END AS screen_key
+          FROM traffic_events
+          WHERE traffic_events.visitor_key IS NOT NULL
+            AND traffic_events.event_at < (SELECT range_end FROM bounds)
+          ORDER BY
+            (traffic_events.event_at AT TIME ZONE 'Asia/Seoul')::date,
+            traffic_events.visitor_key,
+            traffic_events.event_at,
+            traffic_events.id
+        ),
+        screen_counts AS (
+          SELECT
+            day_kst,
+            'screen:' || screen_key AS metric_key,
+            COUNT(*)::TEXT AS count
+          FROM screen_visits
+          GROUP BY day_kst, screen_key
         ),
         raw_banner_events AS (
           SELECT
@@ -1045,6 +1106,8 @@ export async function getDashboardData({
         counts AS (
           SELECT * FROM channel_counts
           UNION ALL
+          SELECT * FROM screen_counts
+          UNION ALL
           SELECT * FROM banner_counts
           UNION ALL
           SELECT * FROM behavior_counts
@@ -1085,6 +1148,14 @@ export async function getDashboardData({
           ('channel:스레드'),
           ('channel:검색'),
           ('channel:직접유입'),
+          ('screen:home'),
+          ('screen:job_detail'),
+          ('screen:diagnosis'),
+          ('screen:community'),
+          ('screen:my'),
+          ('screen:calendar'),
+          ('screen:login'),
+          ('screen:other'),
           ('banner:total'),
           ('banner:job_detail_bookmark_click'),
           ('banner:job_detail_apply_click'),
@@ -1194,6 +1265,45 @@ export async function getDashboardData({
           COUNT(*)::TEXT AS count
         FROM daily_channel_visits
         GROUP BY day_kst, channel_label
+      ),
+      screen_visits AS (
+        SELECT DISTINCT ON (
+          (events.event_at AT TIME ZONE 'Asia/Seoul')::date,
+          events.visitor_key
+        )
+          (events.event_at AT TIME ZONE 'Asia/Seoul')::date AS day_kst,
+          events.visitor_key,
+          CASE
+            WHEN events.screen_key IN ('home', 'job_detail', 'diagnosis', 'community', 'my', 'calendar', 'login')
+              THEN events.screen_key
+            WHEN split_part(events.landing_path, '?', 1) = '/' THEN 'home'
+            WHEN split_part(events.landing_path, '?', 1) ~ '^/jobs/[^/]+$' THEN 'job_detail'
+            WHEN split_part(events.landing_path, '?', 1) LIKE '/ai-tools/diagnosis%'
+              OR split_part(events.landing_path, '?', 1) LIKE '/events/diagnosis%' THEN 'diagnosis'
+            WHEN split_part(events.landing_path, '?', 1) LIKE '/community%' THEN 'community'
+            WHEN split_part(events.landing_path, '?', 1) LIKE '/my%' THEN 'my'
+            WHEN split_part(events.landing_path, '?', 1) LIKE '/calendar%' THEN 'calendar'
+            WHEN split_part(events.landing_path, '?', 1) LIKE '/login%'
+              OR split_part(events.landing_path, '?', 1) LIKE '/auth%' THEN 'login'
+            ELSE 'other'
+          END AS screen_key
+        FROM (${trafficEventsSql}) events, ranges
+        WHERE events.visitor_key IS NOT NULL
+          AND events.event_at >= range_start
+          AND events.event_at < range_end
+        ORDER BY
+          (events.event_at AT TIME ZONE 'Asia/Seoul')::date,
+          events.visitor_key,
+          events.event_at,
+          events.id
+      ),
+      screen_counts AS (
+        SELECT
+          day_kst,
+          'screen:' || screen_key AS metric_key,
+          COUNT(*)::TEXT AS count
+        FROM screen_visits
+        GROUP BY day_kst, screen_key
       ),
       raw_banner_events AS (
         SELECT
@@ -1313,6 +1423,7 @@ export async function getDashboardData({
         UNION ALL SELECT * FROM product_start_counts
         UNION ALL SELECT * FROM product_complete_counts
         UNION ALL SELECT * FROM channel_counts
+        UNION ALL SELECT * FROM screen_counts
         UNION ALL SELECT * FROM banner_counts
         UNION ALL SELECT * FROM behavior_counts
       )
@@ -1925,6 +2036,10 @@ export async function getDashboardData({
       { key: "channel:직접유입", label: "직접유입", color: "#5a6580" },
     ],
   );
+  const screenTrend = createTrendSeries(
+    trafficTrendResult.rows,
+    screenChartDefinitions,
+  );
   const bannerClickTrend = createTrendSeries(
     trafficTrendResult.rows,
     [
@@ -2013,6 +2128,10 @@ export async function getDashboardData({
       { key: "channel:검색", label: "검색", color: "#f5b91e" },
       { key: "channel:직접유입", label: "직접유입", color: "#5a6580" },
     ],
+  );
+  const screenListTrend = createTrendSeries(
+    listTrendResult.rows,
+    screenTrendDefinitions,
   );
   const bannerClickListTrend = createTrendSeries(
     listTrendResult.rows,
@@ -2236,7 +2355,7 @@ export async function getDashboardData({
       count: `${formatCount(numberValue(row.click_count))}건`,
       uniqueCount: `${formatCount(numberValue(row.unique_count))}명`,
       fill: fillPercent(numberValue(row.click_count), maxBannerClickCount),
-      href: createDatedLogHref("/traffic/banner-clicks", {
+      href: createDatedLogHref("/activity-logs", {
         bannerKey: row.banner_key || "unknown",
       }),
     })),
@@ -2250,7 +2369,7 @@ export async function getDashboardData({
         label: screen.label,
         count: `${formatCount(count)}건`,
         fill: fillPercent(count, maxScreenInflowCount),
-        href: createDatedLogHref("/traffic/logs", { screen: screen.key }),
+        href: createDatedLogHref("/activity-logs", { screen: screen.key }),
       };
     }),
     screenInflowTotal: formatCount(totalScreenInflowCount),
@@ -2277,6 +2396,8 @@ export async function getDashboardData({
     productHasVisitStep: selectedProductConfig.hasVisitStep,
     trafficChannelTrend,
     trafficChannelListTrend,
+    screenTrend,
+    screenListTrend,
     bannerClickTrend,
     bannerClickListTrend,
     jobDetailBehaviorTrend,

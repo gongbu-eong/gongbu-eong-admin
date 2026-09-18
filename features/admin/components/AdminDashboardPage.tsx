@@ -87,6 +87,8 @@ export async function AdminDashboardPage({
     visitorSignupListTrend,
     trafficChannelTrend,
     trafficChannelListTrend,
+    screenTrend,
+    screenListTrend,
     bannerClickTrend,
     bannerClickListTrend,
     jobDetailBehaviorTrend,
@@ -108,6 +110,9 @@ export async function AdminDashboardPage({
   const signupCountScale = createChartScale([signupTrend]);
   const trafficChannelScale = createChartScale(
     trafficChannelTrend.map((series) => series.data),
+  );
+  const screenScale = createChartScale(
+    screenTrend.map((series) => series.data),
   );
   const bannerClickScale = createChartScale(
     bannerClickTrend.map((series) => series.data),
@@ -240,9 +245,9 @@ export async function AdminDashboardPage({
           </div>
         </div>
         <div className={styles.channelInsight}>
-          <TrendViewCard
-              className={styles.channelTrendCard}
-              title="유입 채널 순방문자"
+          <div className={styles.channelChartGrid}>
+            <TrendViewCard
+              title="유입 채널 순 방문자 추이"
               subtitle="최근 7일 · 같은 방문자 중복 제외"
               listSubtitle={`목록 · ${dashboardPeriodText}`}
               yLabels={trafficChannelScale.yLabels}
@@ -250,7 +255,18 @@ export async function AdminDashboardPage({
               listSeries={trafficChannelListTrend}
               maxValue={trafficChannelScale.maxValue}
               valueSuffix="명"
-          />
+            />
+            <TrendViewCard
+              title="화면별 순 방문자 추이"
+              subtitle="최근 7일 · 같은 화면 중복 제외"
+              listSubtitle={`목록 · ${dashboardPeriodText}`}
+              yLabels={screenScale.yLabels}
+              series={screenTrend}
+              listSeries={screenListTrend}
+              maxValue={screenScale.maxValue}
+              valueSuffix="명"
+            />
+          </div>
           <div className={styles.channelDetailGrid}>
             <AdminCard className={styles.channelCard}>
               <ChannelList
@@ -270,7 +286,7 @@ export async function AdminDashboardPage({
         </div>
         <div className={styles.trafficPairGrid}>
           <TrendViewCard
-              title="배너·버튼 클릭"
+              title="배너·버튼 클릭 추이"
               subtitle="최근 7일 · 전체 클릭 / 찜 / 지원"
               listSubtitle={`목록 · ${dashboardPeriodText}`}
               yLabels={bannerClickScale.yLabels}
@@ -283,7 +299,7 @@ export async function AdminDashboardPage({
           </AdminCard>
           <TrendViewCard
             className={styles.behaviorTrendCard}
-              title="공고 상세 방문 후 행동"
+              title="공고 상세 방문 후 행동 추이"
               subtitle="최근 7일 · 방문자 / 후속 행동 / 찜 / 지원"
               listSubtitle={`목록 · ${dashboardPeriodText}`}
               yLabels={jobDetailBehaviorScale.yLabels}

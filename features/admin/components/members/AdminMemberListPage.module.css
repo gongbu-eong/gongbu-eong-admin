@@ -324,7 +324,6 @@
   font-weight: 400;
 }
 
-.paidBadge,
 .statusBadge,
 .blockedBadge {
   display: inline-flex;
@@ -337,11 +336,6 @@
   font-style: normal;
   font-weight: 700;
   line-height: normal;
-}
-
-.paidBadge {
-  background: var(--admin-primary-soft);
-  color: var(--admin-primary);
 }
 
 .statusBadge {
