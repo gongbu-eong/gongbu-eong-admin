@@ -115,6 +115,26 @@
   font-weight: 700;
 }
 
+.tableWrap tfoot th,
+.tableWrap tfoot td {
+  position: sticky;
+  bottom: 0;
+  z-index: 1;
+  border-top: 1px solid #cfd9e8;
+  border-bottom: 0;
+  background: #f7faff;
+  color: var(--admin-text);
+  font-weight: 900;
+}
+
+.tableWrap tfoot td span {
+  display: block;
+  margin-top: 3px;
+  color: var(--admin-muted);
+  font-size: 10px;
+  font-weight: 700;
+}
+
 .srOnly {
   position: absolute;
   width: 1px;

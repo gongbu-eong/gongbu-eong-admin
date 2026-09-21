@@ -12,6 +12,18 @@ export function BehaviorPatternList({
   items,
   periodLabel,
 }: BehaviorPatternListProps) {
+  const numberFrom = (value: string) => Number(value.replace(/[^0-9]/g, "")) || 0;
+  const totals = items.reduce(
+    (sum, item) => ({
+      visitors: sum.visitors + numberFrom(item.visitors),
+      activity: sum.activity + numberFrom(item.activity),
+      pageMove: sum.pageMove + numberFrom(item.pageMove),
+      apply: sum.apply + numberFrom(item.apply),
+      revisit: sum.revisit + numberFrom(item.revisit),
+    }),
+    { visitors: 0, activity: 0, pageMove: 0, apply: 0, revisit: 0 },
+  );
+
   return (
     <section className={styles.wrap}>
       <header className={styles.header}>
@@ -52,6 +64,18 @@ export function BehaviorPatternList({
             </MetricLink>
           </div>
         ))}
+        {items.length ? (
+          <div className={styles.tableFooter}>
+            <strong>총계</strong>
+            <strong>{totals.visitors.toLocaleString("ko-KR")}명</strong>
+            <span>
+              <strong>{totals.activity.toLocaleString("ko-KR")}명</strong>
+              <em>페이지 이동 {totals.pageMove.toLocaleString("ko-KR")}건</em>
+            </span>
+            <strong>{totals.apply.toLocaleString("ko-KR")}건</strong>
+            <strong>{totals.revisit.toLocaleString("ko-KR")}명</strong>
+          </div>
+        ) : null}
       </div>
       {!items.length ? (
         <div className={styles.empty}>공고 상세 유입 기록이 없습니다.</div>

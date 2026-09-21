@@ -32,7 +32,8 @@
 }
 
 .tableHeader,
-.tableRow {
+.tableRow,
+.tableFooter {
   display: grid;
   grid-template-columns: minmax(100px, 1fr) minmax(76px, 0.8fr) minmax(128px, 1.3fr) repeat(2, minmax(76px, 0.8fr));
   align-items: center;
@@ -64,6 +65,41 @@
   color: var(--admin-text);
   font-size: 13px;
   text-align: right;
+}
+
+.tableFooter {
+  min-height: 58px;
+  border-top: 1px solid #cfd9e8;
+  background: #f7faff;
+  color: var(--admin-text);
+  font-size: 13px;
+  font-weight: 900;
+  text-align: right;
+}
+
+.tableFooter > strong,
+.tableFooter > span {
+  display: grid;
+  gap: 3px;
+  padding: 0 8px;
+}
+
+.tableFooter > strong:first-child {
+  text-align: left;
+}
+
+.tableFooter span strong {
+  font-size: 13px;
+  line-height: 1;
+}
+
+.tableFooter em {
+  color: var(--admin-muted);
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
 }
 
 .tableRow > strong {

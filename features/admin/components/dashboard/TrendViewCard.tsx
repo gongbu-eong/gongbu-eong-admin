@@ -41,6 +41,19 @@ export function TrendViewCard({
     data: [...item.data].reverse(),
   }));
   const labels = displayListSeries[0]?.data.map((point) => point.label) ?? [];
+  const listTotals = displayListSeries.map((item) => {
+    const isCumulative = item.label === "전체 가입자";
+    const value = isCumulative
+      ? item.data[0]?.value ?? 0
+      : item.data.reduce((sum, point) => sum + point.value, 0);
+
+    return {
+      label: item.label,
+      value,
+      suffix: item.valueSuffix ?? valueSuffix,
+      note: isCumulative ? "기간 종료 기준" : null,
+    };
+  });
 
   return (
     <AdminCard className={`${styles.card} ${className}`}>
@@ -107,6 +120,17 @@ export function TrendViewCard({
                 </tr>
               ))}
             </tbody>
+            <tfoot>
+              <tr>
+                <th scope="row">합계</th>
+                {listTotals.map((item) => (
+                  <td key={`${item.label}-total`}>
+                    <strong>{formatValue(item.value, item.suffix)}</strong>
+                    {item.note ? <span>{item.note}</span> : null}
+                  </td>
+                ))}
+              </tr>
+            </tfoot>
           </table>
         </div>
       )}
