@@ -432,7 +432,7 @@ async function getDashboardFacts(
       throw error;
     });
 
-  dashboardFactsCache.set(key, { expiresAt: Date.now() + 15_000, pending });
+  dashboardFactsCache.set(key, { expiresAt: Date.now() + 60_000, pending });
   return pending;
 }
 

@@ -40,6 +40,29 @@
   line-height: 16px;
 }
 
+.legendButton {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  border: 0;
+  padding: 0;
+  color: inherit;
+  font: inherit;
+  background: transparent;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.legendButton:hover {
+  color: var(--admin-text);
+}
+
+.legendHidden {
+  text-decoration: line-through;
+  text-decoration-thickness: 1px;
+  opacity: 0.55;
+}
+
 .legends span {
   display: flex;
   align-items: center;
@@ -60,6 +83,15 @@
   right: 24px;
   top: 106px;
   min-width: 0;
+}
+
+.emptyChart {
+  position: absolute;
+  inset: 76px 0 0;
+  display: grid;
+  place-items: center;
+  color: var(--admin-muted);
+  font-size: 13px;
 }
 
 .compactChart {

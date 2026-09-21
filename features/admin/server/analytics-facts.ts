@@ -68,6 +68,12 @@ export function trafficFactsCtes(start: string, end: string) {
       FROM public.product_events e
       WHERE e.created_at >= (${start}) - interval '30 days' - interval '30 minutes'
         AND e.created_at < (${end})
+        AND (
+          e.event_type IN ('banner_click', 'job_detail_bookmark_click', 'job_detail_apply_click')
+          OR e.event_type LIKE '%click'
+          OR e.event_type LIKE '%start'
+          OR e.event_type LIKE '%complete'
+        )
         AND ${excludedEventCondition("e.user_id", "NULLIF(e.properties->>'ip_address', '')")}
     ),
     analytics_daily_users AS MATERIALIZED (

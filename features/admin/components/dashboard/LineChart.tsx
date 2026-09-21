@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  useEffect,
   useMemo,
   useRef,
   useState,
@@ -86,11 +87,22 @@ export function LineChart({
   const [selectedPoint, setSelectedPoint] = useState<SelectedPointGroup | null>(
     null,
   );
-  const xLabels = series[0]?.data.map((point) => point.label) ?? [];
-  const showStaticLabels = series.length === 1;
+  const [visibleSeries, setVisibleSeries] = useState(() =>
+    series.map(() => true),
+  );
+  const seriesSignature = series
+    .map((item) => `${item.label || ""}:${item.color}`)
+    .join("|");
+  useEffect(() => {
+    setVisibleSeries(series.map(() => true));
+    setSelectedPoint(null);
+  }, [seriesSignature]);
+  const activeSeries = series.filter((_, index) => visibleSeries[index] !== false);
+  const xLabels = activeSeries[0]?.data.map((point) => point.label) ?? [];
+  const showStaticLabels = activeSeries.length === 1;
   const plottedSeries = useMemo(
     () =>
-      series.map((item, seriesIndex) => {
+      activeSeries.map((item, seriesIndex) => {
         const points = item.data.map((point, index) => ({
           ...toPoint(point, index, Math.max(maxValue, 1), xLabels.length),
           source: point,
@@ -104,7 +116,7 @@ export function LineChart({
 
         return { ...item, points, d };
       }),
-    [series, maxValue, xLabels.length],
+    [activeSeries, maxValue, xLabels.length],
   );
   const selectPointGroup = (
     index: number,
@@ -118,7 +130,7 @@ export function LineChart({
         activeSeriesIndex,
         x,
         y,
-        items: series.map((item, seriesIndex) => ({
+        items: activeSeries.map((item, seriesIndex) => ({
           label: item.label || legends?.[seriesIndex]?.label || title,
           value: item.data[index]?.value || 0,
           color: item.color,
@@ -203,11 +215,24 @@ export function LineChart({
       ) : null}
       {legends ? (
         <div className={styles.legends}>
-          {legends.map((legend) => (
-            <span key={legend.label}>
+          {legends.map((legend, index) => (
+            <button
+              type="button"
+              className={`${styles.legendButton} ${visibleSeries[index] === false ? styles.legendHidden : ""}`}
+              key={legend.label}
+              aria-pressed={visibleSeries[index] !== false}
+              onClick={() => {
+                setSelectedPoint(null);
+                setVisibleSeries((current) =>
+                  current.map((isVisible, currentIndex) =>
+                    currentIndex === index ? !isVisible : isVisible,
+                  ),
+                );
+              }}
+            >
               <i style={{ backgroundColor: legend.color }} />
               {legend.label}
-            </span>
+            </button>
           ))}
         </div>
       ) : null}
@@ -215,7 +240,10 @@ export function LineChart({
         className={`${styles.chart} ${hideHeader ? styles.compactChart : ""}`}
         style={{ height: chartHeight }}
         onMouseLeave={() => setSelectedPoint(null)}
-      >
+        >
+        {!activeSeries.length ? (
+          <div className={styles.emptyChart}>표시할 그래프가 없습니다.</div>
+        ) : null}
         <svg
           ref={svgRef}
           className={styles.svg}
@@ -343,7 +371,7 @@ export function LineChart({
                     {item.label}
                   </span>
                   <span className={styles.tooltipValue}>
-                    {formatChartValue(item.value, series[item.seriesIndex]?.valueSuffix ?? valueSuffix)}
+                    {formatChartValue(item.value, activeSeries[item.seriesIndex]?.valueSuffix ?? valueSuffix)}
                   </span>
                 </span>
               ))}
