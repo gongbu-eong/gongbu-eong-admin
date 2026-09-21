@@ -370,11 +370,10 @@ export async function getActivityLogData(args?: ActivityLogQuery): Promise<Activ
       UNION ALL
       SELECT
         events.id::text,
-        CASE
-          WHEN events.properties->>'client_occurred_at' ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}T'
-            THEN (events.properties->>'client_occurred_at')::timestamptz
-          ELSE events.created_at
-        END,
+        -- Activity logs from different collectors must share one clock.
+        -- Use the server persistence time so a page visit and the following
+        -- product event cannot be reordered by client clock/network delay.
+        events.created_at,
         events.event_type,
         'product'::text,
         events.user_id,
