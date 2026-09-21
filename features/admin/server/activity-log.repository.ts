@@ -1,4 +1,4 @@
-import { trafficFactsCtes, screenSql } from "./analytics-facts";
+import { screenSql } from "./analytics-facts";
 import { query } from "@/features/admin/server/db";
 import {
   ensureAnalyticsExclusionSchema,
@@ -61,6 +61,7 @@ type ActivityLogDbRow = {
   user_agent: string | null;
   path: string | null;
   detail: string | null;
+  total_count: string;
 };
 
 const pageSize = 40;
@@ -71,6 +72,10 @@ function dateValue(value: string | undefined, fallback: string) {
 
 function normalizeIp(value: string | undefined) {
   return (value || "").trim().split("/")[0] || "";
+}
+
+function isIpSearch(value: string) {
+  return /^[0-9a-f:.]+(?:\/\d+)?$/i.test(value) && (value.includes(".") || value.includes(":"));
 }
 
 function getDeviceLabel(userAgent: string | null) {
@@ -112,10 +117,15 @@ function formatEvent(value: string | null) {
   const labels: Record<string, string> = {
     page_view: "방문",
     screen_click: "화면 요소 클릭",
+    screen_change: "화면 입력·변경",
+    screen_submit: "화면 제출",
+    community_post_view: "커뮤니티 글 열람",
     banner_impression: "배너 노출",
     banner_click: "배너·버튼 클릭",
     bookmark_click: "찜 클릭",
     apply_click: "지원 클릭",
+    api_action: "기능 실행",
+    api_data_view: "내부 데이터 조회",
     job_detail_apply_click: "공고 지원 클릭",
     job_detail_bookmark_click: "공고 찜 클릭",
     diagnosis_start: "진단 시작",
@@ -131,12 +141,13 @@ function formatEvent(value: string | null) {
 
 export async function getActivityLogData(args?: ActivityLogQuery): Promise<ActivityLogData> {
   const { startDate, endDate } = defaultDates(args);
-  const requestedEvent = args?.event || "all";
+  const requestedEvent = args?.event || "activity";
   const event = requestedEvent === "page_view" ? "visit" : requestedEvent;
   const screen = args?.screen === "coaching" ? "resume_coaching" : args?.screen || "all";
   const bannerKey = args?.bannerKey || "";
   const keyword = (args?.keyword || "").trim();
   const ip = normalizeIp(args?.ip);
+  const keywordIp = isIpSearch(keyword) ? normalizeIp(keyword) : "";
   const channel = args?.channel || "all";
   const from = args?.from || "";
   const uniqueOnly = args?.unique === "1";
@@ -146,7 +157,7 @@ export async function getActivityLogData(args?: ActivityLogQuery): Promise<Activ
   await ensureAnalyticsExclusionSchema();
 
   const eventsSql = `
-    WITH ${trafficFactsCtes("($1::date::timestamp AT TIME ZONE 'Asia/Seoul')", "(($2::date + 1)::timestamp AT TIME ZONE 'Asia/Seoul')")}, raw_events AS (
+    WITH raw_events AS (
       SELECT
         access.id::text AS id,
         access.created_at AS event_at,
@@ -157,7 +168,7 @@ export async function getActivityLogData(args?: ActivityLogQuery): Promise<Activ
         access.session_id,
         SPLIT_PART(access.ip_address::text, '/', 1) AS ip_address,
         access.user_agent,
-        access.anonymous_id::text AS visitor_key,
+        COALESCE(access.user_id::text, access.anonymous_id::text) AS visitor_key,
         access.path AS path,
         COALESCE(
           NULLIF(access.traffic_channel, ''),
@@ -170,7 +181,8 @@ export async function getActivityLogData(args?: ActivityLogQuery): Promise<Activ
           'direct'
         ) AS source_value,
         COALESCE(access.title, access.screen_key, access.traffic_channel, access.referrer) AS detail,
-        COALESCE(NULLIF(access.screen_key, ''), access.metadata->>'screenKey') AS screen_key
+        COALESCE(NULLIF(access.screen_key, ''), access.metadata->>'screenKey') AS screen_key,
+        NULL::text AS banner_key
       FROM public.access_logs access
       WHERE access.created_at >= ($1::date AT TIME ZONE 'Asia/Seoul')
         AND access.created_at < (($2::date + 1) AT TIME ZONE 'Asia/Seoul')
@@ -178,7 +190,11 @@ export async function getActivityLogData(args?: ActivityLogQuery): Promise<Activ
       UNION ALL
       SELECT
         events.id::text,
-        events.created_at,
+        CASE
+          WHEN events.properties->>'client_occurred_at' ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}T'
+            THEN (events.properties->>'client_occurred_at')::timestamptz
+          ELSE events.created_at
+        END,
         events.event_type,
         'product'::text,
         events.user_id,
@@ -193,8 +209,19 @@ export async function getActivityLogData(args?: ActivityLogQuery): Promise<Activ
         ),
         COALESCE(events.properties->>'path', events.properties->>'screenKey', events.properties->>'targetPath'),
         COALESCE(NULLIF(events.properties->>'traffic_channel', ''), NULLIF(events.properties->>'source', ''), 'direct'),
-        COALESCE(events.properties->>'banner_name', events.properties->>'title', events.properties::text),
-        events.properties->>'screenKey'
+        COALESCE(
+          NULLIF(events.properties->>'banner_name', ''),
+          NULLIF(events.properties->>'element_text', ''),
+          NULLIF(events.properties->>'api_path', ''),
+          NULLIF(events.properties->>'targetPath', ''),
+          NULLIF(events.properties->>'title', ''),
+          events.event_type
+        ),
+        events.properties->>'screenKey',
+        CASE
+          WHEN events.event_type = 'banner_click' THEN NULLIF(events.properties->>'banner_key', '')
+          WHEN events.event_type IN ('job_detail_bookmark_click', 'job_detail_apply_click') THEN events.event_type
+        END
       FROM public.product_events events
       WHERE events.created_at >= ($1::date AT TIME ZONE 'Asia/Seoul')
         AND events.created_at < (($2::date + 1) AT TIME ZONE 'Asia/Seoul')
@@ -214,6 +241,7 @@ export async function getActivityLogData(args?: ActivityLogQuery): Promise<Activ
         events.landing_path,
         COALESCE(events.source, events.medium, events.campaign, events.referrer),
         COALESCE(events.source, events.medium, events.campaign, events.referrer),
+        NULL::text,
         NULL::text
       FROM public.attribution_events events
       WHERE events.created_at >= ($1::date AT TIME ZONE 'Asia/Seoul')
@@ -234,7 +262,8 @@ export async function getActivityLogData(args?: ActivityLogQuery): Promise<Activ
         '/login',
         'login',
         COALESCE(events.provider::text, events.failure_reason),
-        'login'
+        'login',
+        NULL::text
       FROM public.auth_login_events events
       WHERE events.created_at >= ($1::date AT TIME ZONE 'Asia/Seoul')
         AND events.created_at < (($2::date + 1) AT TIME ZONE 'Asia/Seoul')
@@ -254,11 +283,22 @@ export async function getActivityLogData(args?: ActivityLogQuery): Promise<Activ
         events.landing_path,
         COALESCE(events.campaign_source, events.campaign_medium, events.campaign_name),
         COALESCE(events.campaign_source, events.campaign_medium, events.campaign_name),
+        NULL::text,
         NULL::text
       FROM public.user_entry_events events
       WHERE events.created_at >= ($1::date AT TIME ZONE 'Asia/Seoul')
         AND events.created_at < (($2::date + 1) AT TIME ZONE 'Asia/Seoul')
         AND ${excludedEventCondition("events.user_id", "events.ip_address")}
+    ), daily_channels AS (
+      SELECT DISTINCT ON ((event_at AT TIME ZONE 'Asia/Seoul')::date, visitor_key)
+        (event_at AT TIME ZONE 'Asia/Seoul')::date AS day,
+        visitor_key,
+        source_value
+      FROM raw_events
+      WHERE event_source = 'access'
+        AND event_type = 'page_view'
+        AND visitor_key IS NOT NULL
+      ORDER BY (event_at AT TIME ZONE 'Asia/Seoul')::date, visitor_key, event_at, id
     ), normalized AS (
       SELECT
         raw_events.*,
@@ -266,55 +306,66 @@ export async function getActivityLogData(args?: ActivityLogQuery): Promise<Activ
         users.display_name,
         users.email::text AS email,
         COALESCE(raw_events.anonymous_id::text, raw_events.session_id::text) AS identity,
-        ${screenSql("split_part(raw_events.path, '?', 1)") } AS normalized_screen_key
+        ${screenSql("split_part(raw_events.path, '?', 1)") } AS normalized_screen_key,
+        CASE
+          WHEN COALESCE(daily_channels.source_value, raw_events.source_value) IN ('블로그', 'blog') OR COALESCE(daily_channels.source_value, raw_events.source_value) ILIKE '%blog%' THEN 'blog'
+          WHEN COALESCE(daily_channels.source_value, raw_events.source_value) IN ('인스타그램', 'instagram') OR COALESCE(daily_channels.source_value, raw_events.source_value) ILIKE '%instagram%' THEN 'instagram'
+          WHEN COALESCE(daily_channels.source_value, raw_events.source_value) IN ('스레드', 'threads') OR COALESCE(daily_channels.source_value, raw_events.source_value) ILIKE '%thread%' THEN 'threads'
+          WHEN COALESCE(daily_channels.source_value, raw_events.source_value) IN ('검색', 'search') OR COALESCE(daily_channels.source_value, raw_events.source_value) ILIKE '%google%' OR COALESCE(daily_channels.source_value, raw_events.source_value) ILIKE '%naver%' OR COALESCE(daily_channels.source_value, raw_events.source_value) ILIKE '%daum%' THEN 'search'
+          ELSE 'direct'
+        END AS acquisition_channel
       FROM raw_events
       LEFT JOIN public.users users ON users.id = raw_events.user_id
-    ), enriched AS (
-      SELECT normalized.*, CASE COALESCE(u.channel, p.channel)
-        WHEN '블로그' THEN 'blog' WHEN '인스타그램' THEN 'instagram'
-        WHEN '스레드' THEN 'threads' WHEN '검색' THEN 'search' ELSE 'direct' END AS acquisition_channel
-      FROM normalized
-      LEFT JOIN analytics_daily_users u ON u.visitor_key = normalized.anonymous_id::text
-        AND u.day = (normalized.event_at AT TIME ZONE 'Asia/Seoul')::date
-      LEFT JOIN analytics_pages p ON normalized.event_source = 'access' AND p.id = normalized.id
+      LEFT JOIN daily_channels
+        ON daily_channels.day = (raw_events.event_at AT TIME ZONE 'Asia/Seoul')::date
+        AND daily_channels.visitor_key = raw_events.visitor_key
     )
   `;
   const whereSql = `
-    WHERE ($3::text = 'all' OR
+    WHERE ($3::text = 'activity' AND (
+      (event_source = 'access' AND event_type = 'page_view') OR
+      (event_source = 'product' AND event_type NOT IN ('api_data_view', 'api_action', 'banner_impression', 'attribution_capture', 'entry')) OR
+      event_source = 'auth'
+    ) OR $3::text = 'all' OR
       ($3::text = 'visit' AND event_source = 'access' AND event_type = 'page_view') OR
-      ($3::text = 'product' AND event_type NOT IN ('page_view', 'attribution_capture', 'entry', 'login_success', 'login_failed')) OR
+      ($3::text = 'product' AND event_source = 'product' AND event_type NOT IN ('page_view', 'api_data_view', 'api_action', 'banner_impression', 'attribution_capture', 'entry', 'login_success', 'login_failed')) OR
       ($3::text = 'attribution' AND event_type = 'attribution_capture') OR
       ($3::text = 'login' AND event_type LIKE 'login_%') OR
       ($3::text = 'entry' AND event_type = 'entry'))
     AND ($4::text = 'all' OR normalized_screen_key = $4::text OR ($4::text = 'ai_tools' AND path LIKE '/ai-tools%'))
     AND ($5::text = 'all' OR acquisition_channel = $5::text)
-    AND (
+    AND ${keywordIp ? "($9::text <> '' AND ip_address = $9::text)" : `($9::text = '' AND (
       $6::text = '' OR path ILIKE $6::text OR detail ILIKE $6::text OR
       ip_address ILIKE $6::text OR identity ILIKE $6::text OR
       nickname ILIKE $6::text OR display_name ILIKE $6::text OR email ILIKE $6::text
-    )
+    ))`}
     AND ($7::text = '' OR ip_address = $7::text)
-    AND ($8::text = '' OR (event_source = 'product' AND EXISTS (
-      SELECT 1 FROM analytics_products p WHERE p.id = enriched.id AND p.banner_key = $8::text
-    )))
+    AND ($8::text = '' OR (event_source = 'product' AND banner_key = $8::text))
   `;
-  const baseParams = [startDate, endDate, event, screen, channel, pattern, ip, bannerKey];
+  const baseParams = [startDate, endDate, event, screen, channel, pattern, ip, bannerKey, keywordIp];
   const sourceSql = uniqueOnly
-    ? `${eventsSql}, filtered AS (
-        SELECT enriched.*,
-          ROW_NUMBER() OVER (PARTITION BY (event_at AT TIME ZONE 'Asia/Seoul')::date, anonymous_id ORDER BY event_at ASC, id ASC) AS visitor_rank
-        FROM enriched
-        ${whereSql} AND anonymous_id IS NOT NULL
+      ? `${eventsSql}, filtered AS (
+        SELECT normalized.*,
+          ROW_NUMBER() OVER (
+            PARTITION BY (event_at AT TIME ZONE 'Asia/Seoul')::date,
+              COALESCE(anonymous_id::text, user_id::text, session_id::text, ip_address)
+            ORDER BY event_at ASC, id ASC
+          ) AS visitor_rank
+        FROM normalized
+        ${whereSql} AND COALESCE(anonymous_id::text, user_id::text, session_id::text, ip_address) IS NOT NULL
       )`
     : eventsSql;
   const rowsSource = uniqueOnly
     ? "filtered WHERE visitor_rank = 1"
-    : `enriched ${whereSql}`;
-  const [countResult, rowsResult] = await Promise.all([
-    query<{ count: string }>(`${sourceSql} SELECT COUNT(*)::text AS count FROM ${uniqueOnly ? "filtered WHERE visitor_rank = 1" : `enriched ${whereSql}`}`, baseParams),
-    query<ActivityLogDbRow>(`${sourceSql} SELECT id, event_at, event_type, COALESCE(nickname, display_name) AS user_name, email AS user_email, anonymous_id, session_id, ip_address, user_agent, path, detail FROM ${rowsSource} ORDER BY event_at DESC, id DESC LIMIT $9 OFFSET $10`, [...baseParams, pageSize, offset]),
-  ]);
-  const totalCount = Number(countResult.rows[0]?.count || 0);
+    : `normalized ${whereSql}`;
+  const rowsResult = await query<ActivityLogDbRow>(`${sourceSql}
+    SELECT id, event_at, event_type, COALESCE(nickname, display_name) AS user_name,
+      email AS user_email, anonymous_id, session_id, ip_address, user_agent, path, detail,
+      COUNT(*) OVER()::text AS total_count
+    FROM ${rowsSource}
+    ORDER BY event_at DESC, id DESC
+    LIMIT $10 OFFSET $11`, [...baseParams, pageSize, offset]);
+  const totalCount = Number(rowsResult.rows[0]?.total_count || 0);
 
   return {
     startDate,

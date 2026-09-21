@@ -5,7 +5,8 @@ import { getActivityLogData, ActivityLogQuery } from "@/features/admin/server/ac
 import styles from "@/features/admin/components/traffic/TrafficLogsPage.module.css";
 
 const eventOptions = [
-  ["all", "전체 방문·이벤트"],
+  ["activity", "사용자 활동"],
+  ["all", "원본 전체"],
   ["visit", "방문"],
   ["product", "기능·버튼 이벤트"],
   ["attribution", "유입 기록"],
@@ -63,7 +64,7 @@ export async function ActivityLogsPage({ filters }: ActivityLogsPageProps) {
     <AdminLayout
       activeNav="activity-logs"
       title="방문·이벤트 로그"
-      description="가입자와 비회원의 방문·유입·기능 이용 이력을 시간순으로 확인합니다."
+      description="가입자와 비회원의 방문 및 실제 사용자 행동을 시간순으로 확인합니다."
       headerActions={
         <form className={styles.headerFilters} action="/activity-logs">
           <label className={styles.headerDateField}>
@@ -106,9 +107,9 @@ export async function ActivityLogsPage({ filters }: ActivityLogsPageProps) {
         <AdminCard className={styles.tableCard}>
           <div className={styles.tableTop}>
             <div>
-              <h2>{data.event === "visit" ? "방문 이력" : data.event === "all" ? "전체 방문·이벤트 이력" : "이벤트 이력"}</h2>
+              <h2>{data.event === "visit" ? "방문 이력" : data.event === "activity" ? "사용자 활동 이력" : data.event === "all" ? "원본 전체 방문·이벤트 이력" : "이벤트 이력"}</h2>
               {data.bannerKey ? <p>선택한 배너·버튼의 실제 클릭만 조회 중</p> : null}
-              <p>총 <strong>{formatCount(data.totalCount)}</strong>건 · {data.uniqueOnly ? "순 방문자 기준 · " : "원본 이벤트 기준 · "}비회원은 IP와 익명 식별자로 확인합니다.{data.ip ? ` · ${data.ip} 로그만 조회 중` : ""}</p>
+              <p>총 <strong>{formatCount(data.totalCount)}</strong>건 · {data.uniqueOnly ? "순 방문자 기준 · " : data.event === "activity" ? "방문·사용자 행동 기준 · " : "원본 이벤트 기준 · "}비회원은 IP와 익명 식별자로 확인합니다.{data.ip ? ` · ${data.ip} 로그만 조회 중` : ""}</p>
             </div>
             <span className={styles.tableActions}>
               {data.ip ? <Link className={styles.backButtonSecondary} href={makeHref(data, 1, "")}>전체 IP 보기</Link> : null}
