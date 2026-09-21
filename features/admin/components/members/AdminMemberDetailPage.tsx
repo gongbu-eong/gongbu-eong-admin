@@ -174,8 +174,17 @@ export async function AdminMemberDetailPage({ userId, activeTab, selectedItem }:
       ) : null}
 
       {tab === "logs" ? (
-        <ActivitySection title="전체 활동 로그" description="가입 전후의 페이지 방문, 로그인, 유입, 기능 이용 이력을 시간순으로 표시합니다.">
-          <DataTable columns={["시간", "주체", "이벤트", "대상", "상세"]} rows={data.logs.map((item) => [item.occurredAt, item.actor, item.kind, item.target, item.detail || "-"])} />
+        <ActivitySection title="방문·이벤트 로그" description="전체 기간 · 방문·이벤트 로그의 사용자 활동 기준과 동일하게 최신순 표시합니다.">
+          <DataTable columns={["접속일시", "이벤트", "주체", "식별 정보", "IP", "기기", "대상", "상세"]} rows={data.logs.map((item) => [
+            item.eventAt,
+            item.event,
+            item.userEmail ? `${item.userName} · ${item.userEmail}` : item.userName,
+            item.identity,
+            item.ipAddress,
+            item.device,
+            item.path,
+            item.detail,
+          ])} />
         </ActivitySection>
       ) : null}
 

@@ -1,4 +1,5 @@
 import { query } from "@/features/admin/server/db";
+import { getActivityLogData, type ActivityLogRow } from "@/features/admin/server/activity-log.repository";
 
 export type MemberStatusFilter = "all" | "active" | "blocked";
 export type MemberChannelFilter =
@@ -100,15 +101,6 @@ export type MemberCommunityActivity = {
   href: string;
 };
 
-export type MemberLog = {
-  id: string;
-  actor: string;
-  kind: string;
-  target: string;
-  detail: string;
-  occurredAt: string;
-};
-
 export type MemberListData = {
   metrics: MemberMetric[];
   members: MemberSummary[];
@@ -128,7 +120,7 @@ export type MemberDetailData = {
   resumeCoachings: MemberResumeCoaching[];
   interviewCoachings: MemberInterviewCoaching[];
   community: MemberCommunityActivity[];
-  logs: MemberLog[];
+  logs: ActivityLogRow[];
 };
 
 type MemberRow = {
@@ -204,15 +196,6 @@ type InterviewCoachingRow = {
   material_filename: string | null;
   material_file_available: boolean | null;
   detail: unknown;
-};
-
-type LogRow = {
-  id: string;
-  actor: string | null;
-  kind: string | null;
-  target: string | null;
-  detail: string | null;
-  occurred_at: string | Date | null;
 };
 
 const pageSize = 10;
@@ -312,6 +295,7 @@ function formatDateTime(value: string | Date | null | undefined) {
     day: "numeric",
     hour: "2-digit",
     minute: "2-digit",
+    second: "2-digit",
     hour12: false,
   }).format(date);
 }
@@ -361,101 +345,6 @@ function formatCommunityStatus(value: string | null) {
   if (value === "hidden") return "숨김";
   if (value === "deleted") return "삭제";
   return value || "-";
-}
-
-function formatKind(value: string | null) {
-  if (!value) return "-";
-  const labels: Record<string, string> = {
-    attribution_capture: "방문",
-    entry: "최초 진입",
-    page_view: "페이지 방문",
-    screen_click: "화면 요소 클릭",
-    banner_impression: "배너 노출",
-    diagnosis_start: "진단 시작",
-    diagnosis_complete: "진단 완료",
-    diagnosis_result_view: "진단 결과 열람",
-    login_success: "로그인 성공",
-    login_failed: "로그인 실패",
-    signup: "회원 가입",
-    bookmark_click: "찜 클릭",
-    apply_click: "지원 클릭",
-    community_post: "게시글 작성",
-    community_comment: "댓글 작성",
-    community_reply: "대댓글 작성",
-  };
-
-  if (labels[value]) return labels[value];
-  if (value.includes("resume_coaching")) return "자소서 코칭";
-  if (value.includes("interview_coaching")) return "면접 코칭";
-  if (value.includes("share")) return "공유";
-  return value;
-}
-
-function formatTarget(value: string | null, kind?: string | null) {
-  if (kind === "diagnosis_complete" || kind === "diagnosis_result_view") {
-    return "강점·성향 진단 결과";
-  }
-  if (kind?.includes("resume_coaching")) return "AI NCS 자소서 코칭";
-  if (kind?.includes("interview_coaching")) return "AI NCS 면접 코칭";
-  if (!value) return "-";
-  if (value === "home" || value === "/home" || value === "/") return "메인";
-  if (value === "diagnosis_result_view") return "강점·성향 진단 결과";
-  if (value.includes("diagnosis/result")) return "강점·성향 진단 결과";
-  if (value.includes("diagnosis")) return "강점·성향 진단";
-  if (value.includes("coaching")) return "AI NCS 자소서 코칭";
-  if (value.includes("community")) return "커뮤니티";
-  if (value.includes("jobs")) return "채용공고";
-  if (value === "/") return "메인";
-  return value;
-}
-
-function shortenLogText(value: string, maxLength = 96) {
-  const normalized = value.replace(/\s+/g, " ").trim();
-  return normalized.length > maxLength
-    ? `${normalized.slice(0, maxLength - 1)}…`
-    : normalized;
-}
-
-function formatLogDetail(kind: string | null, target: string | null, detail: string | null) {
-  if (!detail) return "-";
-
-  try {
-    const parsed = JSON.parse(detail) as Record<string, unknown>;
-    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
-      const getText = (...keys: string[]) => {
-        for (const key of keys) {
-          const value = parsed[key];
-          if (typeof value === "string" && value.trim()) return value;
-        }
-        return "";
-      };
-
-      if (kind === "screen_click") {
-        const elementText = getText("element_text", "banner_name", "button_text");
-        return elementText ? `클릭: ${shortenLogText(elementText)}` : "화면 요소 클릭";
-      }
-
-      if (kind === "banner_impression") {
-        const bannerName = getText("banner_name", "element_text");
-        return bannerName ? `배너: ${shortenLogText(bannerName)}` : "배너 노출";
-      }
-
-      if (kind === "attribution_capture" || kind === "entry") {
-        const channel = getText("traffic_channel", "source", "medium", "campaign");
-        return channel ? `유입: ${shortenLogText(channel)}` : "유입 기록";
-      }
-
-      const title = getText("title", "job_title", "screen_name");
-      if (title) return shortenLogText(title);
-
-      if (target) return formatTarget(target, kind);
-      return "이벤트 기록";
-    }
-  } catch {
-    // 기존 문자열 상세 값은 아래에서 정제해 표시한다.
-  }
-
-  return shortenLogText(detail);
 }
 
 function maskEmail(value: string | null) {
@@ -757,7 +646,6 @@ export async function getMemberDetailData(
     resumeCoachingResult,
     communityResult,
     interviewCoachingResult,
-    logResult,
   ] = await Promise.all([
     query<DiagnosisRow>(
       `
@@ -862,93 +750,14 @@ export async function getMemberDetailData(
       `,
       [memberRow.id],
     ),
-    query<LogRow>(
-      `
-        SELECT *
-        FROM (
-          SELECT
-            users.id::text AS id,
-            '시스템' AS actor,
-            'signup' AS kind,
-            '/signup' AS target,
-            users.email::text AS detail,
-            COALESCE(users.signup_completed_at, users.created_at) AS occurred_at
-          FROM public.users users
-          WHERE users.id = $1::uuid
-          UNION ALL
-          SELECT id::text, '사용자', CASE WHEN success THEN 'login_success' ELSE 'login_failed' END,
-            COALESCE(entry_source::text, 'login'), COALESCE(failure_reason, provider::text), created_at
-          FROM public.auth_login_events
-          WHERE user_id = $1::uuid
-          UNION ALL
-          SELECT id::text, '사용자', event_name, COALESCE(canonical_path, path),
-            COALESCE(title, screen_key, traffic_channel), created_at
-          FROM public.access_logs
-          WHERE user_id = $1::uuid
-          UNION ALL
-          SELECT id::text, '사용자', 'entry', COALESCE(landing_path, entry_source::text),
-            campaign_source, created_at
-          FROM public.user_entry_events
-          WHERE user_id = $1::uuid
-          UNION ALL
-          SELECT
-            id::text,
-            '시스템' AS actor,
-            event_name AS kind,
-            COALESCE(landing_path, landing_url, referrer) AS target,
-            COALESCE(source, medium, campaign) AS detail,
-            created_at AS occurred_at
-          FROM public.attribution_events
-          WHERE user_id = $1::uuid
-          UNION ALL
-          SELECT
-            id::text,
-            '시스템' AS actor,
-            event_type AS kind,
-            COALESCE(
-              properties->>'path',
-              properties->>'title',
-              diagnosis_result_id::TEXT,
-              diagnosis_run_id::TEXT
-            ) AS target,
-            properties::text AS detail,
-            created_at AS occurred_at
-          FROM public.product_events
-          WHERE user_id = $1::uuid
-          UNION ALL
-          SELECT results.id::text, '시스템', 'diagnosis_complete', results.id::text,
-            COALESCE(results.summary, types.name), results.created_at
-          FROM public.diagnosis_results results
-          LEFT JOIN public.personality_types types ON types.id = results.personality_type_id
-          WHERE results.user_id = $1::uuid
-          UNION ALL
-          SELECT results.id::text, '시스템', 'resume_coaching_complete', results.id::text,
-            requests.source_filename, results.created_at
-          FROM public.resume_coaching_results results
-          JOIN public.resume_coaching_requests requests ON requests.id = results.request_id
-          WHERE requests.user_id = $1::uuid
-          UNION ALL
-          SELECT sessions.id::text, '시스템', 'interview_coaching', sessions.id::text,
-            COALESCE(sessions.position_name, sessions.company_name), sessions.started_at
-          FROM public.interview_coaching_sessions sessions
-          WHERE sessions.user_id = $1::uuid
-          UNION ALL
-          SELECT posts.id::text, '사용자', 'community_post', posts.id::text,
-            posts.title, posts.created_at
-          FROM public.community_posts posts
-          WHERE posts.user_id = $1::uuid
-          UNION ALL
-          SELECT comments.id::text, '사용자',
-            CASE WHEN comments.parent_comment_id IS NULL THEN 'community_comment' ELSE 'community_reply' END,
-            comments.post_id::text, comments.content, comments.created_at
-          FROM public.community_comments comments
-          WHERE comments.user_id = $1::uuid
-        ) logs
-        ORDER BY occurred_at DESC, id DESC
-      `,
-      [memberRow.id],
-    ),
   ]);
+
+  const activityLogResult = await getActivityLogData({
+    userId: memberRow.id,
+    allDates: true,
+    event: "activity",
+    limit: 10000,
+  });
 
   return {
     member: toMemberSummary(memberRow),
@@ -990,14 +799,7 @@ export async function getMemberDetailData(
       status: formatCommunityStatus(row.status),
       href: `/community/${row.post_id}${row.kind === "게시글" ? "" : `#comment-${row.id}`}`,
     })),
-    logs: logResult.rows.map((row) => ({
-      id: row.id,
-      actor: row.actor || "시스템",
-      kind: formatKind(row.kind),
-      target: formatTarget(row.target, row.kind),
-      detail: formatLogDetail(row.kind, row.target, row.detail),
-      occurredAt: formatDateTime(row.occurred_at),
-    })),
+    logs: activityLogResult.rows,
   };
 }
 

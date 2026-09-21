@@ -128,7 +128,7 @@ export async function ActivityLogsPage({ filters }: ActivityLogsPageProps) {
           </div>
           <div className={styles.tableWrap}>
             <table className={styles.table}>
-              <thead><tr><th>접속일시</th><th>이벤트</th><th>사용자</th><th>식별 정보</th><th>IP</th><th>기기</th><th>경로</th><th>상세</th></tr></thead>
+              <thead><tr><th>접속일시</th><th>이벤트</th><th>주체</th><th>식별 정보</th><th>IP</th><th>기기</th><th>대상</th><th>상세</th></tr></thead>
               <tbody>{data.rows.length ? data.rows.map((row) => (
                 <tr key={row.id}>
                   <td>{row.eventAt}</td><td>{row.event}</td>
