@@ -196,9 +196,27 @@
   width: 100%;
   min-width: 1120px;
   border-collapse: collapse;
+  table-layout: fixed;
   color: var(--admin-text);
   font-size: 14px;
 }
+
+.table th:nth-child(1),
+.table td:nth-child(1) { width: 150px; }
+.table th:nth-child(2),
+.table td:nth-child(2) { width: 145px; }
+.table th:nth-child(3),
+.table td:nth-child(3) { width: 190px; }
+.table th:nth-child(4),
+.table td:nth-child(4) { width: 205px; }
+.table th:nth-child(5),
+.table td:nth-child(5) { width: 115px; }
+.table th:nth-child(6),
+.table td:nth-child(6) { width: 90px; }
+.table th:nth-child(7),
+.table td:nth-child(7) { width: 250px; }
+.table th:nth-child(8),
+.table td:nth-child(8) { width: 280px; }
 
 .table th {
   height: 46px;
@@ -217,8 +235,7 @@
   border-bottom: 1px solid var(--admin-border);
   background: var(--admin-surface);
   vertical-align: middle;
-  white-space: normal;
-  overflow-wrap: anywhere;
+  white-space: nowrap;
 }
 
 .userCell {
@@ -276,17 +293,18 @@
 
 .userCell em {
   min-width: 0;
+  overflow: hidden;
   color: var(--admin-muted);
   font-size: 13px;
   font-style: normal;
-  overflow-wrap: anywhere;
-  word-break: break-word;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .pathCell {
-  max-width: 420px;
-  overflow-wrap: anywhere;
-  word-break: break-word;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .deviceBadge {
