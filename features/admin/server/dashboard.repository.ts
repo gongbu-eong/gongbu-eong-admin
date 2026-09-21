@@ -11,7 +11,11 @@ import {
 } from "@/features/admin/data/dashboard";
 import { query } from "@/features/admin/server/db";
 import { ensureAnalyticsExclusionSchema } from "./analytics-exclusion.repository";
-import { dashboardFactsSql, type AnalyticsFact } from "./analytics-facts";
+import {
+  dashboardProductFactsSql,
+  dashboardTrafficFactsSql,
+  type AnalyticsFact,
+} from "./analytics-facts";
 
 type DashboardData = {
   metrics: MetricItem[];
@@ -410,22 +414,36 @@ const dashboardFactsCache = new Map<
   { expiresAt: number; pending: Promise<AnalyticsFact[]> }
 >();
 
-async function getDashboardFacts(
-  product: string,
-  startDate: string,
-  endDate: string,
+function trimDashboardFactsCache() {
+  const now = Date.now();
+  for (const [key, entry] of dashboardFactsCache) {
+    if (entry.expiresAt <= now) dashboardFactsCache.delete(key);
+  }
+
+  while (dashboardFactsCache.size > 12) {
+    const oldestKey = dashboardFactsCache.keys().next().value;
+    if (!oldestKey) break;
+    dashboardFactsCache.delete(oldestKey);
+  }
+}
+
+async function getCachedDashboardFacts(
+  key: string,
+  sql: string,
+  params: [string, string],
 ) {
-  // Tests and local data fixtures must always observe the latest database state.
-  if (process.env.NODE_ENV !== "production") {
-    const result = await query<AnalyticsFact>(dashboardFactsSql(product), [startDate, endDate]);
+  // The test suite changes fixture state between assertions; the running admin
+  // can reuse the same facts briefly so preset/product switches do not rescan DB.
+  if (process.env.NODE_ENV === "test") {
+    const result = await query<AnalyticsFact>(sql, params);
     return result.rows;
   }
 
-  const key = `${product}:${startDate}:${endDate}`;
+  trimDashboardFactsCache();
   const cached = dashboardFactsCache.get(key);
   if (cached && cached.expiresAt > Date.now()) return cached.pending;
 
-  const pending = query<AnalyticsFact>(dashboardFactsSql(product), [startDate, endDate])
+  const pending = query<AnalyticsFact>(sql, params)
     .then((result) => result.rows)
     .catch((error) => {
       dashboardFactsCache.delete(key);
@@ -434,6 +452,28 @@ async function getDashboardFacts(
 
   dashboardFactsCache.set(key, { expiresAt: Date.now() + 60_000, pending });
   return pending;
+}
+
+async function getDashboardFacts(
+  product: string,
+  startDate: string,
+  endDate: string,
+) {
+  const params: [string, string] = [startDate, endDate];
+  const [trafficFacts, productFacts] = await Promise.all([
+    getCachedDashboardFacts(
+      `traffic:${startDate}:${endDate}`,
+      dashboardTrafficFactsSql(),
+      params,
+    ),
+    getCachedDashboardFacts(
+      `product:${product}:${startDate}:${endDate}`,
+      dashboardProductFactsSql(product),
+      params,
+    ),
+  ]);
+
+  return [...trafficFacts, ...productFacts];
 }
 
 export async function getDashboardData({

@@ -126,7 +126,11 @@ export function trafficFactsCtes(start: string, end: string) {
 }
 
 // A completion belongs to its real start, not to an unrelated completion-day population.
-export function conversionCtes(product: string, start = "'-infinity'::timestamptz") {
+export function conversionCtes(
+  product: string,
+  start = "'-infinity'::timestamptz",
+  pagesCte = "analytics_pages",
+) {
   const common = (alias: string, ip: string) => excludedEventCondition(`${alias}.user_id`, ip);
   let starts: string;
   let completions: string;
@@ -179,7 +183,7 @@ export function conversionCtes(product: string, start = "'-infinity'::timestampt
     conversion_visits AS (
       SELECT DISTINCT ON (day, visitor_key) id, visitor_key, user_id, anonymous_id, event_at, day,
         original_path AS path, referrer, channel, ip_address, user_agent
-      FROM analytics_pages WHERE path = '${path}' AND visitor_key IS NOT NULL
+      FROM ${pagesCte} WHERE path = '${path}' AND visitor_key IS NOT NULL
       ORDER BY day, visitor_key, event_at, id
     ),
     conversion_people AS MATERIALIZED (
@@ -190,6 +194,136 @@ export function conversionCtes(product: string, start = "'-infinity'::timestampt
 }
 
 export type AnalyticsFact = { day: string; metric: string; channel: string; dimension: string; value: string };
+
+const dashboardBoundsSql = `
+    bounds AS (
+      SELECT LEAST($1::date - ($2::date - $1::date + 1), (NOW() AT TIME ZONE 'Asia/Seoul')::date - 6) AS first_day,
+        GREATEST($2::date, (NOW() AT TIME ZONE 'Asia/Seoul')::date) AS last_day
+    )`;
+
+const dashboardTrafficFactsSqlBody = `
+      SELECT day, 'visitor' AS metric, channel, '' AS dimension, COUNT(*)::bigint AS value
+      FROM analytics_daily_users GROUP BY day, channel
+      UNION ALL
+      SELECT p.day, 'screen', COALESCE(u.channel, p.channel), p.screen, COUNT(*)
+      FROM analytics_pages p LEFT JOIN analytics_daily_users u USING (day, visitor_key) GROUP BY 1, 3, 4
+      UNION ALL
+      SELECT p.day, 'banner', COALESCE(u.channel, '식별 불가'), p.banner_key, COUNT(*)
+      FROM analytics_products p LEFT JOIN analytics_daily_users u USING (day, visitor_key)
+      WHERE p.banner_key IN ('job_detail_resume_a','job_detail_resume_b','job_detail_strength_a','job_detail_strength_b','job_detail_bookmark_click','job_detail_apply_click') GROUP BY 1, 3, 4
+      UNION ALL
+      SELECT p.day, 'banner_uv', '', p.banner_key, COUNT(DISTINCT p.visitor_key)
+      FROM analytics_products p WHERE p.banner_key IN ('job_detail_resume_a','job_detail_resume_b','job_detail_strength_a','job_detail_strength_b','job_detail_bookmark_click','job_detail_apply_click') GROUP BY 1, 4
+      UNION ALL
+      SELECT j.day, 'job_visitor', u.channel, '', COUNT(*) FROM analytics_job_users j
+      JOIN analytics_daily_users u USING (day, visitor_key) GROUP BY 1, 3
+      UNION ALL
+      SELECT j.day, 'job_activity', u.channel, '', COUNT(*) FROM analytics_job_users j
+      JOIN analytics_daily_users u USING (day, visitor_key)
+      JOIN analytics_followups f USING (day, visitor_key) GROUP BY 1, 3
+      UNION ALL
+      SELECT j.day, 'job_returning', u.channel, '', COUNT(*) FROM analytics_job_users j
+      JOIN analytics_daily_users u USING (day, visitor_key) WHERE j.returning GROUP BY 1, 3
+      UNION ALL
+      SELECT f.day, 'job_page_moves', u.channel, '', SUM(f.page_moves)::bigint FROM analytics_followups f
+      JOIN analytics_daily_users u USING (day, visitor_key) GROUP BY 1, 3
+      UNION ALL
+      SELECT d.day, 'calendar', '', '', 0 FROM days d
+      UNION ALL
+      SELECT (NOW() AT TIME ZONE 'Asia/Seoul')::date, 'clock', '', '', 0
+      UNION ALL
+      SELECT d.day, 'unidentified_page', '', '', COALESCE(u.count, 0)
+      FROM days d
+      LEFT JOIN (
+        SELECT day, COUNT(*)::bigint AS count
+        FROM analytics_pages WHERE visitor_key IS NULL GROUP BY day
+      ) u USING (day)`;
+
+function dashboardConversionPageCte(path: string) {
+  return `
+    conversion_pages AS MATERIALIZED (
+      SELECT p.id::text AS id, p.user_id, p.anonymous_id, ${cookieKey("p")} AS visitor_key,
+        p.created_at AS event_at, (p.created_at AT TIME ZONE 'Asia/Seoul')::date AS day,
+        split_part(p.path, '?', 1) AS path, p.path AS original_path,
+        p.referrer, NULL::text AS channel, p.ip_address::text AS ip_address, p.user_agent
+      FROM public.access_logs p, bounds
+      WHERE p.event_name = 'page_view'
+        AND p.created_at >= (bounds.first_day::timestamp AT TIME ZONE 'Asia/Seoul')
+        AND p.created_at < ((bounds.last_day + 1)::timestamp AT TIME ZONE 'Asia/Seoul')
+        AND split_part(p.path, '?', 1) = '${path}'
+        AND ${excludedEventCondition("p.user_id", "p.ip_address")}
+    )`;
+}
+
+export function dashboardTrafficFactsSql() {
+  return `WITH ${dashboardBoundsSql},
+    ${trafficFactsCtes("(SELECT first_day::timestamp AT TIME ZONE 'Asia/Seoul' FROM bounds)", "(SELECT (last_day + 1)::timestamp AT TIME ZONE 'Asia/Seoul' FROM bounds)")},
+    days AS (SELECT d::date AS day FROM bounds, generate_series(first_day::timestamp, last_day::timestamp, interval '1 day') d),
+    facts AS (${dashboardTrafficFactsSqlBody})
+    SELECT to_char(f.day, 'YYYY-MM-DD') AS day, metric, channel, dimension, value::text
+    FROM facts f, bounds WHERE f.day BETWEEN bounds.first_day AND bounds.last_day
+    ORDER BY f.day, metric, channel, dimension`;
+}
+
+export function dashboardProductFactsSql(product: string) {
+  const path = product === "resume_coaching"
+    ? "/ai-tools/coaching"
+    : product === "interview_coaching"
+      ? "/ai-tools/interview-coaching"
+      : "/events/diagnosis";
+
+  return `WITH ${dashboardBoundsSql},
+    ${dashboardConversionPageCte(path)},
+    ${conversionCtes(product, "(SELECT first_day::timestamp AT TIME ZONE 'Asia/Seoul' FROM bounds)", "conversion_pages")},
+    days AS (SELECT d::date AS day FROM bounds, generate_series(first_day::timestamp, last_day::timestamp, interval '1 day') d),
+    eligible_users AS MATERIALIZED (
+      SELECT id, (COALESCE(signup_completed_at, created_at) AT TIME ZONE 'Asia/Seoul')::date AS day
+      FROM public.users u WHERE status = 'active' AND ${excludedUserCondition("u.id")}
+    ),
+    daily_signups AS (
+      SELECT d.day, COUNT(u.id) AS count
+      FROM days d LEFT JOIN eligible_users u ON u.day = d.day GROUP BY d.day
+    ),
+    signup_totals AS (
+      SELECT day, count,
+        SUM(count) OVER (ORDER BY day) + (SELECT COUNT(*) FROM eligible_users, bounds WHERE day < first_day) AS total
+      FROM daily_signups
+    ),
+    facts AS (
+      SELECT day, 'product_start' AS metric, '' AS channel, '' AS dimension, COUNT(*) AS value FROM conversion_people GROUP BY day
+      UNION ALL
+      SELECT (event_at AT TIME ZONE 'Asia/Seoul')::date, 'unidentified_start', '', '', COUNT(*)
+      FROM conversion_starts_raw WHERE visitor_key IS NULL GROUP BY 1
+      ${product === "diagnosis" ? `UNION ALL
+      SELECT (COALESCE(r.completed_at, result.created_at) AT TIME ZONE 'Asia/Seoul')::date,
+        'unmatched_completion', '', '', COUNT(*)
+      FROM public.diagnosis_results result JOIN public.diagnosis_runs r ON r.id = result.diagnosis_run_id
+      WHERE ${excludedEventCondition("result.user_id", "r.ip_address")}
+        AND COALESCE(r.completed_at, result.created_at) >= (SELECT first_day::timestamp AT TIME ZONE 'Asia/Seoul' FROM bounds)
+        AND COALESCE(r.completed_at, result.created_at) < (SELECT (last_day + 1)::timestamp AT TIME ZONE 'Asia/Seoul' FROM bounds)
+        AND NOT EXISTS (
+          SELECT 1 FROM public.product_events e
+          WHERE e.anonymous_id = r.anonymous_id AND e.event_type = 'diagnosis_start'
+            AND e.properties->>'action' IN ('question_1_view', 'start_button_click')
+            AND e.created_at <= COALESCE(r.completed_at, result.created_at)
+            AND ${excludedEventCondition("e.user_id", "NULLIF(e.properties->>'ip_address', '')")}
+        ) GROUP BY 1` : ""}
+      UNION ALL
+      SELECT day, 'product_complete', '', '', COUNT(*) FROM conversion_people WHERE completed GROUP BY day
+      UNION ALL
+      SELECT day, 'product_visit', '', '', COUNT(*) FROM conversion_visits GROUP BY day
+      UNION ALL
+      SELECT day, 'product_visit_start', '', '', COUNT(*) FROM conversion_visits v
+      WHERE EXISTS (SELECT 1 FROM conversion_starts s WHERE s.day = v.day AND s.visitor_key = v.visitor_key AND s.event_at >= v.event_at) GROUP BY day
+      UNION ALL
+      SELECT day, 'signup', '', '', total::bigint FROM signup_totals
+      UNION ALL
+      SELECT day, 'new_signup', '', '', count FROM signup_totals
+    )
+    SELECT to_char(f.day, 'YYYY-MM-DD') AS day, metric, channel, dimension, value::text
+    FROM facts f, bounds WHERE f.day BETWEEN bounds.first_day AND bounds.last_day
+    ORDER BY f.day, metric, channel, dimension`;
+}
 
 export function dashboardFactsSql(product: string) {
   return `WITH bounds AS (
