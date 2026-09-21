@@ -1,4 +1,4 @@
-import { screenSql } from "./analytics-facts";
+import { screenSql, trafficFactsCtes } from "./analytics-facts";
 import { query } from "@/features/admin/server/db";
 import {
   ensureAnalyticsExclusionSchema,
@@ -9,6 +9,8 @@ export type ActivityLogQuery = {
   startDate?: string;
   endDate?: string;
   event?: string;
+  eventType?: string;
+  cohort?: "job_visitor" | "job_activity" | "job_returning";
   bannerKey?: string;
   screen?: string;
   keyword?: string;
@@ -23,6 +25,8 @@ export type ActivityLogData = {
   startDate: string;
   endDate: string;
   event: string;
+  eventType: string;
+  cohort: string;
   bannerKey: string;
   screen: string;
   keyword: string;
@@ -135,14 +139,158 @@ function formatEvent(value: string | null) {
     login_failed: "로그인 실패",
     attribution_capture: "유입 기록",
     entry: "최초 진입",
+    coaching_start: "코칭 시작",
+    coaching_complete: "코칭 완료",
+    interview_coaching_start: "면접 코칭 시작",
+    interview_coaching_answer: "면접 답변 제출",
+    interview_coaching_complete: "면접 코칭 완료",
+    job_detail_visitor: "공고 상세 방문자",
+    job_detail_followup_visitor: "공고 상세 후속 행동 방문자",
+    job_detail_returning_visitor: "공고 상세 재방문자",
   };
   return labels[value] || value;
+}
+
+function mapActivityRows(rows: ActivityLogDbRow[]): ActivityLogRow[] {
+  return rows.map((row) => ({
+    id: row.id,
+    eventAt: formatDateTime(row.event_at),
+    event: formatEvent(row.event_type),
+    userName: row.user_name || "비회원",
+    userEmail: row.user_email || "",
+    identity: row.anonymous_id || row.session_id || "회원 식별됨",
+    ipAddress: row.ip_address || "-",
+    path: row.path || "-",
+    detail: row.detail || "-",
+    device: getDeviceLabel(row.user_agent),
+  }));
+}
+
+function jobCohortSql() {
+  const trafficCtes = trafficFactsCtes(
+    "($1::date AT TIME ZONE 'Asia/Seoul')",
+    "(($2::date + 1) AT TIME ZONE 'Asia/Seoul')",
+  );
+
+  return `
+    WITH ${trafficCtes},
+    job_visits AS (
+      SELECT DISTINCT ON (p.day, p.visitor_key)
+        p.id,
+        p.user_id,
+        p.anonymous_id,
+        p.event_at,
+        p.day,
+        p.path,
+        p.ip_address,
+        p.user_agent,
+        p.visitor_key,
+        p.channel
+      FROM analytics_pages p
+      WHERE p.visitor_key IS NOT NULL
+        AND p.screen = 'job_detail'
+        AND p.day BETWEEN $1::date AND $2::date
+      ORDER BY p.day, p.visitor_key, p.event_at, p.id
+    ),
+    followup_visitors AS (
+      SELECT DISTINCT ON ((s.last_job_at AT TIME ZONE 'Asia/Seoul')::date, s.visitor_key)
+        s.id,
+        s.event_at,
+        s.path,
+        s.event_type,
+        (s.last_job_at AT TIME ZONE 'Asia/Seoul')::date AS day,
+        s.visitor_key
+      FROM analytics_session_flags s
+      WHERE s.last_job_at IS NOT NULL
+        AND s.event_at >= s.last_job_at
+        AND (s.event_type = 'page_view' OR s.event_type LIKE '%click%' OR s.event_type LIKE '%start%' OR s.event_type LIKE '%complete%')
+        AND (s.last_job_at AT TIME ZONE 'Asia/Seoul')::date BETWEEN $1::date AND $2::date
+      ORDER BY (s.last_job_at AT TIME ZONE 'Asia/Seoul')::date, s.visitor_key, s.event_at, s.id
+    ),
+    cohort_rows AS (
+      SELECT
+        'job-visitor:' || v.day::text || ':' || v.visitor_key AS id,
+        v.event_at,
+        'job_detail_visitor' AS event_type,
+        v.user_id,
+        v.anonymous_id,
+        NULL::uuid AS session_id,
+        v.ip_address,
+        v.user_agent,
+        v.path,
+        '공고 상세 방문자' AS detail,
+        v.channel
+      FROM job_visits v
+      WHERE $6::text = 'job_visitor'
+      UNION ALL
+      SELECT
+        'job-followup:' || f.day::text || ':' || f.visitor_key AS id,
+        f.event_at,
+        'job_detail_followup_visitor' AS event_type,
+        v.user_id,
+        v.anonymous_id,
+        NULL::uuid AS session_id,
+        v.ip_address,
+        v.user_agent,
+        f.path,
+        f.event_type AS detail,
+        v.channel
+      FROM followup_visitors f
+      JOIN job_visits v ON v.day = f.day AND v.visitor_key = f.visitor_key
+      WHERE $6::text = 'job_activity'
+      UNION ALL
+      SELECT
+        'job-returning:' || v.day::text || ':' || v.visitor_key AS id,
+        v.event_at,
+        'job_detail_returning_visitor' AS event_type,
+        v.user_id,
+        v.anonymous_id,
+        NULL::uuid AS session_id,
+        v.ip_address,
+        v.user_agent,
+        v.path,
+        '이전 30일 이내 방문 이력' AS detail,
+        v.channel
+      FROM job_visits v
+      JOIN analytics_job_users j ON j.day = v.day AND j.visitor_key = v.visitor_key
+      WHERE $6::text = 'job_returning' AND j.returning
+    )
+    SELECT
+      c.id,
+      c.event_at,
+      c.event_type,
+      COALESCE(u.nickname, u.display_name) AS user_name,
+      u.email::text AS user_email,
+      c.anonymous_id,
+      c.session_id,
+      c.ip_address,
+      c.user_agent,
+      c.path,
+      c.detail,
+      COUNT(*) OVER()::text AS total_count
+    FROM cohort_rows c
+    LEFT JOIN public.users u ON u.id = c.user_id
+    WHERE ($3::text = '' OR c.channel = CASE $3::text
+      WHEN 'instagram' THEN '인스타그램'
+      WHEN 'blog' THEN '블로그'
+      WHEN 'threads' THEN '스레드'
+      WHEN 'search' THEN '검색'
+      WHEN 'direct' THEN '직접유입'
+      ELSE $3::text END)
+    ORDER BY c.event_at DESC, c.id DESC
+    LIMIT $4 OFFSET $5`;
 }
 
 export async function getActivityLogData(args?: ActivityLogQuery): Promise<ActivityLogData> {
   const { startDate, endDate } = defaultDates(args);
   const requestedEvent = args?.event || "activity";
   const event = requestedEvent === "page_view" ? "visit" : requestedEvent;
+  const eventType = /^[a-z0-9][a-z0-9_.:-]{1,99}$/i.test(args?.eventType || "")
+    ? args?.eventType || ""
+    : "";
+  const cohort = args?.cohort && ["job_visitor", "job_activity", "job_returning"].includes(args.cohort)
+    ? args.cohort
+    : "";
   const screen = args?.screen === "coaching" ? "resume_coaching" : args?.screen || "all";
   const bannerKey = args?.bannerKey || "";
   const keyword = (args?.keyword || "").trim();
@@ -155,6 +303,37 @@ export async function getActivityLogData(args?: ActivityLogQuery): Promise<Activ
   const pattern = keyword ? `%${keyword}%` : "";
   const offset = (page - 1) * pageSize;
   await ensureAnalyticsExclusionSchema();
+
+  if (cohort) {
+    const cohortResult = await query<ActivityLogDbRow>(jobCohortSql(), [
+      startDate,
+      endDate,
+      channel === "all" ? "" : channel,
+      pageSize,
+      offset,
+      cohort,
+    ]);
+    const totalCount = Number(cohortResult.rows[0]?.total_count || 0);
+
+    return {
+      startDate,
+      endDate,
+      event,
+      eventType,
+      cohort,
+      bannerKey,
+      screen,
+      keyword,
+      ip,
+      channel,
+      uniqueOnly,
+      from,
+      page,
+      totalPages: Math.max(1, Math.ceil(totalCount / pageSize)),
+      totalCount,
+      rows: mapActivityRows(cohortResult.rows),
+    };
+  }
 
   const eventsSql = `
     WITH raw_events AS (
@@ -186,6 +365,7 @@ export async function getActivityLogData(args?: ActivityLogQuery): Promise<Activ
       FROM public.access_logs access
       WHERE access.created_at >= ($1::date AT TIME ZONE 'Asia/Seoul')
         AND access.created_at < (($2::date + 1) AT TIME ZONE 'Asia/Seoul')
+        AND ($10::text = '' OR SPLIT_PART(access.ip_address::text, '/', 1) = $10::text)
         AND ${excludedEventCondition("access.user_id", "access.ip_address")}
       UNION ALL
       SELECT
@@ -225,6 +405,7 @@ export async function getActivityLogData(args?: ActivityLogQuery): Promise<Activ
       FROM public.product_events events
       WHERE events.created_at >= ($1::date AT TIME ZONE 'Asia/Seoul')
         AND events.created_at < (($2::date + 1) AT TIME ZONE 'Asia/Seoul')
+        AND ($10::text = '' OR SPLIT_PART(events.properties->>'ip_address', '/', 1) = $10::text)
         AND ${excludedEventCondition("events.user_id", "NULLIF(events.properties->>'ip_address', '')")}
       UNION ALL
       SELECT
@@ -246,6 +427,7 @@ export async function getActivityLogData(args?: ActivityLogQuery): Promise<Activ
       FROM public.attribution_events events
       WHERE events.created_at >= ($1::date AT TIME ZONE 'Asia/Seoul')
         AND events.created_at < (($2::date + 1) AT TIME ZONE 'Asia/Seoul')
+        AND ($10::text = '' OR SPLIT_PART(events.ip_address::text, '/', 1) = $10::text)
         AND ${excludedEventCondition("events.user_id", "events.ip_address")}
       UNION ALL
       SELECT
@@ -267,6 +449,7 @@ export async function getActivityLogData(args?: ActivityLogQuery): Promise<Activ
       FROM public.auth_login_events events
       WHERE events.created_at >= ($1::date AT TIME ZONE 'Asia/Seoul')
         AND events.created_at < (($2::date + 1) AT TIME ZONE 'Asia/Seoul')
+        AND ($10::text = '' OR SPLIT_PART(events.ip_address::text, '/', 1) = $10::text)
         AND ${excludedEventCondition("events.user_id", "events.ip_address")}
       UNION ALL
       SELECT
@@ -288,6 +471,7 @@ export async function getActivityLogData(args?: ActivityLogQuery): Promise<Activ
       FROM public.user_entry_events events
       WHERE events.created_at >= ($1::date AT TIME ZONE 'Asia/Seoul')
         AND events.created_at < (($2::date + 1) AT TIME ZONE 'Asia/Seoul')
+        AND ($10::text = '' OR SPLIT_PART(events.ip_address::text, '/', 1) = $10::text)
         AND ${excludedEventCondition("events.user_id", "events.ip_address")}
     ), daily_channels AS (
       SELECT DISTINCT ON ((event_at AT TIME ZONE 'Asia/Seoul')::date, visitor_key)
@@ -334,15 +518,19 @@ export async function getActivityLogData(args?: ActivityLogQuery): Promise<Activ
       ($3::text = 'entry' AND event_type = 'entry'))
     AND ($4::text = 'all' OR normalized_screen_key = $4::text OR ($4::text = 'ai_tools' AND path LIKE '/ai-tools%'))
     AND ($5::text = 'all' OR acquisition_channel = $5::text)
-    AND ${keywordIp ? "($9::text <> '' AND ip_address = $9::text)" : `($9::text = '' AND (
-      $6::text = '' OR path ILIKE $6::text OR detail ILIKE $6::text OR
-      ip_address ILIKE $6::text OR identity ILIKE $6::text OR
-      nickname ILIKE $6::text OR display_name ILIKE $6::text OR email ILIKE $6::text
-    ))`}
+    AND ($9::text = '' OR event_type = $9::text)
+    AND (
+      ($10::text <> '' AND ip_address = $10::text) OR
+      ($10::text = '' AND (
+        $6::text = '' OR path ILIKE $6::text OR detail ILIKE $6::text OR
+        ip_address ILIKE $6::text OR identity ILIKE $6::text OR
+        nickname ILIKE $6::text OR display_name ILIKE $6::text OR email ILIKE $6::text
+      ))
+    )
     AND ($7::text = '' OR ip_address = $7::text)
     AND ($8::text = '' OR (event_source = 'product' AND banner_key = $8::text))
   `;
-  const baseParams = [startDate, endDate, event, screen, channel, pattern, ip, bannerKey, keywordIp];
+  const baseParams = [startDate, endDate, event, screen, channel, pattern, ip, bannerKey, eventType, keywordIp];
   const sourceSql = uniqueOnly
       ? `${eventsSql}, filtered AS (
         SELECT normalized.*,
@@ -364,13 +552,15 @@ export async function getActivityLogData(args?: ActivityLogQuery): Promise<Activ
       COUNT(*) OVER()::text AS total_count
     FROM ${rowsSource}
     ORDER BY event_at DESC, id DESC
-    LIMIT $10 OFFSET $11`, [...baseParams, pageSize, offset]);
+    LIMIT $11 OFFSET $12`, [...baseParams, pageSize, offset]);
   const totalCount = Number(rowsResult.rows[0]?.total_count || 0);
 
   return {
     startDate,
     endDate,
     event,
+    eventType,
+    cohort,
     bannerKey,
     screen,
     keyword,
@@ -381,17 +571,6 @@ export async function getActivityLogData(args?: ActivityLogQuery): Promise<Activ
     page,
     totalPages: Math.max(1, Math.ceil(totalCount / pageSize)),
     totalCount,
-    rows: rowsResult.rows.map((row) => ({
-      id: row.id,
-      eventAt: formatDateTime(row.event_at),
-      event: formatEvent(row.event_type),
-      userName: row.user_name || "비회원",
-      userEmail: row.user_email || "",
-      identity: row.anonymous_id || row.session_id || "회원 식별됨",
-      ipAddress: row.ip_address || "-",
-      path: row.path || "-",
-      detail: row.detail || "-",
-      device: getDeviceLabel(row.user_agent),
-    })),
+    rows: mapActivityRows(rowsResult.rows),
   };
 }

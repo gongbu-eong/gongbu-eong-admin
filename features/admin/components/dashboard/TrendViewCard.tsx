@@ -8,6 +8,7 @@ import styles from "./TrendViewCard.module.css";
 
 type TrendViewCardProps = {
   title: string;
+  titleNote?: string;
   subtitle: string;
   series: DashboardTrendSeries[];
   listSeries: DashboardTrendSeries[];
@@ -24,6 +25,7 @@ function formatValue(value: number, suffix: string) {
 
 export function TrendViewCard({
   title,
+  titleNote,
   subtitle,
   series,
   listSeries,
@@ -44,7 +46,10 @@ export function TrendViewCard({
     <AdminCard className={`${styles.card} ${className}`}>
       <div className={styles.header}>
         <div>
-          <h2>{title}</h2>
+          <h2>
+            {title}
+            {titleNote ? <span className={styles.titleNote}>{titleNote}</span> : null}
+          </h2>
           <p>{view === "list" ? listSubtitle : subtitle}</p>
         </div>
         <label className={styles.viewSelect}>

@@ -2,6 +2,7 @@ import Link from "next/link";
 import { AdminLayout } from "@/features/admin/components/AdminLayout";
 import { AdminCard } from "@/features/admin/components/common/AdminCard";
 import { getActivityLogData, ActivityLogQuery } from "@/features/admin/server/activity-log.repository";
+import { TrimmedSearchInput } from "./TrimmedSearchInput";
 import styles from "@/features/admin/components/traffic/TrafficLogsPage.module.css";
 
 const eventOptions = [
@@ -9,9 +10,7 @@ const eventOptions = [
   ["all", "원본 전체"],
   ["visit", "방문"],
   ["product", "기능·버튼 이벤트"],
-  ["attribution", "유입 기록"],
   ["login", "로그인"],
-  ["entry", "최초 진입"],
 ] as const;
 
 const screenOptions = [
@@ -36,9 +35,17 @@ function formatCount(value: number) {
   return value.toLocaleString("ko-KR");
 }
 
+const cohortLabels: Record<string, string> = {
+  job_visitor: "공고 상세 방문자 코호트",
+  job_activity: "공고 상세 후속 행동 방문자 코호트",
+  job_returning: "공고 상세 재방문자 코호트",
+};
+
 function makeHref(data: Awaited<ReturnType<typeof getActivityLogData>>, page: number, selectedIp = data.ip) {
   const params = new URLSearchParams({ startDate: data.startDate, endDate: data.endDate });
   if (data.event !== "all") params.set("event", data.event);
+  if (data.eventType) params.set("eventType", data.eventType);
+  if (data.cohort) params.set("cohort", data.cohort);
   if (data.bannerKey) params.set("bannerKey", data.bannerKey);
   if (data.screen !== "all") params.set("screen", data.screen);
   if (data.keyword) params.set("keyword", data.keyword);
@@ -59,6 +66,7 @@ function pages(page: number, totalPages: number) {
 export async function ActivityLogsPage({ filters }: ActivityLogsPageProps) {
   const data = await getActivityLogData(filters);
   const pageItems = pages(data.page, data.totalPages);
+  const totalUnit = data.cohort ? "명" : "건";
 
   return (
     <AdminLayout
@@ -89,9 +97,11 @@ export async function ActivityLogsPage({ filters }: ActivityLogsPageProps) {
           </label>
           <label className={styles.headerKeywordField}>
             <span>검색어</span>
-            <input name="keyword" placeholder="이름 · 경로 · 이벤트" defaultValue={data.keyword} />
+            <TrimmedSearchInput name="keyword" placeholder="이름 · 경로 · 이벤트 · IP" defaultValue={data.keyword} />
           </label>
           {data.channel !== "all" ? <input type="hidden" name="channel" value={data.channel} /> : null}
+          {data.eventType ? <input type="hidden" name="eventType" value={data.eventType} /> : null}
+          {data.cohort ? <input type="hidden" name="cohort" value={data.cohort} /> : null}
           {data.bannerKey ? <input type="hidden" name="bannerKey" value={data.bannerKey} /> : null}
           {data.uniqueOnly ? <input type="hidden" name="unique" value="1" /> : null}
           {data.from ? <input type="hidden" name="from" value={data.from} /> : null}
@@ -109,7 +119,8 @@ export async function ActivityLogsPage({ filters }: ActivityLogsPageProps) {
             <div>
               <h2>{data.event === "visit" ? "방문 이력" : data.event === "activity" ? "사용자 활동 이력" : data.event === "all" ? "원본 전체 방문·이벤트 이력" : "이벤트 이력"}</h2>
               {data.bannerKey ? <p>선택한 배너·버튼의 실제 클릭만 조회 중</p> : null}
-              <p>총 <strong>{formatCount(data.totalCount)}</strong>건 · {data.uniqueOnly ? "순 방문자 기준 · " : data.event === "activity" ? "방문·사용자 행동 기준 · " : "원본 이벤트 기준 · "}비회원은 IP와 익명 식별자로 확인합니다.{data.ip ? ` · ${data.ip} 로그만 조회 중` : ""}</p>
+              {data.cohort ? <p>{cohortLabels[data.cohort]} · 대시보드와 동일한 일별 중복 제거 기준</p> : null}
+              <p>총 <strong>{formatCount(data.totalCount)}</strong>{totalUnit} · {data.uniqueOnly ? "순 방문자 기준 · " : data.cohort ? "대시보드 코호트 기준 · " : data.event === "activity" ? "방문·사용자 행동 기준 · " : "원본 이벤트 기준 · "}비회원은 IP와 익명 식별자로 확인합니다.{data.ip ? ` · ${data.ip} 로그만 조회 중` : ""}</p>
             </div>
             <span className={styles.tableActions}>
               {data.ip ? <Link className={styles.backButtonSecondary} href={makeHref(data, 1, "")}>전체 IP 보기</Link> : null}

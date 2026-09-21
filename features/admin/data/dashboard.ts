@@ -75,11 +75,15 @@ export type BehaviorPatternItem = {
   key: string;
   channelLabel: string;
   visitors: string;
+  visitorHref?: string;
   activity: string;
+  activityHref?: string;
   activityRate: string;
   revisit: string;
+  revisitHref?: string;
   revisitRate: string;
   apply: string;
+  applyHref?: string;
   pageMove: string;
 };
 

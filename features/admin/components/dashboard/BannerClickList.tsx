@@ -13,7 +13,7 @@ export function BannerClickList({ items, total, periodLabel }: BannerClickListPr
       <header className={styles.header}>
         <div>
           <h2>배너·버튼 클릭 상세</h2>
-          <p>{periodLabel} 클릭 기준 · 총 {total}건</p>
+          <p>{periodLabel} 실제 클릭 로그 기준 · 총 {total}건</p>
         </div>
       </header>
 
@@ -26,7 +26,7 @@ export function BannerClickList({ items, total, periodLabel }: BannerClickListPr
                   <strong>{item.label}</strong>
                   <b>{item.count}</b>
                 </div>
-                <p>일별 클릭 인원 합산 {item.uniqueCount}</p>
+                <p>일별 중복 제거 클릭자 합산 {item.uniqueCount}</p>
                 <div className={styles.track}>
                   <i style={{ width: `${item.fill}%` }} />
                 </div>

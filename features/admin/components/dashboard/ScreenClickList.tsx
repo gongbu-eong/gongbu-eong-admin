@@ -17,8 +17,11 @@ export function ScreenClickList({
     <section className={styles.wrap}>
       <header className={styles.header}>
         <div>
-          <h2>화면별 방문수</h2>
-          <p>{channelLabel} 기준 · 페이지 이동·방문 횟수 {total}건</p>
+          <h2>
+            화면별 방문 건수
+            <span className={styles.titleNote}>순 방문자 수와 다름</span>
+          </h2>
+          <p>{channelLabel} 기준 · 페이지 이동·방문 로그 합계 {total}건 (중복 포함)</p>
         </div>
       </header>
       <div className={styles.list}>

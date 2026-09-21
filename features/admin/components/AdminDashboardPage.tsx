@@ -83,6 +83,7 @@ export async function AdminDashboardPage({
     productVisitTrend,
     productHasVisitStep,
     signupTrend,
+    newSignupTrend,
     visitorTrend,
     visitorSignupListTrend,
     trafficChannelTrend,
@@ -110,7 +111,7 @@ export async function AdminDashboardPage({
   const productConversionScale = createChartScale(productConversionSeries);
   const commonMetrics = metrics.slice(0, 2);
   const productMetrics = metrics.slice(2);
-  const signupCountScale = createChartScale([signupTrend]);
+  const signupCountScale = createChartScale([signupTrend, newSignupTrend]);
   const trafficChannelScale = createChartScale(
     trafficChannelTrend.map((series) => series.data),
   );
@@ -180,8 +181,8 @@ export async function AdminDashboardPage({
               maxValue={visitorSignupScale.maxValue}
           />
           <TrendViewCard
-              title="전체 가입자 추이"
-              subtitle="최근 7일 · 각 날짜까지 가입한 현재 활성 회원 누적 수"
+              title="전체 가입자 및 신규 가입자 추이"
+              subtitle="최근 7일 · 초록색 누적 전체 가입자 / 노란색 일별 신규 가입자"
               valueSuffix="명"
               listSubtitle={`목록 · ${dashboardPeriodText}`}
               yLabels={signupCountScale.yLabels}
@@ -191,6 +192,11 @@ export async function AdminDashboardPage({
                   label: "전체 가입자",
                   color: "#20bf7a",
                   data: signupTrend,
+                },
+                {
+                  label: "신규 가입자",
+                  color: "#ffb000",
+                  data: newSignupTrend,
                 },
               ]}
               maxValue={signupCountScale.maxValue}
@@ -277,7 +283,8 @@ export async function AdminDashboardPage({
             />
             <TrendViewCard
               title="화면별 방문수 추이"
-              subtitle={`최근 7일 · ${selectedChannelLabel} · 페이지 이동·방문 횟수`}
+              titleNote="로그 건수 · 중복 포함"
+              subtitle={`최근 7일 · ${selectedChannelLabel} · 순 방문자가 아닌 페이지 방문 건수`}
               listSubtitle={`목록 · ${dashboardPeriodText} · ${selectedChannelLabel}`}
               yLabels={screenScale.yLabels}
               series={screenTrend}
@@ -306,7 +313,7 @@ export async function AdminDashboardPage({
         <div className={styles.trafficPairGrid}>
           <TrendViewCard
               title="배너·버튼 클릭 추이"
-              subtitle="최근 7일 · 전체 클릭 / 찜 / 지원"
+              subtitle="최근 7일 · 전체 클릭 / 찜 / 지원 (모두 건수)"
               listSubtitle={`목록 · ${dashboardPeriodText}`}
               yLabels={bannerClickScale.yLabels}
               series={bannerClickTrend}

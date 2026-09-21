@@ -19,6 +19,7 @@ type DashboardData = {
   visitorTrend: LinePoint[];
   coachingTrend: LinePoint[];
   signupTrend: LinePoint[];
+  newSignupTrend: LinePoint[];
   visitorSignupListTrend: DashboardTrendSeries[];
   productRateTrend: LinePoint[];
   productVisitTrend: LinePoint[];
@@ -404,6 +405,37 @@ function mapBannerLabel(key: string | null, name: string | null) {
   return bannerLabels[trimmedKey] || trimmedKey;
 }
 
+const dashboardFactsCache = new Map<
+  string,
+  { expiresAt: number; pending: Promise<AnalyticsFact[]> }
+>();
+
+async function getDashboardFacts(
+  product: string,
+  startDate: string,
+  endDate: string,
+) {
+  // Tests and local data fixtures must always observe the latest database state.
+  if (process.env.NODE_ENV !== "production") {
+    const result = await query<AnalyticsFact>(dashboardFactsSql(product), [startDate, endDate]);
+    return result.rows;
+  }
+
+  const key = `${product}:${startDate}:${endDate}`;
+  const cached = dashboardFactsCache.get(key);
+  if (cached && cached.expiresAt > Date.now()) return cached.pending;
+
+  const pending = query<AnalyticsFact>(dashboardFactsSql(product), [startDate, endDate])
+    .then((result) => result.rows)
+    .catch((error) => {
+      dashboardFactsCache.delete(key);
+      throw error;
+    });
+
+  dashboardFactsCache.set(key, { expiresAt: Date.now() + 15_000, pending });
+  return pending;
+}
+
 export async function getDashboardData({
   period,
   selectedChannel,
@@ -434,7 +466,11 @@ export async function getDashboardData({
     dashboardDateRange.endDate,
   ];
 
-  const { rows: facts } = await query<AnalyticsFact>(dashboardFactsSql(selectedProductKey), dashboardDateParams);
+  const facts = await getDashboardFacts(
+    selectedProductKey,
+    dashboardDateParams[0],
+    dashboardDateParams[1],
+  );
   const shiftDay = (day: string, offset: number) => {
     const date = new Date(day + "T00:00:00Z");
     date.setUTCDate(date.getUTCDate() + offset);
@@ -484,7 +520,7 @@ export async function getDashboardData({
         add(f.day, "banner:" + f.dimension, value);
         add(f.day, "banner:total", value);
         if (f.dimension === "job_detail_apply_click") add(f.day, "behavior:apply_clicks", value);
-      } else if (f.metric === "signup" || f.metric === "calendar" || metricAliases[f.metric]) {
+      } else if (f.metric === "signup" || f.metric === "new_signup" || f.metric === "calendar" || metricAliases[f.metric]) {
         add(f.day, metricAliases[f.metric] || f.metric, value);
       }
     }
@@ -498,6 +534,7 @@ export async function getDashboardData({
   const visitorTrendResult = { rows: daily(graphFacts, "visitor") };
   const coachingTrendResult = { rows: daily(graphFacts, "product_start") };
   const signupTrendResult = { rows: daily(graphFacts, "signup") };
+  const newSignupTrendResult = { rows: daily(graphFacts, "new_signup") };
   const productRateTrendResult = { rows: daily(graphFacts, "product_complete") };
   const productConversionTrendResult = { rows: daily(graphFacts, "calendar").map(({ label }) => {
     const rows = graphFacts.filter(f => f.day === label);
@@ -508,10 +545,39 @@ export async function getDashboardData({
   const completed = rangeCoachingCompleted;
   const visitStarted = sum(selectedFacts, "product_visit_start");
   const base = Math.max(selectedProductConfig.hasVisitStep ? pageVisits : started, started, 1);
-  const createFunnelHref = (step: string) => "/traffic/funnel?" + new URLSearchParams({
-    product: selectedProductKey, step, startDate: dashboardDateRange.startDate,
-    endDate: dashboardDateRange.endDate, from: "dashboard",
-  }).toString();
+  const createFunnelHref = (step: string) => {
+    if (step !== "visit" && step !== "start" && step !== "complete") {
+      return undefined;
+    }
+    const params = new URLSearchParams({
+      startDate: dashboardDateRange.startDate,
+      endDate: dashboardDateRange.endDate,
+      event: "activity",
+      from: "dashboard",
+    });
+    const screenByProduct = {
+      diagnosis: "diagnosis",
+      resume_coaching: "resume_coaching",
+      interview_coaching: "interview_coaching",
+    } as const;
+    const eventByProduct = {
+      diagnosis: { start: "diagnosis_start", complete: "diagnosis_complete" },
+      resume_coaching: { start: "coaching_start", complete: "coaching_complete" },
+      interview_coaching: {
+        start: "interview_coaching_start",
+        complete: "interview_coaching_complete",
+      },
+    } as const;
+
+    if (step === "visit") {
+      params.set("event", "visit");
+      params.set("screen", screenByProduct[selectedProductKey as keyof typeof screenByProduct]);
+    } else {
+      params.set("eventType", eventByProduct[selectedProductKey as keyof typeof eventByProduct][step === "complete" ? "complete" : "start"]);
+    }
+
+    return "/activity-logs?" + params.toString();
+  };
   const sortedChannels = dashboardChannelOptions.slice(1).map(item =>
     [item.label, sum(selectedFacts.filter(f => f.channel === item.label), "visitor")] as const,
   ).sort((a, b) => b[1] - a[1]);
@@ -567,12 +633,26 @@ export async function getDashboardData({
     (sum, screen) => sum + (groupedScreenInflows.get(screen.key) || 0),
     0,
   );
+  const createBehaviorLogHref = (params: Record<string, string>) => {
+    const searchParams = new URLSearchParams({
+      ...params,
+      startDate: dashboardDateRange.startDate,
+      endDate: dashboardDateRange.endDate,
+      from: "dashboard",
+    });
+    return `/activity-logs?${searchParams.toString()}`;
+  };
   const behaviorPatterns = behaviorPatternResult.rows.map((row) => {
     const visitors = numberValue(row.visitors);
     const activity = numberValue(row.activity_count);
     const revisit = numberValue(row.revisit_count);
     const apply = numberValue(row.apply_count);
     const pageMove = numberValue(row.page_move_count);
+    const channelKey =
+      dashboardChannelOptions.find((option) => option.label === row.channel_label)?.key ||
+      "direct";
+    const channelParam: Record<string, string> =
+      channelKey === "all" ? {} : { channel: channelKey };
     const formatBehaviorRate = (value: number) =>
       visitors > 0 ? formatPercent((value / visitors) * 100) : "0%";
 
@@ -580,11 +660,31 @@ export async function getDashboardData({
       key: row.channel_label,
       channelLabel: row.channel_label,
       visitors: `${formatCount(visitors)}명`,
+      visitorHref: createBehaviorLogHref({
+        event: "activity",
+        cohort: "job_visitor",
+        ...channelParam,
+      }),
       activity: `${formatCount(activity)}명`,
+      activityHref: createBehaviorLogHref({
+        event: "activity",
+        cohort: "job_activity",
+        ...channelParam,
+      }),
       activityRate: formatBehaviorRate(activity),
       revisit: `${formatCount(revisit)}명`,
+      revisitHref: createBehaviorLogHref({
+        event: "activity",
+        cohort: "job_returning",
+        ...channelParam,
+      }),
       revisitRate: formatBehaviorRate(revisit),
       apply: `${formatCount(apply)}건`,
+      applyHref: createBehaviorLogHref({
+        event: "product",
+        eventType: "job_detail_apply_click",
+        ...channelParam,
+      }),
       pageMove: `${formatCount(pageMove)}건`,
     };
   });
@@ -661,7 +761,8 @@ export async function getDashboardData({
     listTrendResult.rows,
     [
       { key: "visitor", label: "방문자", color: "#2f7ff0" },
-      { key: "signup", label: "전체 가입자", color: "#ffb000" },
+      { key: "signup", label: "전체 가입자", color: "#20bf7a" },
+      { key: "new_signup", label: "신규 가입자", color: "#ffb000" },
     ],
   );
   const productConversionTrend = productHasVisitStep
@@ -840,6 +941,7 @@ export async function getDashboardData({
     visitorTrend: toLinePoints(visitorTrendResult.rows),
     coachingTrend: toLinePoints(coachingTrendResult.rows),
     signupTrend: toLinePoints(signupTrendResult.rows),
+    newSignupTrend: toLinePoints(newSignupTrendResult.rows),
     visitorSignupListTrend,
     productRateTrend,
     productVisitTrend,
