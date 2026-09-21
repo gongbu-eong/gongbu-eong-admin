@@ -37,7 +37,7 @@ export const bannerKeys = [
 export function trafficFactsCtes(start: string, end: string) {
   return `
     analytics_pages_raw AS MATERIALIZED (
-      SELECT p.id::text AS id, p.user_id, p.anonymous_id, ${cookieKey("p")} AS visitor_key,
+      SELECT p.id AS id, p.user_id, p.anonymous_id, ${cookieKey("p")} AS visitor_key,
         p.created_at AS event_at, (p.created_at AT TIME ZONE 'Asia/Seoul')::date AS day,
         split_part(p.path, '?', 1) AS path, p.path AS original_path,
         p.referrer, p.ip_address::text AS ip_address, p.user_agent,
@@ -135,26 +135,33 @@ export function conversionCtes(
   let starts: string;
   let completions: string;
   if (product === "resume_coaching") {
-    starts = `SELECT r.id::text AS id, ${cookieKey("r")} AS visitor_key, r.user_id, r.anonymous_id,
+    starts = `SELECT r.id AS id, ${cookieKey("r")} AS visitor_key, r.user_id, r.anonymous_id,
       r.created_at AS event_at, r.ip_address::text AS ip_address, r.user_agent,
       '/ai-tools/coaching'::text AS path FROM public.resume_coaching_requests r
-      WHERE ${common("r", "r.ip_address")}`;
-    completions = `SELECT request_id::text AS start_id, MIN(created_at) AS completed_at
-      FROM public.resume_coaching_results WHERE created_at <= NOW()
-        AND request_id::text IN (SELECT id FROM conversion_starts_raw) GROUP BY request_id`;
+      WHERE r.created_at >= (${start}) AND r.created_at <= NOW()
+        AND ${common("r", "r.ip_address")}`;
+    completions = `SELECT r.id AS start_id, MIN(results.created_at) AS completed_at
+      FROM public.resume_coaching_requests r
+      JOIN public.resume_coaching_results results ON results.request_id = r.id
+      WHERE r.created_at >= (${start}) AND r.created_at <= NOW()
+        AND results.created_at <= NOW()
+      GROUP BY r.id`;
   } else if (product === "interview_coaching") {
-    starts = `SELECT r.id::text AS id, ${cookieKey("r")} AS visitor_key, r.user_id, r.anonymous_id,
+    starts = `SELECT r.id AS id, ${cookieKey("r")} AS visitor_key, r.user_id, r.anonymous_id,
       r.started_at AS event_at, r.ip_address::text AS ip_address, r.user_agent,
       '/ai-tools/interview-coaching'::text AS path FROM public.interview_coaching_sessions r
-      WHERE ${common("r", "r.ip_address")}`;
-    completions = `SELECT id::text AS start_id, COALESCE(completed_at, updated_at) AS completed_at
+      WHERE r.started_at >= (${start}) AND r.started_at <= NOW()
+        AND ${common("r", "r.ip_address")}`;
+    completions = `SELECT id AS start_id, COALESCE(completed_at, updated_at) AS completed_at
       FROM public.interview_coaching_sessions WHERE (completed_at IS NOT NULL OR result IS NOT NULL)
-      AND COALESCE(completed_at, updated_at) <= NOW() AND started_at >= (${start})`;
+      AND COALESCE(completed_at, updated_at) <= NOW() AND started_at >= (${start})
+      AND started_at <= NOW()`;
   } else {
-    starts = `SELECT e.id::text AS id, ${cookieKey("e")} AS visitor_key, e.user_id, e.anonymous_id,
+    starts = `SELECT e.id AS id, ${cookieKey("e")} AS visitor_key, e.user_id, e.anonymous_id,
       e.created_at AS event_at, e.properties->>'ip_address' AS ip_address, e.properties->>'user_agent' AS user_agent,
       '/events/diagnosis'::text AS path FROM public.product_events e
       WHERE e.event_type = 'diagnosis_start' AND e.properties->>'action' IN ('question_1_view', 'start_button_click')
+      AND e.created_at >= (${start}) AND e.created_at <= NOW()
       AND ${common("e", "NULLIF(e.properties->>'ip_address', '')")}`;
 // Legacy Q1 events do not carry run_id. Use the nearest earlier Q1 for the same browser ID only.
     completions = `SELECT s.id AS start_id, MIN(COALESCE(r.completed_at, result.created_at)) AS completed_at
@@ -242,7 +249,7 @@ const dashboardTrafficFactsSqlBody = `
 function dashboardConversionPageCte(path: string) {
   return `
     conversion_pages AS MATERIALIZED (
-      SELECT p.id::text AS id, p.user_id, p.anonymous_id, ${cookieKey("p")} AS visitor_key,
+      SELECT p.id AS id, p.user_id, p.anonymous_id, ${cookieKey("p")} AS visitor_key,
         p.created_at AS event_at, (p.created_at AT TIME ZONE 'Asia/Seoul')::date AS day,
         split_part(p.path, '?', 1) AS path, p.path AS original_path,
         p.referrer, NULL::text AS channel, p.ip_address::text AS ip_address, p.user_agent

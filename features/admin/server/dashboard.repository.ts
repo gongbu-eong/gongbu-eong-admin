@@ -432,10 +432,17 @@ async function getCachedDashboardFacts(
   sql: string,
   params: [string, string],
 ) {
+  const startedAt = Date.now();
+  const reportTiming = (rowCount: number) => {
+    if (process.env.ADMIN_ANALYTICS_TIMING !== "1") return;
+    console.info(`[dashboard analytics] ${key} ${Date.now() - startedAt}ms (${rowCount} rows)`);
+  };
+
   // The test suite changes fixture state between assertions; the running admin
   // can reuse the same facts briefly so preset/product switches do not rescan DB.
   if (process.env.NODE_ENV === "test") {
     const result = await query<AnalyticsFact>(sql, params);
+    reportTiming(result.rows.length);
     return result.rows;
   }
 
@@ -444,7 +451,10 @@ async function getCachedDashboardFacts(
   if (cached && cached.expiresAt > Date.now()) return cached.pending;
 
   const pending = query<AnalyticsFact>(sql, params)
-    .then((result) => result.rows)
+    .then((result) => {
+      reportTiming(result.rows.length);
+      return result.rows;
+    })
     .catch((error) => {
       dashboardFactsCache.delete(key);
       throw error;
