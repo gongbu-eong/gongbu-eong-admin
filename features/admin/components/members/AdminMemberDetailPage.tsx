@@ -9,6 +9,7 @@ import {
 } from "@/features/admin/server/members.repository";
 import { AdminMemberActions } from "./AdminMemberActions";
 import styles from "./AdminMemberDetailPage.module.css";
+import logStyles from "@/features/admin/components/traffic/TrafficLogsPage.module.css";
 
 const tabs: Array<{ label: string; value: MemberDetailTab }> = [
   { label: "개요", value: "overview" },
@@ -174,18 +175,31 @@ export async function AdminMemberDetailPage({ userId, activeTab, selectedItem }:
       ) : null}
 
       {tab === "logs" ? (
-        <ActivitySection title="방문·이벤트 로그" description="전체 기간 · 방문·이벤트 로그의 사용자 활동 기준과 동일하게 최신순 표시합니다.">
-          <DataTable columns={["접속일시", "이벤트", "주체", "식별 정보", "IP", "기기", "대상", "상세"]} rows={data.logs.map((item) => [
-            item.eventAt,
-            item.event,
-            item.userEmail ? `${item.userName} · ${item.userEmail}` : item.userName,
-            item.identity,
-            item.ipAddress,
-            item.device,
-            item.path,
-            item.detail,
-          ])} />
-        </ActivitySection>
+        <section className={styles.tableCard}>
+          <div className={logStyles.tableTop}>
+            <div>
+              <h2>방문·이벤트 로그</h2>
+              <p>전체 기간 · 방문·이벤트 로그의 사용자 활동 기준과 동일하게 최신순 표시합니다.</p>
+              <p>총 <strong>{data.logCount.toLocaleString("ko-KR")}</strong>건</p>
+            </div>
+          </div>
+          <div className={logStyles.tableWrap}>
+            <table className={logStyles.table}>
+              <thead><tr><th>접속일시</th><th>이벤트</th><th>주체</th><th>식별 정보</th><th>IP</th><th>기기</th><th>대상</th><th>상세</th></tr></thead>
+              <tbody>{data.logs.length ? data.logs.map((row) => (
+                <tr key={row.id}>
+                  <td>{row.eventAt}</td><td>{row.event}</td>
+                  <td><span className={logStyles.userCell}><strong>{row.userName}</strong><em>{row.userEmail || "비회원"}</em></span></td>
+                  <td className={logStyles.pathCell} title={row.identity}>{row.identity}</td>
+                  <td>{row.ipAddress}</td>
+                  <td><span className={`${logStyles.deviceBadge} ${row.device === "모바일" ? logStyles.deviceMobile : row.device === "웹" ? logStyles.deviceWeb : logStyles.deviceUnknown}`}>{row.device}</span></td>
+                  <td className={logStyles.pathCell} title={row.path}>{row.path}</td>
+                  <td className={logStyles.pathCell} title={row.detail}>{row.detail}</td>
+                </tr>
+              )) : <tr><td className={logStyles.emptyCell} colSpan={8}>조회된 로그가 없습니다.</td></tr>}</tbody>
+            </table>
+          </div>
+        </section>
       ) : null}
 
     </AdminLayout>

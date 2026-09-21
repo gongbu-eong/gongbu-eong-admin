@@ -121,6 +121,7 @@ export type MemberDetailData = {
   interviewCoachings: MemberInterviewCoaching[];
   community: MemberCommunityActivity[];
   logs: ActivityLogRow[];
+  logCount: number;
 };
 
 type MemberRow = {
@@ -620,6 +621,7 @@ export async function getMemberDetailData(
     interviewCoachings: [],
     community: [],
     logs: [],
+    logCount: 0,
   };
 
   const memberResult = await query<MemberRow>(
@@ -800,6 +802,7 @@ export async function getMemberDetailData(
       href: `/community/${row.post_id}${row.kind === "게시글" ? "" : `#comment-${row.id}`}`,
     })),
     logs: activityLogResult.rows,
+    logCount: activityLogResult.totalCount,
   };
 }
 

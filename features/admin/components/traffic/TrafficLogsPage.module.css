@@ -217,7 +217,8 @@
   border-bottom: 1px solid var(--admin-border);
   background: var(--admin-surface);
   vertical-align: middle;
-  white-space: nowrap;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .userCell {
@@ -275,16 +276,17 @@
 
 .userCell em {
   min-width: 0;
-  overflow: hidden;
   color: var(--admin-muted);
   font-size: 13px;
   font-style: normal;
-  text-overflow: ellipsis;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .pathCell {
-  overflow: hidden;
-  text-overflow: ellipsis;
+  max-width: 420px;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .deviceBadge {
