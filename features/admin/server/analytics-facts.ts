@@ -244,6 +244,13 @@ const dashboardBoundsSql = `
         GREATEST($2::date, (NOW() AT TIME ZONE 'Asia/Seoul')::date) AS last_day
     )`;
 
+// A single fact day intentionally has fixed bounds. The traffic CTE still
+// reads its 30-day lookback internally for sessions and returning visitors.
+const dashboardFactDayBoundsSql = `
+    bounds AS (
+      SELECT $1::date AS first_day, $1::date AS last_day
+    )`;
+
 const dashboardTrafficFactsSqlBody = `
       SELECT day, 'visitor' AS metric, channel, '' AS dimension, COUNT(*)::bigint AS value
       FROM analytics_daily_users GROUP BY day, channel
@@ -298,8 +305,8 @@ function dashboardConversionPageCte(path: string) {
     )`;
 }
 
-export function dashboardTrafficFactsSql() {
-  return `WITH ${dashboardBoundsSql},
+function dashboardTrafficFactsSqlWithBounds(boundsSql: string) {
+  return `WITH ${boundsSql},
     ${trafficFactsCtes("(SELECT first_day::timestamp AT TIME ZONE 'Asia/Seoul' FROM bounds)", "(SELECT (last_day + 1)::timestamp AT TIME ZONE 'Asia/Seoul' FROM bounds)")},
     days AS (SELECT d::date AS day FROM bounds, generate_series(first_day::timestamp, last_day::timestamp, interval '1 day') d),
     facts AS (${dashboardTrafficFactsSqlBody})
@@ -308,14 +315,22 @@ export function dashboardTrafficFactsSql() {
     ORDER BY f.day, metric, channel, dimension`;
 }
 
-export function dashboardProductFactsSql(product: string) {
+export function dashboardTrafficFactsSql() {
+  return dashboardTrafficFactsSqlWithBounds(dashboardBoundsSql);
+}
+
+export function dashboardTrafficFactsForDaySql() {
+  return dashboardTrafficFactsSqlWithBounds(dashboardFactDayBoundsSql);
+}
+
+function dashboardProductFactsSqlWithBounds(product: string, boundsSql: string) {
   const path = product === "resume_coaching"
     ? "/ai-tools/coaching"
     : product === "interview_coaching"
       ? "/ai-tools/interview-coaching"
       : "/events/diagnosis";
 
-  return `WITH ${dashboardBoundsSql},
+  return `WITH ${boundsSql},
     ${dashboardConversionPageCte(path)},
     ${conversionCtes(product, "(SELECT first_day::timestamp AT TIME ZONE 'Asia/Seoul' FROM bounds)", "conversion_pages")},
     days AS (SELECT d::date AS day FROM bounds, generate_series(first_day::timestamp, last_day::timestamp, interval '1 day') d),
@@ -367,6 +382,14 @@ export function dashboardProductFactsSql(product: string) {
     SELECT to_char(f.day, 'YYYY-MM-DD') AS day, metric, channel, dimension, value::text
     FROM facts f, bounds WHERE f.day BETWEEN bounds.first_day AND bounds.last_day
     ORDER BY f.day, metric, channel, dimension`;
+}
+
+export function dashboardProductFactsSql(product: string) {
+  return dashboardProductFactsSqlWithBounds(product, dashboardBoundsSql);
+}
+
+export function dashboardProductFactsForDaySql(product: string) {
+  return dashboardProductFactsSqlWithBounds(product, dashboardFactDayBoundsSql);
 }
 
 export function dashboardFactsSql(product: string) {

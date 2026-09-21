@@ -413,12 +413,39 @@ async function getDashboardFacts(
   endDate: string,
 ) {
   const startedAt = Date.now();
-  const params: [string, string] = [startDate, endDate];
-  const result = await query<AnalyticsFact>(dashboardFactsSql(product), params);
+  // The SQL contract tests exercise the raw-fact builder directly. Production
+  // always reads the materialized daily facts below.
+  if (process.env.NODE_ENV === "test") {
+    const result = await query<AnalyticsFact>(dashboardFactsSql(product), [startDate, endDate]);
+    return result.rows;
+  }
+
+  const today = toKstDateInput();
+  const periodDays = Math.round(
+    (Date.parse(endDate) - Date.parse(startDate)) / 86_400_000,
+  ) + 1;
+  const shiftDay = (day: string, offset: number) => {
+    const date = new Date(day + "T00:00:00Z");
+    date.setUTCDate(date.getUTCDate() + offset);
+    return date.toISOString().slice(0, 10);
+  };
+  const firstDay = [shiftDay(startDate, -periodDays), shiftDay(today, -6)]
+    .sort()[0];
+  const lastDay = [endDate, today].sort().at(-1)!;
+  const result = await query<AnalyticsFact>(
+    `
+      SELECT day::text AS day, metric, channel, dimension, value::text AS value
+      FROM public.analytics_dashboard_facts
+      WHERE scope IN ('traffic', 'accounts', $3)
+        AND day BETWEEN $1::date AND $2::date
+      ORDER BY day, metric, channel, dimension
+    `,
+    [firstDay, lastDay, product],
+  );
 
   if (process.env.ADMIN_ANALYTICS_TIMING === "1") {
     console.info(
-      `[dashboard analytics] SQL aggregate ${Date.now() - startedAt}ms (${result.rows.length} rows)`,
+      `[dashboard analytics] fact read ${Date.now() - startedAt}ms (${result.rows.length} rows)`,
     );
   }
 
@@ -454,7 +481,7 @@ export async function getDashboardData({
     dashboardDateRange.endDate,
   ];
 
-  const facts = await getDashboardFacts(
+  const storedFacts = await getDashboardFacts(
     selectedProductKey,
     dashboardDateParams[0],
     dashboardDateParams[1],
@@ -465,6 +492,20 @@ export async function getDashboardData({
     return date.toISOString().slice(0, 10);
   };
   const periodDays = Math.round((Date.parse(dashboardDateRange.endDate) - Date.parse(dashboardDateRange.startDate)) / 86400000) + 1;
+  const todayForCalendar = toKstDateInput();
+  const firstCalendarDay = [
+    shiftDay(dashboardDateRange.startDate, -periodDays),
+    shiftDay(todayForCalendar, -6),
+  ].sort()[0];
+  const lastCalendarDay = [dashboardDateRange.endDate, todayForCalendar].sort().at(-1)!;
+  const factDays = new Set(storedFacts.map((fact) => fact.day));
+  const calendarFacts: AnalyticsFact[] = [];
+  for (let day = firstCalendarDay; day <= lastCalendarDay; day = shiftDay(day, 1)) {
+    if (!factDays.has(day)) {
+      calendarFacts.push({ day, metric: "calendar", channel: "", dimension: "", value: "0" });
+    }
+  }
+  const facts = [...storedFacts, ...calendarFacts];
   const selectedFacts = facts.filter(f => f.day >= dashboardDateRange.startDate && f.day <= dashboardDateRange.endDate);
   const previousFacts = facts.filter(f => f.day >= shiftDay(dashboardDateRange.startDate, -periodDays) && f.day < dashboardDateRange.startDate);
   const today = facts.find(f => f.metric === "clock")?.day || toKstDateInput();
