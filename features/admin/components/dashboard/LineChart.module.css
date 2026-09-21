@@ -63,7 +63,26 @@
 }
 
 .compactChart {
-  top: 76px;
+  position: relative;
+  inset: auto;
+  width: 100%;
+}
+
+.compactWrap {
+  display: grid;
+  grid-template-rows: 72px 252px;
+  align-content: start;
+  padding-top: 8px;
+}
+
+.compactWrap .legends {
+  position: static;
+  align-content: center;
+  max-width: none;
+  max-height: 72px;
+  overflow-y: auto;
+  gap: 6px 10px;
+  font-size: 12px;
 }
 
 .svg {

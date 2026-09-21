@@ -1,7 +1,7 @@
 .card {
   display: flex;
   flex-direction: column;
-  height: 400px;
+  height: 440px;
   overflow: hidden;
   padding: 20px 22px;
 }
@@ -9,7 +9,7 @@
 .chartSlot {
   position: relative;
   flex: 1;
-  min-height: 270px;
+  min-height: 332px;
 }
 
 .header {
@@ -25,6 +25,14 @@
   color: var(--admin-text);
   font-size: 17px;
   font-weight: 800;
+}
+
+.header > div {
+  min-width: 0;
+}
+
+.viewSelect {
+  flex-shrink: 0;
 }
 
 .header p {
@@ -61,7 +69,7 @@
 
 .tableWrap th:first-child,
 .tableWrap td:first-child {
-  width: 16%;
+  width: 110px;
 }
 
 .tableWrap th,
@@ -130,6 +138,6 @@
   }
 
   .chartSlot {
-    min-height: 270px;
+    min-height: 332px;
   }
 }

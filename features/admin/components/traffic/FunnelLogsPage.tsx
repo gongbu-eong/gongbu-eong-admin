@@ -86,7 +86,7 @@ export async function FunnelLogsPage({ filters }: FunnelLogsPageProps) {
       activeNav="traffic"
       activeSubNav="traffic-funnel"
       title="전환 퍼널 상세"
-      description="대시보드 퍼널 숫자에 포함된 실제 회원과 익명 세션을 확인해요."
+      description="퍼널에 포함된 일별 인원입니다. 완료·미완료는 완료일이 아닌 시작일 기준입니다."
     >
       <section className={styles.page} aria-label="전환 퍼널 상세">
         <AdminCard className={styles.searchCard}>
@@ -154,7 +154,7 @@ export async function FunnelLogsPage({ filters }: FunnelLogsPageProps) {
             <table className={styles.table}>
               <thead>
                 <tr>
-                  <th>일시</th>
+                  <th>{data.step === "visit" || data.step === "visit_drop" ? "방문일시" : "시작일시"}</th>
                   <th>대상</th>
                   <th>마지막 행동</th>
                   <th>채널</th>

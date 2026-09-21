@@ -25,6 +25,7 @@ export type LinePoint = {
 };
 
 export type DashboardTrendSeries = {
+  valueSuffix?: string;
   label: string;
   color: string;
   data: LinePoint[];
@@ -76,19 +77,10 @@ export type BehaviorPatternItem = {
   visitors: string;
   activity: string;
   activityRate: string;
-  bounce: string;
-  bounceRate: string;
   revisit: string;
   revisitRate: string;
-  bookmark: string;
-  bookmarkRate: string;
   apply: string;
-  applyRate: string;
   pageMove: string;
-  pageMoveRate: string;
-  unknown: string;
-  unknownRate: string;
-  fill: number;
 };
 
 export type DashboardProductOption = {

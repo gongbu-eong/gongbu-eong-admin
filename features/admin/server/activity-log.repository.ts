@@ -1,3 +1,4 @@
+import { trafficFactsCtes, screenSql } from "./analytics-facts";
 import { query } from "@/features/admin/server/db";
 import {
   ensureAnalyticsExclusionSchema,
@@ -8,6 +9,7 @@ export type ActivityLogQuery = {
   startDate?: string;
   endDate?: string;
   event?: string;
+  bannerKey?: string;
   screen?: string;
   keyword?: string;
   ip?: string;
@@ -21,6 +23,7 @@ export type ActivityLogData = {
   startDate: string;
   endDate: string;
   event: string;
+  bannerKey: string;
   screen: string;
   keyword: string;
   ip: string;
@@ -113,6 +116,8 @@ function formatEvent(value: string | null) {
     banner_click: "배너·버튼 클릭",
     bookmark_click: "찜 클릭",
     apply_click: "지원 클릭",
+    job_detail_apply_click: "공고 지원 클릭",
+    job_detail_bookmark_click: "공고 찜 클릭",
     diagnosis_start: "진단 시작",
     diagnosis_complete: "진단 완료",
     diagnosis_result_view: "진단 결과 열람",
@@ -128,7 +133,8 @@ export async function getActivityLogData(args?: ActivityLogQuery): Promise<Activ
   const { startDate, endDate } = defaultDates(args);
   const requestedEvent = args?.event || "all";
   const event = requestedEvent === "page_view" ? "visit" : requestedEvent;
-  const screen = args?.screen || "all";
+  const screen = args?.screen === "coaching" ? "resume_coaching" : args?.screen || "all";
+  const bannerKey = args?.bannerKey || "";
   const keyword = (args?.keyword || "").trim();
   const ip = normalizeIp(args?.ip);
   const channel = args?.channel || "all";
@@ -140,7 +146,7 @@ export async function getActivityLogData(args?: ActivityLogQuery): Promise<Activ
   await ensureAnalyticsExclusionSchema();
 
   const eventsSql = `
-    WITH raw_events AS (
+    WITH ${trafficFactsCtes("($1::date::timestamp AT TIME ZONE 'Asia/Seoul')", "(($2::date + 1)::timestamp AT TIME ZONE 'Asia/Seoul')")}, raw_events AS (
       SELECT
         access.id::text AS id,
         access.created_at AS event_at,
@@ -151,13 +157,8 @@ export async function getActivityLogData(args?: ActivityLogQuery): Promise<Activ
         access.session_id,
         SPLIT_PART(access.ip_address::text, '/', 1) AS ip_address,
         access.user_agent,
-        COALESCE(
-          access.user_id::text,
-          access.anonymous_id::text,
-          access.session_id::text,
-          NULLIF(CONCAT_WS('|', SPLIT_PART(access.ip_address::text, '/', 1), NULLIF(access.user_agent, '')), '')
-        ) AS visitor_key,
-        COALESCE(access.canonical_path, access.path) AS path,
+        access.anonymous_id::text AS visitor_key,
+        access.path AS path,
         COALESCE(
           NULLIF(access.traffic_channel, ''),
           NULLIF(access.metadata->>'trafficChannel', ''),
@@ -265,43 +266,17 @@ export async function getActivityLogData(args?: ActivityLogQuery): Promise<Activ
         users.display_name,
         users.email::text AS email,
         COALESCE(raw_events.anonymous_id::text, raw_events.session_id::text) AS identity,
-        CASE
-          WHEN raw_events.screen_key IN ('home', 'job_detail', 'diagnosis', 'community', 'my', 'calendar', 'login')
-            THEN raw_events.screen_key
-          WHEN split_part(raw_events.path, '?', 1) = '/' THEN 'home'
-          WHEN split_part(raw_events.path, '?', 1) ~ '^/jobs/[^/]+$' THEN 'job_detail'
-          WHEN split_part(raw_events.path, '?', 1) LIKE '/ai-tools/diagnosis%'
-            OR split_part(raw_events.path, '?', 1) LIKE '/events/diagnosis%' THEN 'diagnosis'
-          WHEN split_part(raw_events.path, '?', 1) LIKE '/community%' THEN 'community'
-          WHEN split_part(raw_events.path, '?', 1) LIKE '/my%' THEN 'my'
-          WHEN split_part(raw_events.path, '?', 1) LIKE '/calendar%' THEN 'calendar'
-          WHEN split_part(raw_events.path, '?', 1) LIKE '/login%'
-            OR split_part(raw_events.path, '?', 1) LIKE '/auth%' THEN 'login'
-          ELSE 'other'
-        END AS normalized_screen_key
+        ${screenSql("split_part(raw_events.path, '?', 1)") } AS normalized_screen_key
       FROM raw_events
       LEFT JOIN public.users users ON users.id = raw_events.user_id
-    ), acquisition AS (
-      SELECT DISTINCT ON (visitor_key)
-        visitor_key,
-        CASE
-          WHEN source_value ILIKE '%instagram%' OR LOWER(source_value) = 'ig' THEN 'instagram'
-          WHEN source_value ILIKE '%blog%' OR source_value ILIKE '%블로그%' THEN 'blog'
-          WHEN source_value ILIKE '%thread%' OR source_value ILIKE '%스레드%' THEN 'threads'
-          WHEN source_value ILIKE '%naver%' OR source_value ILIKE '%google%'
-            OR source_value ILIKE '%daum%' OR source_value ILIKE '%search%'
-            OR source_value ILIKE '%검색%' THEN 'search'
-          ELSE 'direct'
-        END AS channel
-      FROM normalized
-      WHERE visitor_key IS NOT NULL
-        AND event_source = 'access'
-        AND event_type = 'page_view'
-      ORDER BY visitor_key, event_at, id
     ), enriched AS (
-      SELECT normalized.*, COALESCE(acquisition.channel, 'direct') AS acquisition_channel
+      SELECT normalized.*, CASE COALESCE(u.channel, p.channel)
+        WHEN '블로그' THEN 'blog' WHEN '인스타그램' THEN 'instagram'
+        WHEN '스레드' THEN 'threads' WHEN '검색' THEN 'search' ELSE 'direct' END AS acquisition_channel
       FROM normalized
-      LEFT JOIN acquisition ON acquisition.visitor_key = normalized.visitor_key
+      LEFT JOIN analytics_daily_users u ON u.visitor_key = normalized.anonymous_id::text
+        AND u.day = (normalized.event_at AT TIME ZONE 'Asia/Seoul')::date
+      LEFT JOIN analytics_pages p ON normalized.event_source = 'access' AND p.id = normalized.id
     )
   `;
   const whereSql = `
@@ -311,7 +286,7 @@ export async function getActivityLogData(args?: ActivityLogQuery): Promise<Activ
       ($3::text = 'attribution' AND event_type = 'attribution_capture') OR
       ($3::text = 'login' AND event_type LIKE 'login_%') OR
       ($3::text = 'entry' AND event_type = 'entry'))
-    AND ($4::text = 'all' OR normalized_screen_key = $4::text OR screen_key ILIKE '%' || $4::text || '%' OR path ILIKE '%' || $4::text || '%')
+    AND ($4::text = 'all' OR normalized_screen_key = $4::text OR ($4::text = 'ai_tools' AND path LIKE '/ai-tools%'))
     AND ($5::text = 'all' OR acquisition_channel = $5::text)
     AND (
       $6::text = '' OR path ILIKE $6::text OR detail ILIKE $6::text OR
@@ -319,14 +294,17 @@ export async function getActivityLogData(args?: ActivityLogQuery): Promise<Activ
       nickname ILIKE $6::text OR display_name ILIKE $6::text OR email ILIKE $6::text
     )
     AND ($7::text = '' OR ip_address = $7::text)
+    AND ($8::text = '' OR (event_source = 'product' AND EXISTS (
+      SELECT 1 FROM analytics_products p WHERE p.id = enriched.id AND p.banner_key = $8::text
+    )))
   `;
-  const baseParams = [startDate, endDate, event, screen, channel, pattern, ip];
+  const baseParams = [startDate, endDate, event, screen, channel, pattern, ip, bannerKey];
   const sourceSql = uniqueOnly
     ? `${eventsSql}, filtered AS (
         SELECT enriched.*,
-          ROW_NUMBER() OVER (PARTITION BY visitor_key ORDER BY event_at ASC, id ASC) AS visitor_rank
+          ROW_NUMBER() OVER (PARTITION BY (event_at AT TIME ZONE 'Asia/Seoul')::date, anonymous_id ORDER BY event_at ASC, id ASC) AS visitor_rank
         FROM enriched
-        ${whereSql}
+        ${whereSql} AND anonymous_id IS NOT NULL
       )`
     : eventsSql;
   const rowsSource = uniqueOnly
@@ -334,7 +312,7 @@ export async function getActivityLogData(args?: ActivityLogQuery): Promise<Activ
     : `enriched ${whereSql}`;
   const [countResult, rowsResult] = await Promise.all([
     query<{ count: string }>(`${sourceSql} SELECT COUNT(*)::text AS count FROM ${uniqueOnly ? "filtered WHERE visitor_rank = 1" : `enriched ${whereSql}`}`, baseParams),
-    query<ActivityLogDbRow>(`${sourceSql} SELECT id, event_at, event_type, COALESCE(nickname, display_name) AS user_name, email AS user_email, anonymous_id, session_id, ip_address, user_agent, path, detail FROM ${rowsSource} ORDER BY event_at DESC, id DESC LIMIT $8 OFFSET $9`, [...baseParams, pageSize, offset]),
+    query<ActivityLogDbRow>(`${sourceSql} SELECT id, event_at, event_type, COALESCE(nickname, display_name) AS user_name, email AS user_email, anonymous_id, session_id, ip_address, user_agent, path, detail FROM ${rowsSource} ORDER BY event_at DESC, id DESC LIMIT $9 OFFSET $10`, [...baseParams, pageSize, offset]),
   ]);
   const totalCount = Number(countResult.rows[0]?.count || 0);
 
@@ -342,6 +320,7 @@ export async function getActivityLogData(args?: ActivityLogQuery): Promise<Activ
     startDate,
     endDate,
     event,
+    bannerKey,
     screen,
     keyword,
     ip,

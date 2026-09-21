@@ -1,3 +1,4 @@
+import { trafficFactsCtes, conversionCtes } from "./analytics-facts";
 import {
   BannerClickLogData,
   BannerClickLogQuery,
@@ -404,8 +405,8 @@ const funnelStepLabels: Record<FunnelStepFilter, string> = {
   visit: "방문",
   start: "시작",
   complete: "완료",
-  visit_drop: "방문 후 이탈",
-  start_drop: "시작 후 이탈",
+  visit_drop: "방문 후 미시작",
+  start_drop: "시작 후 미완료",
 };
 
 function numberValue(value: string | number | null | undefined) {
@@ -544,6 +545,7 @@ function createDelta(current: number, previous: number, suffix: string) {
 
 function mapChannelLabel(source: string | null) {
   const trimmed = (source || "").trim();
+  if (trimmed === "식별 불가") return trimmed;
   if (trafficChannelOrder.includes(trimmed)) return trimmed;
 
   const value = trimmed.toLowerCase();
@@ -1235,78 +1237,34 @@ export async function getFunnelLogData(
         requested_step
       FROM input
     ),
+    ${trafficFactsCtes("(SELECT current_start FROM ranges)", "(SELECT current_end FROM ranges)")},
+    ${conversionCtes(product, "(SELECT current_start FROM ranges)")},
     visits AS (
-      SELECT
-        logs.id::TEXT AS id,
-        logs.visitor_key,
-        logs.user_id,
-        logs.anonymous_id,
-        logs.event_at,
-        logs.landing_path AS path,
-        COALESCE(NULLIF(logs.previous_path, ''), logs.referrer, '-') AS referrer,
-        logs.source_value AS channel,
-        logs.ip_address::TEXT AS ip_address,
-        logs.user_agent
-      FROM (${trafficEventsSql}) logs, ranges
-      WHERE logs.event_at >= ranges.current_start
-        AND logs.event_at < ranges.current_end
-        AND ${productConfig.visitWhere}
+      SELECT * FROM conversion_visits, ranges
+      WHERE event_at >= current_start AND event_at < current_end
     ),
     starts AS (
-      SELECT start_events.*
-      FROM (${productConfig.startSql}) start_events, ranges
-      WHERE start_events.event_at >= ranges.current_start
-        AND start_events.event_at < ranges.current_end
-        AND ${excludedEventCondition("start_events.user_id", "start_events.ip_address")}
-    ),
-    completes AS (
-      SELECT complete_events.*
-      FROM (${productConfig.completeSql}) complete_events, ranges
-      WHERE complete_events.event_at >= ranges.current_start
-        AND complete_events.event_at < ranges.current_end
-        AND ${excludedEventCondition("complete_events.user_id", "complete_events.ip_address")}
-    ),
-    selected_events AS (
-      SELECT visits.*, '방문' AS last_action
-      FROM visits, ranges
-      WHERE ranges.requested_step = 'visit'
-      UNION ALL
-      SELECT starts.*, $5::text AS last_action
-      FROM starts, ranges
-      WHERE ranges.requested_step = 'start'
-      UNION ALL
-      SELECT completes.*, $6::text AS last_action
-      FROM completes, ranges
-      WHERE ranges.requested_step = 'complete'
-      UNION ALL
-      SELECT visits.*, '방문 후 이탈' AS last_action
-      FROM visits
-      CROSS JOIN ranges
-      LEFT JOIN starts ON starts.visitor_key = visits.visitor_key
-      WHERE ranges.requested_step = 'visit_drop'
-        AND starts.visitor_key IS NULL
-      UNION ALL
-      SELECT starts.*, '시작 후 이탈' AS last_action
-      FROM starts
-      CROSS JOIN ranges
-      LEFT JOIN completes ON completes.visitor_key = starts.visitor_key
-      WHERE ranges.requested_step = 'start_drop'
-        AND completes.visitor_key IS NULL
+      SELECT s.*, COALESCE(u.channel, '식별 불가') AS channel
+      FROM conversion_people s LEFT JOIN analytics_daily_users u USING (day, visitor_key), ranges
+      WHERE s.event_at >= current_start AND s.event_at < current_end
     ),
     deduped_events AS (
-      SELECT *
-      FROM (
-        SELECT
-          selected_events.*,
-          ROW_NUMBER() OVER (
-            PARTITION BY
-              (selected_events.event_at AT TIME ZONE 'Asia/Seoul')::date,
-              selected_events.visitor_key
-            ORDER BY selected_events.event_at DESC, selected_events.id DESC
-          ) AS row_no
-        FROM selected_events
-      ) ranked
-      WHERE ranked.row_no = 1
+      SELECT v.id, v.visitor_key, v.user_id, v.anonymous_id, v.event_at, v.path, v.referrer, v.channel, v.ip_address, v.user_agent,
+        '방문'::text AS last_action
+      FROM visits v WHERE v.requested_step = 'visit'
+      UNION ALL
+      SELECT s.id, s.visitor_key, s.user_id, s.anonymous_id, s.event_at, s.path, NULL, s.channel, s.ip_address, s.user_agent,
+        CASE WHEN ranges.requested_step = 'start' THEN $5::text
+          WHEN ranges.requested_step = 'complete' THEN $6::text ELSE '시작 후 미완료' END
+      FROM starts s, ranges WHERE ranges.requested_step = 'start'
+        OR (ranges.requested_step = 'complete' AND s.completed)
+        OR (ranges.requested_step = 'start_drop' AND NOT s.completed)
+      UNION ALL
+      SELECT v.id, v.visitor_key, v.user_id, v.anonymous_id, v.event_at, v.path, v.referrer, v.channel, v.ip_address, v.user_agent,
+        '방문 후 미시작'
+      FROM visits v WHERE v.requested_step = 'visit_drop'
+        AND NOT EXISTS (SELECT 1 FROM conversion_starts s
+          WHERE s.day = v.day AND s.visitor_key = v.visitor_key AND s.event_at >= v.event_at)
     ),
     enriched_events AS (
       SELECT

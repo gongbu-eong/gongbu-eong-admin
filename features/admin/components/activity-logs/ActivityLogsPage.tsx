@@ -19,7 +19,7 @@ const screenOptions = [
   ["jobs", "공고 목록"],
   ["job_detail", "공고 상세"],
   ["ai_tools", "AI 도구"],
-  ["coaching", "AI NCS 자소서 코칭"],
+  ["resume_coaching", "AI NCS 자소서 코칭"],
   ["interview_coaching", "AI NCS 면접 코칭"],
   ["diagnosis", "강약점"],
   ["community", "커뮤니티"],
@@ -38,6 +38,7 @@ function formatCount(value: number) {
 function makeHref(data: Awaited<ReturnType<typeof getActivityLogData>>, page: number, selectedIp = data.ip) {
   const params = new URLSearchParams({ startDate: data.startDate, endDate: data.endDate });
   if (data.event !== "all") params.set("event", data.event);
+  if (data.bannerKey) params.set("bannerKey", data.bannerKey);
   if (data.screen !== "all") params.set("screen", data.screen);
   if (data.keyword) params.set("keyword", data.keyword);
   if (data.channel !== "all") params.set("channel", data.channel);
@@ -90,6 +91,7 @@ export async function ActivityLogsPage({ filters }: ActivityLogsPageProps) {
             <input name="keyword" placeholder="이름 · 경로 · 이벤트" defaultValue={data.keyword} />
           </label>
           {data.channel !== "all" ? <input type="hidden" name="channel" value={data.channel} /> : null}
+          {data.bannerKey ? <input type="hidden" name="bannerKey" value={data.bannerKey} /> : null}
           {data.uniqueOnly ? <input type="hidden" name="unique" value="1" /> : null}
           {data.from ? <input type="hidden" name="from" value={data.from} /> : null}
           {data.ip ? <input type="hidden" name="ip" value={data.ip} /> : null}
@@ -105,6 +107,7 @@ export async function ActivityLogsPage({ filters }: ActivityLogsPageProps) {
           <div className={styles.tableTop}>
             <div>
               <h2>{data.event === "visit" ? "방문 이력" : data.event === "all" ? "전체 방문·이벤트 이력" : "이벤트 이력"}</h2>
+              {data.bannerKey ? <p>선택한 배너·버튼의 실제 클릭만 조회 중</p> : null}
               <p>총 <strong>{formatCount(data.totalCount)}</strong>건 · {data.uniqueOnly ? "순 방문자 기준 · " : "원본 이벤트 기준 · "}비회원은 IP와 익명 식별자로 확인합니다.{data.ip ? ` · ${data.ip} 로그만 조회 중` : ""}</p>
             </div>
             <span className={styles.tableActions}>

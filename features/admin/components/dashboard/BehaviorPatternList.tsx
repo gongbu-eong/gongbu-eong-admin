@@ -25,30 +25,22 @@ export function BehaviorPatternList({
           <span>유입 경로</span>
           <span>방문자</span>
           <span>후속 행동 방문자</span>
-          <span>다른 페이지</span>
-          <span>지원</span>
+          <span>지원 클릭</span>
           <span>재방문자</span>
         </div>
         {items.map((item) => (
           <div className={styles.tableRow} key={item.key}>
             <span className={styles.channelCell}>
               <strong>{item.channelLabel}</strong>
-              <i>
-                <b style={{ width: `${item.fill}%` }} />
-              </i>
             </span>
             <strong>{item.visitors}</strong>
             <span>
               <b>{item.activity}</b>
               <em>{item.activityRate}</em>
-            </span>
-            <span>
-              <b>{item.pageMove}</b>
-              <em>{item.pageMoveRate}</em>
+              <em>페이지 이동 {item.pageMove}</em>
             </span>
             <span>
               <b>{item.apply}</b>
-              <em>{item.applyRate}</em>
             </span>
             <span>
               <b>{item.revisit}</b>
@@ -61,10 +53,10 @@ export function BehaviorPatternList({
         <div className={styles.empty}>공고 상세 유입 기록이 없습니다.</div>
       ) : null}
       <div className={styles.legend}>
-        <span>후속 행동 방문자: 공고 상세 이후 30분 내 다른 페이지 이동 또는 지원 클릭이 발생한 방문자</span>
-        <span>다른 페이지: 공고 상세 외 화면으로 이동한 횟수</span>
-        <span>지원: 공고 상세 방문 이후 지원 버튼 클릭 횟수</span>
-        <span>재방문자: 동일 식별자가 30분 세션 경계를 넘어 공고 상세 방문 후 30일 이내 다시 방문한 경우</span>
+        <span>방문자·후속 행동 방문자·재방문자는 브라우저 익명 ID 기준 일별 중복 제거 후 합산합니다. 각 항목은 서로 겹칠 수 있습니다.</span>
+        <span>후속 행동 방문자: 공고 상세 이후 같은 세션에서 페이지 재방문·이동 또는 클릭·진단·코칭을 진행한 방문자. 페이지 이동은 실제 방문 횟수입니다.</span>
+        <span>지원 클릭: 클릭 발생일 기준 실제 지원·이메일 지원 횟수. 방문 기록과 연결되지 않는 클릭도 제외하지 않으며, 유입 경로가 없으면 식별 불가로 표시합니다.</span>
+        <span>재방문자: 30분 이상 활동이 없어 새 세션이 시작될 때, 같은 브라우저 익명 ID의 이전 방문이 지난 30일 안에 있는 공고 상세 방문자입니다. 방문 이후 30일 동안 돌아올 사람을 뜻하지 않습니다.</span>
       </div>
     </section>
   );

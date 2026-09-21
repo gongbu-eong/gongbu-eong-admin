@@ -34,15 +34,15 @@
 .tableHeader,
 .tableRow {
   display: grid;
-  grid-template-columns: minmax(118px, 1.2fr) repeat(5, minmax(92px, 0.8fr));
+  grid-template-columns: minmax(100px, 1fr) minmax(76px, 0.8fr) minmax(128px, 1.3fr) repeat(2, minmax(76px, 0.8fr));
   align-items: center;
-  min-width: 700px;
+  min-width: 560px;
   column-gap: 12px;
 }
 
 .tableHeader {
   min-height: 38px;
-  border-radius: 10px;
+  border-radius: 8px;
   background: var(--admin-surface-soft);
   color: var(--admin-muted);
   font-size: 12px;

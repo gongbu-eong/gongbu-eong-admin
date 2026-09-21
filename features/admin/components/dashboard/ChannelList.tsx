@@ -19,7 +19,7 @@ export function ChannelList({
       <header className={styles.header}>
         <div>
           <h2>유입 채널 순 방문자</h2>
-          <p>조회 기간 순방문자 기준 · 총 {total}명</p>
+          <p>조회 기간 일별 순 방문자 합산 · 총 {total}명</p>
         </div>
       </header>
       <div className={styles.list}>

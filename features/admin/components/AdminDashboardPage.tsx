@@ -93,6 +93,9 @@ export async function AdminDashboardPage({
     bannerClickListTrend,
     jobDetailBehaviorTrend,
     jobDetailBehaviorListTrend,
+    unidentifiedPageCount,
+    unidentifiedStartCount,
+    unmatchedCompletionCount,
   } = await getDashboardData({
     period,
     selectedChannel,
@@ -100,7 +103,7 @@ export async function AdminDashboardPage({
     startDate,
     endDate,
   });
-  const visitorSignupScale = createChartScale([visitorTrend, signupTrend]);
+  const visitorSignupScale = createChartScale([visitorTrend]);
   const productConversionSeries = productHasVisitStep
     ? [productVisitTrend, productStartTrend, productCompleteTrend]
     : [productStartTrend, productCompleteTrend];
@@ -143,6 +146,12 @@ export async function AdminDashboardPage({
           <MetricCard key={metric.label} metric={metric} />
         ))}
       </section>
+      {unidentifiedPageCount > 0 ? (
+        <p role="status" className={styles.dataNotice}>
+          선택 기간에 브라우저 익명 식별자가 없는 방문 {unidentifiedPageCount.toLocaleString("ko-KR")}건이 있습니다.
+          화면 방문수에는 포함되지만 방문자 수·재방문자에는 포함되지 않습니다.
+        </p>
+      ) : null}
 
       <section className={styles.insightPanel} aria-label="주요 추이">
         <div className={styles.insightHeader}>
@@ -155,28 +164,25 @@ export async function AdminDashboardPage({
         </div>
         <div className={styles.chartGrid}>
           <TrendViewCard
-              title="방문자 및 전체 가입자 추이"
-              subtitle="최근 7일"
+              title="일별 방문자 추이"
+              subtitle="최근 7일 · 브라우저 익명 ID 기준 일별 순 방문자"
               listSubtitle={`목록 · ${dashboardPeriodText}`}
               yLabels={visitorSignupScale.yLabels}
-              listSeries={visitorSignupListTrend}
+              listSeries={visitorSignupListTrend.slice(0, 1)}
+              valueSuffix="명"
               series={[
                 {
                   label: "방문자",
                   color: "#2f7ff0",
                   data: visitorTrend,
                 },
-                {
-                  label: "전체 가입자",
-                  color: "#ffb000",
-                  data: signupTrend,
-                },
               ]}
               maxValue={visitorSignupScale.maxValue}
           />
           <TrendViewCard
               title="전체 가입자 추이"
-              subtitle="최근 7일 · 테스트 계정·제외 IP 제외 가입 완료 회원 수"
+              subtitle="최근 7일 · 각 날짜까지 가입한 현재 활성 회원 누적 수"
+              valueSuffix="명"
               listSubtitle={`목록 · ${dashboardPeriodText}`}
               yLabels={signupCountScale.yLabels}
               listSeries={visitorSignupListTrend.slice(1)}
@@ -207,25 +213,38 @@ export async function AdminDashboardPage({
             <MetricCard key={metric.label} metric={metric} />
           ))}
         </div>
+        {unidentifiedStartCount > 0 ? (
+          <p role="status" className={styles.dataNotice}>
+            브라우저 익명 식별자가 없는 시작 기록 {unidentifiedStartCount.toLocaleString("ko-KR")}건은 전환 인원 집계에서 제외했습니다.
+            시작 기록의 익명 식별자 수집 상태를 확인해야 합니다.
+          </p>
+        ) : null}
+        {unmatchedCompletionCount > 0 ? (
+          <p role="status" className={styles.dataNotice}>
+            시작 기록과 연결할 수 없는 진단 완료 {unmatchedCompletionCount.toLocaleString("ko-KR")}건은 전환 퍼널에서 제외했습니다.
+            누락된 시작을 임의로 생성하지 않습니다.
+          </p>
+        ) : null}
         <div className={styles.analysisGrid}>
           <TrendViewCard
               title={`${selectedProductLabel} 전환 추이`}
               subtitle={
                 productHasVisitStep
-                  ? "최근 7일 · 방문 / 시작 / 완료"
-                  : "최근 7일 · 진단 시작 / 진단 완료"
+                  ? "최근 7일 · 방문일 / 시작일 기준 시작·완료 인원"
+                  : "최근 7일 · 시작일 기준 진단 시작 / 진단 완료 인원"
               }
               listSubtitle={`목록 · ${dashboardPeriodText}`}
               yLabels={productConversionScale.yLabels}
               series={productConversionTrend}
               listSeries={productConversionListTrend}
               maxValue={productConversionScale.maxValue}
+              valueSuffix="명"
           />
           <AdminCard className={styles.funnelCard}>
             <FunnelList
               items={funnelItems}
               title={productFunnelTitle}
-              description={`${productFunnelDescription} 항목을 누르면 대상자 목록을 확인합니다.`}
+              description={`${dashboardPeriodText} · ${productFunnelDescription}`}
               productLabel={selectedProductLabel}
             />
           </AdminCard>
@@ -248,7 +267,7 @@ export async function AdminDashboardPage({
           <div className={styles.channelChartGrid}>
             <TrendViewCard
               title="유입 채널 순 방문자 추이"
-              subtitle="최근 7일 · 같은 방문자 중복 제외"
+              subtitle="최근 7일 · 일별 순 방문자, 당일 최초 유입 채널"
               listSubtitle={`목록 · ${dashboardPeriodText}`}
               yLabels={trafficChannelScale.yLabels}
               series={trafficChannelTrend}
@@ -258,13 +277,13 @@ export async function AdminDashboardPage({
             />
             <TrendViewCard
               title="화면별 방문수 추이"
-              subtitle="최근 7일 · 페이지 이동·방문 횟수"
-              listSubtitle={`목록 · ${dashboardPeriodText}`}
+              subtitle={`최근 7일 · ${selectedChannelLabel} · 페이지 이동·방문 횟수`}
+              listSubtitle={`목록 · ${dashboardPeriodText} · ${selectedChannelLabel}`}
               yLabels={screenScale.yLabels}
               series={screenTrend}
               listSeries={screenListTrend}
               maxValue={screenScale.maxValue}
-              valueSuffix="명"
+              valueSuffix="건"
             />
           </div>
           <div className={styles.channelDetailGrid}>
@@ -295,7 +314,7 @@ export async function AdminDashboardPage({
               maxValue={bannerClickScale.maxValue}
           />
           <AdminCard className={styles.bannerCard}>
-            <BannerClickList items={bannerClicks} total={bannerClickTotal} />
+            <BannerClickList items={bannerClicks} total={bannerClickTotal} periodLabel={dashboardPeriodText} />
           </AdminCard>
           <TrendViewCard
             className={styles.behaviorTrendCard}

@@ -10,7 +10,10 @@ export function ensureAnalyticsExclusionSchema() {
         reason TEXT,
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       )
-    `).then(() => undefined);
+    `).then(() => undefined).catch((error) => {
+      schemaPromise = null;
+      throw error;
+    });
   }
 
   return schemaPromise;

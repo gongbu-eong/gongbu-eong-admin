@@ -4,15 +4,16 @@ import styles from "./BannerClickList.module.css";
 type BannerClickListProps = {
   items: BannerClickItem[];
   total: string;
+  periodLabel: string;
 };
 
-export function BannerClickList({ items, total }: BannerClickListProps) {
+export function BannerClickList({ items, total, periodLabel }: BannerClickListProps) {
   return (
     <section className={styles.wrap}>
       <header className={styles.header}>
         <div>
           <h2>배너·버튼 클릭 상세</h2>
-          <p>오늘 클릭 기준 · 총 {total}건</p>
+          <p>{periodLabel} 클릭 기준 · 총 {total}건</p>
         </div>
       </header>
 
@@ -25,7 +26,7 @@ export function BannerClickList({ items, total }: BannerClickListProps) {
                   <strong>{item.label}</strong>
                   <b>{item.count}</b>
                 </div>
-                <p>고유 클릭 {item.uniqueCount}</p>
+                <p>일별 클릭 인원 합산 {item.uniqueCount}</p>
                 <div className={styles.track}>
                   <i style={{ width: `${item.fill}%` }} />
                 </div>
@@ -36,7 +37,7 @@ export function BannerClickList({ items, total }: BannerClickListProps) {
           })}
         </div>
       ) : (
-        <div className={styles.empty}>오늘 기록된 클릭이 없습니다.</div>
+        <div className={styles.empty}>조회 기간에 기록된 클릭이 없습니다.</div>
       )}
     </section>
   );

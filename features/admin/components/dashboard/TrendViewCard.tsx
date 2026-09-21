@@ -63,6 +63,7 @@ export function TrendViewCard({
       {view === "chart" ? (
         <div className={styles.chartSlot}>
           <LineChart
+            key={JSON.stringify(series)}
             title={title}
             subtitle={subtitle}
             yLabels={yLabels}
@@ -78,7 +79,7 @@ export function TrendViewCard({
         </div>
       ) : (
         <div className={styles.tableWrap}>
-          <table>
+          <table style={{ minWidth: Math.max(520, (displayListSeries.length + 1) * 110) }}>
             <thead>
               <tr>
                 <th scope="col">날짜</th>
@@ -95,7 +96,7 @@ export function TrendViewCard({
                   <th scope="row">{label}</th>
                   {displayListSeries.map((item) => (
                     <td key={`${item.label}-${label}`}>
-                      {formatValue(item.data[index]?.value ?? 0, valueSuffix)}
+                      {formatValue(item.data[index]?.value ?? 0, item.valueSuffix ?? valueSuffix)}
                     </td>
                   ))}
                 </tr>

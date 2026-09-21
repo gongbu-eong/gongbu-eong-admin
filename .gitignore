@@ -42,3 +42,5 @@ next-env.d.ts
 
 # sql
 *.sql
+*.md
+*.cjs

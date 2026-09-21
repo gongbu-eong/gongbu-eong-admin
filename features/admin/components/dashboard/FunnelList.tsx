@@ -10,26 +10,26 @@ type FunnelListProps = {
 };
 
 const funnelHelpTemplates: Record<
-  number,
+  string,
   {
     title: string;
     description: (productLabel: string) => string;
   }
 > = {
-  1: {
+  visit: {
     title: "방문",
     description: (productLabel) =>
-      `${productLabel} 페이지에 방문한 사용자 수를 나타냅니다.`,
+      `${productLabel} 페이지의 브라우저 익명 ID별 일일 방문 인원 합계입니다. 시작 기록과 별도로 집계합니다.`,
   },
-  2: {
+  start: {
     title: "시작",
     description: (productLabel) =>
-      `${productLabel}의 시작 버튼이나 요청 버튼을 눌러 실제 사용을 시작한 횟수를 나타냅니다.`,
+      `${productLabel} 사용을 시작한 브라우저 익명 ID별 일일 인원 합계입니다. 같은 날 여러 번 시작해도 1명입니다.`,
   },
-  3: {
+  complete: {
     title: "완료",
     description: (productLabel) =>
-      `${productLabel} 결과가 생성된 횟수를 나타냅니다.`,
+      `${productLabel} 시작 인원 중 현재까지 결과가 확인된 인원입니다. 결과 생성일이 아닌 시작일에 집계합니다.`,
   },
 };
 
@@ -54,7 +54,7 @@ export function FunnelList({
                   description: (productLabel: string) =>
                     `${productLabel} Q1 문항 화면에 진입한 사용자 수를 나타냅니다.`,
                 }
-              : funnelHelpTemplates[item.step];
+              : funnelHelpTemplates[item.label.includes("완료") ? "complete" : item.label.includes("시작") ? "start" : "visit"];
           const content = (
             <>
               <div className={styles.top}>

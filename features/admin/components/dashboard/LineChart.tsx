@@ -10,6 +10,7 @@ import { LinePoint } from "@/features/admin/data/dashboard";
 import styles from "./LineChart.module.css";
 
 type Series = {
+  valueSuffix?: string;
   label?: string;
   color: string;
   data: LinePoint[];
@@ -193,7 +194,7 @@ export function LineChart({
   };
 
   return (
-    <div className={styles.wrap}>
+    <div className={`${styles.wrap} ${hideHeader ? styles.compactWrap : ""}`}>
       {!hideHeader ? (
         <div className={styles.titleBlock}>
           <h2>{title}</h2>
@@ -287,7 +288,7 @@ export function LineChart({
                         <title>
                           {`${seriesLabel} ${point.source.label}: ${formatChartValue(
                             point.source.value,
-                            valueSuffix,
+                            item.valueSuffix ?? valueSuffix,
                           )}`}
                         </title>
                       </circle>
@@ -304,7 +305,7 @@ export function LineChart({
                               fontWeight="400"
                               textAnchor={labelProps.textAnchor}
                             >
-                              {formatChartValue(point.source.value, valueSuffix)}
+                              {formatChartValue(point.source.value, item.valueSuffix ?? valueSuffix)}
                             </text>
                           );
                         })()
@@ -342,7 +343,7 @@ export function LineChart({
                     {item.label}
                   </span>
                   <span className={styles.tooltipValue}>
-                    {formatChartValue(item.value, valueSuffix)}
+                    {formatChartValue(item.value, series[item.seriesIndex]?.valueSuffix ?? valueSuffix)}
                   </span>
                 </span>
               ))}
@@ -363,7 +364,7 @@ export function LineChart({
               }}
               key={`${label}-${index}`}
             >
-              {shouldShowXAxisLabel(index) ? label : ""}
+              {shouldShowXAxisLabel(index) ? label.replace(/^\d{4}-/, "").replace("-", "/") : ""}
             </span>
           ))}
         </div>

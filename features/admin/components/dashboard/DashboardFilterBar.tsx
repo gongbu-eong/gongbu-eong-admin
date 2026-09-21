@@ -70,16 +70,16 @@ export function DashboardFilterBar({
     setShowCustomRange(checked);
 
     if (checked) {
-      setDraftStartDate(endDate);
-      setDraftEndDate(endDate);
+      const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Seoul" }).format(new Date());
+      setDraftStartDate(today);
+      setDraftEndDate(today);
+    } else {
+      changePreset("today");
     }
   };
 
   const changeProduct = (nextProduct: string) => {
     const params = new URLSearchParams(searchParams.toString());
-
-    params.set("startDate", draftStartDate);
-    params.set("endDate", draftEndDate);
 
     if (nextProduct === "diagnosis") {
       params.delete("product");
@@ -139,6 +139,7 @@ export function DashboardFilterBar({
                 <span>조회 시작</span>
                 <input
                   type="date"
+                  required
                   value={draftStartDate}
                   onChange={(event) => setDraftStartDate(event.target.value)}
                 />
@@ -147,6 +148,7 @@ export function DashboardFilterBar({
                 <span>조회 종료</span>
                 <input
                   type="date"
+                  required
                   value={draftEndDate}
                   onChange={(event) => setDraftEndDate(event.target.value)}
                 />
