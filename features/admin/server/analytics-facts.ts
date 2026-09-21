@@ -34,9 +34,36 @@ export const bannerKeys = [
   "job_detail_strength_b", "job_detail_bookmark_click", "job_detail_apply_click",
 ];
 
+function analyticsExcludedCondition(userExpression: string, ipExpression: string) {
+  return `NOT EXISTS (
+      SELECT 1 FROM analytics_excluded_ip_hosts excluded_ips
+      WHERE excluded_ips.ip = NULLIF(SPLIT_PART((${ipExpression})::text, '/', 1), '')
+    )
+    AND NOT EXISTS (
+      SELECT 1 FROM analytics_excluded_user_ids excluded_users
+      WHERE excluded_users.id = ${userExpression}
+    )`;
+}
+
 // start/end are SQL expressions supplied by callers, never user input.
 export function trafficFactsCtes(start: string, end: string) {
   return `
+    analytics_excluded_ip_hosts AS MATERIALIZED (
+      SELECT DISTINCT HOST(ip_address) AS ip
+      FROM public.analytics_excluded_ips
+    ),
+    analytics_excluded_user_ids AS MATERIALIZED (
+      SELECT u.id
+      FROM public.users u
+      WHERE u.email::text ILIKE '%@example.local'
+        OR EXISTS (
+          SELECT 1
+          FROM public.auth_login_events l
+          JOIN analytics_excluded_ip_hosts excluded_ips
+            ON excluded_ips.ip = HOST(l.ip_address)
+          WHERE l.user_id = u.id
+        )
+    ),
     analytics_pages_raw AS MATERIALIZED (
       SELECT p.id AS id, p.user_id, p.anonymous_id, ${cookieKey("p")} AS visitor_key,
         p.created_at AS event_at, (p.created_at AT TIME ZONE 'Asia/Seoul')::date AS day,
@@ -51,7 +78,7 @@ export function trafficFactsCtes(start: string, end: string) {
       WHERE p.event_name = 'page_view'
         AND p.created_at >= (${start}) - interval '30 days' - interval '30 minutes'
         AND p.created_at < (${end})
-        AND ${excludedEventCondition("p.user_id", "p.ip_address")}
+        AND ${analyticsExcludedCondition("p.user_id", "p.ip_address")}
     ),
     analytics_pages AS MATERIALIZED (
       SELECT p.*, ${screenSql("p.path")} AS screen,
@@ -75,7 +102,7 @@ export function trafficFactsCtes(start: string, end: string) {
           OR e.event_type LIKE '%start'
           OR e.event_type LIKE '%complete'
         )
-        AND ${excludedEventCondition("e.user_id", "NULLIF(e.properties->>'ip_address', '')")}
+        AND ${analyticsExcludedCondition("e.user_id", "NULLIF(e.properties->>'ip_address', '')")}
     ),
     analytics_daily_users AS MATERIALIZED (
       SELECT DISTINCT ON (day, visitor_key) day, visitor_key, channel
@@ -352,7 +379,9 @@ export function dashboardFactsSql(product: string) {
     days AS (SELECT d::date AS day FROM bounds, generate_series(first_day::timestamp, last_day::timestamp, interval '1 day') d),
     eligible_users AS MATERIALIZED (
       SELECT id, (COALESCE(signup_completed_at, created_at) AT TIME ZONE 'Asia/Seoul')::date AS day
-      FROM public.users u WHERE status = 'active' AND ${excludedUserCondition("u.id")}
+      FROM public.users u
+      WHERE status = 'active'
+        AND NOT EXISTS (SELECT 1 FROM analytics_excluded_user_ids excluded_users WHERE excluded_users.id = u.id)
     ),
     daily_signups AS (
       SELECT d.day, COUNT(u.id) AS count
@@ -398,7 +427,7 @@ export function dashboardFactsSql(product: string) {
       SELECT (COALESCE(r.completed_at, result.created_at) AT TIME ZONE 'Asia/Seoul')::date,
         'unmatched_completion', '', '', COUNT(*)
       FROM public.diagnosis_results result JOIN public.diagnosis_runs r ON r.id = result.diagnosis_run_id
-      WHERE ${excludedEventCondition("result.user_id", "r.ip_address")}
+      WHERE ${analyticsExcludedCondition("result.user_id", "r.ip_address")}
         AND COALESCE(r.completed_at, result.created_at) >= (SELECT first_day::timestamp AT TIME ZONE 'Asia/Seoul' FROM bounds)
         AND COALESCE(r.completed_at, result.created_at) < (SELECT (last_day + 1)::timestamp AT TIME ZONE 'Asia/Seoul' FROM bounds)
         AND NOT EXISTS (
@@ -406,7 +435,7 @@ export function dashboardFactsSql(product: string) {
           WHERE e.anonymous_id = r.anonymous_id AND e.event_type = 'diagnosis_start'
             AND e.properties->>'action' IN ('question_1_view', 'start_button_click')
             AND e.created_at <= COALESCE(r.completed_at, result.created_at)
-            AND ${excludedEventCondition("e.user_id", "NULLIF(e.properties->>'ip_address', '')")}
+            AND ${analyticsExcludedCondition("e.user_id", "NULLIF(e.properties->>'ip_address', '')")}
         ) GROUP BY 1` : ""}
       UNION ALL
       SELECT day, 'product_complete', '', '', COUNT(*) FROM conversion_people WHERE completed GROUP BY day
