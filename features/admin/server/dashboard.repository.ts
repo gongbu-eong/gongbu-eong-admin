@@ -413,9 +413,10 @@ async function getDashboardFacts(
   endDate: string,
 ) {
   const startedAt = Date.now();
-  // The SQL contract tests exercise the raw-fact builder directly. Production
-  // always reads the materialized daily facts below.
-  if (process.env.NODE_ENV === "test") {
+  // Facts are enabled only after the one-time historical backfill has been
+  // verified. This keeps every existing dashboard value visible during the
+  // migration instead of mixing an incomplete fact table with live data.
+  if (process.env.NODE_ENV === "test" || process.env.ANALYTICS_FACT_SOURCE !== "facts") {
     const result = await query<AnalyticsFact>(dashboardFactsSql(product), [startDate, endDate]);
     return result.rows;
   }

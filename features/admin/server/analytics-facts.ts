@@ -14,6 +14,30 @@ export function channelSql(source: string) {
     ELSE '직접유입' END`;
 }
 
+// Every channel-filtered surface uses the first page-view source of the KST
+// day. Internal moves retain the captured external attribution when present.
+export function normalizedTrafficChannelSql(source: string, metadata: string) {
+  return channelSql(`CASE
+    WHEN ${source} ~* '(page_move|page move|internal|페이지 이동)'
+      THEN COALESCE(
+        NULLIF(${metadata} #>> '{attribution,current,source}', ''),
+        NULLIF(${metadata} #>> '{attribution,first,source}', ''),
+        'direct'
+      )
+    ELSE ${source}
+  END`);
+}
+
+export function trafficChannelKeySql(source: string, metadata: string) {
+  return `CASE ${normalizedTrafficChannelSql(source, metadata)}
+    WHEN '인스타그램' THEN 'instagram'
+    WHEN '블로그' THEN 'blog'
+    WHEN '스레드' THEN 'threads'
+    WHEN '검색' THEN 'search'
+    ELSE 'direct'
+  END`;
+}
+
 export function screenSql(path: string) {
   return `CASE
     WHEN ${path} = '/' THEN 'home'
@@ -82,9 +106,7 @@ export function trafficFactsCtes(start: string, end: string) {
     ),
     analytics_pages AS MATERIALIZED (
       SELECT p.*, ${screenSql("p.path")} AS screen,
-        ${channelSql(`CASE WHEN raw_source ~* '(page_move|page move|internal|페이지 이동)'
-          THEN COALESCE(NULLIF(metadata #>> '{attribution,current,source}', ''),
-            NULLIF(metadata #>> '{attribution,first,source}', ''), 'direct') ELSE raw_source END`)} AS channel
+        ${normalizedTrafficChannelSql("raw_source", "metadata")} AS channel
       FROM analytics_pages_raw p
     ),
     analytics_products AS MATERIALIZED (
