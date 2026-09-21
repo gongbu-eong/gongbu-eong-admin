@@ -1,8 +1,9 @@
 import { excludedEventCondition, excludedUserCondition } from "./analytics-exclusion.repository";
 
-// The current collector persists anonymous_id in localStorage, not a server cookie.
-// It survives login. IP/session IDs must not turn into people.
-export const cookieKey = (alias: string) => `NULLIF(${alias}.anonymous_id::text, '')`;
+// Prefer the browser identifier, then fall back to the logged-in account when
+// a page/event was recorded without anonymous_id. IP/session IDs are not people.
+export const cookieKey = (alias: string) =>
+  `COALESCE(NULLIF(${alias}.anonymous_id::text, ''), NULLIF(${alias}.user_id::text, ''))`;
 
 export function channelSql(source: string) {
   return `CASE
@@ -81,13 +82,21 @@ export function trafficFactsCtes(start: string, end: string) {
       FROM analytics_pages WHERE visitor_key IS NOT NULL
       ORDER BY day, visitor_key, event_at, id
     ),
+    analytics_job_visitors AS MATERIALIZED (
+      SELECT DISTINCT visitor_key
+      FROM analytics_pages
+      WHERE visitor_key IS NOT NULL AND screen = 'job_detail'
+    ),
     analytics_activity AS (
       SELECT 'p:' || id AS id, visitor_key, event_at, day, path, 'page_view' AS event_type,
         screen = 'job_detail' AS is_job, NULL::text AS banner_key
-      FROM analytics_pages WHERE visitor_key IS NOT NULL
+      FROM analytics_pages p
+      JOIN analytics_job_visitors j USING (visitor_key)
       UNION ALL
       SELECT 'e:' || id, visitor_key, event_at, day, path, event_type, false, banner_key
-      FROM analytics_products WHERE visitor_key IS NOT NULL
+      FROM analytics_products p
+      JOIN analytics_job_visitors j USING (visitor_key)
+      WHERE visitor_key IS NOT NULL
         AND event_type <> 'banner_impression'
     ),
     analytics_previous AS (
@@ -168,7 +177,7 @@ export function conversionCtes(
       FROM public.diagnosis_results result JOIN public.diagnosis_runs r ON r.id = result.diagnosis_run_id
       JOIN LATERAL (
         SELECT s.id FROM conversion_starts_raw s
-        WHERE s.visitor_key = r.anonymous_id::text
+        WHERE s.visitor_key = COALESCE(NULLIF(r.anonymous_id::text, ''), NULLIF(result.user_id::text, ''))
           AND s.event_at <= COALESCE(r.completed_at, result.created_at)
         ORDER BY s.event_at DESC, s.id DESC LIMIT 1
       ) s ON true
@@ -310,7 +319,8 @@ export function dashboardProductFactsSql(product: string) {
         AND COALESCE(r.completed_at, result.created_at) < (SELECT (last_day + 1)::timestamp AT TIME ZONE 'Asia/Seoul' FROM bounds)
         AND NOT EXISTS (
           SELECT 1 FROM public.product_events e
-          WHERE e.anonymous_id = r.anonymous_id AND e.event_type = 'diagnosis_start'
+          WHERE ${cookieKey("e")} = COALESCE(NULLIF(r.anonymous_id::text, ''), NULLIF(result.user_id::text, ''))
+            AND e.event_type = 'diagnosis_start'
             AND e.properties->>'action' IN ('question_1_view', 'start_button_click')
             AND e.created_at <= COALESCE(r.completed_at, result.created_at)
             AND ${excludedEventCondition("e.user_id", "NULLIF(e.properties->>'ip_address', '')")}

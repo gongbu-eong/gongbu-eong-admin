@@ -10,10 +10,8 @@ import {
   ScreenInflowItem,
 } from "@/features/admin/data/dashboard";
 import { query } from "@/features/admin/server/db";
-import { ensureAnalyticsExclusionSchema } from "./analytics-exclusion.repository";
 import {
-  dashboardProductFactsSql,
-  dashboardTrafficFactsSql,
+  dashboardFactsSql,
   type AnalyticsFact,
 } from "./analytics-facts";
 
@@ -409,81 +407,22 @@ function mapBannerLabel(key: string | null, name: string | null) {
   return bannerLabels[trimmedKey] || trimmedKey;
 }
 
-const dashboardFactsCache = new Map<
-  string,
-  { expiresAt: number; pending: Promise<AnalyticsFact[]> }
->();
-
-function trimDashboardFactsCache() {
-  const now = Date.now();
-  for (const [key, entry] of dashboardFactsCache) {
-    if (entry.expiresAt <= now) dashboardFactsCache.delete(key);
-  }
-
-  while (dashboardFactsCache.size > 12) {
-    const oldestKey = dashboardFactsCache.keys().next().value;
-    if (!oldestKey) break;
-    dashboardFactsCache.delete(oldestKey);
-  }
-}
-
-async function getCachedDashboardFacts(
-  key: string,
-  sql: string,
-  params: [string, string],
-) {
-  const startedAt = Date.now();
-  const reportTiming = (rowCount: number) => {
-    if (process.env.ADMIN_ANALYTICS_TIMING !== "1") return;
-    console.info(`[dashboard analytics] ${key} ${Date.now() - startedAt}ms (${rowCount} rows)`);
-  };
-
-  // The test suite changes fixture state between assertions; the running admin
-  // can reuse the same facts briefly so preset/product switches do not rescan DB.
-  if (process.env.NODE_ENV === "test") {
-    const result = await query<AnalyticsFact>(sql, params);
-    reportTiming(result.rows.length);
-    return result.rows;
-  }
-
-  trimDashboardFactsCache();
-  const cached = dashboardFactsCache.get(key);
-  if (cached && cached.expiresAt > Date.now()) return cached.pending;
-
-  const pending = query<AnalyticsFact>(sql, params)
-    .then((result) => {
-      reportTiming(result.rows.length);
-      return result.rows;
-    })
-    .catch((error) => {
-      dashboardFactsCache.delete(key);
-      throw error;
-    });
-
-  dashboardFactsCache.set(key, { expiresAt: Date.now() + 60_000, pending });
-  return pending;
-}
-
 async function getDashboardFacts(
   product: string,
   startDate: string,
   endDate: string,
 ) {
+  const startedAt = Date.now();
   const params: [string, string] = [startDate, endDate];
-  const [trafficFacts, productFacts] = await Promise.all([
-    getCachedDashboardFacts(
-      `traffic:${startDate}:${endDate}`,
-      dashboardTrafficFactsSql(),
-      params,
-    ),
-    getCachedDashboardFacts(
-      `product:${product}:${startDate}:${endDate}`,
-      dashboardProductFactsSql(product),
-      params,
-    ),
-  ]);
+  const result = await query<AnalyticsFact>(dashboardFactsSql(product), params);
 
-  return [...trafficFacts, ...productFacts];
+  if (process.env.ADMIN_ANALYTICS_TIMING === "1") {
+    console.info(
+      `[dashboard analytics] SQL aggregate ${Date.now() - startedAt}ms (${result.rows.length} rows)`,
+    );
+  }
+
+  return result.rows;
 }
 
 export async function getDashboardData({
@@ -499,7 +438,6 @@ export async function getDashboardData({
   startDate?: string | null;
   endDate?: string | null;
 } = {}): Promise<DashboardData> {
-  await ensureAnalyticsExclusionSchema();
   const selectedChannelKey = normalizeDashboardChannel(selectedChannel);
   const selectedChannelLabel =
     dashboardChannelOptions.find((item) => item.key === selectedChannelKey)
