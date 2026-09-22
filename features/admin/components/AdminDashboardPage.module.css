@@ -154,6 +154,12 @@
   }
 }
 
+@media (min-width: 901px) and (max-width: 1500px) {
+  .dashboardSection {
+    scroll-margin-top: 150px;
+  }
+}
+
 @media (max-width: 900px) {
   .dashboardSection {
     scroll-margin-top: 214px;

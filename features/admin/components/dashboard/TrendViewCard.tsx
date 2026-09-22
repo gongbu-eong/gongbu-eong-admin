@@ -59,7 +59,10 @@ export function TrendViewCard({
   });
 
   return (
-    <AdminCard id={id} className={`${styles.card} ${className}`}>
+    <AdminCard
+      id={id}
+      className={`${styles.card} ${view === "chart" ? styles.chartView : styles.listView} ${className}`}
+    >
       <div className={styles.header}>
         <div>
           <h2>
@@ -71,11 +74,10 @@ export function TrendViewCard({
         <button
           className={styles.viewToggle}
           type="button"
-          aria-label={`${title} ${view === "chart" ? "목록" : "그래프"}으로 전환`}
-          aria-pressed={view === "list"}
+          aria-label={`${title} ${view === "chart" ? "목록 보기" : "그래프 보기"}`}
           onClick={() => setView((current) => current === "chart" ? "list" : "chart")}
         >
-          {view === "chart" ? "그래프" : "목록"}
+          {view === "chart" ? "목록 보기" : "그래프 보기"}
         </button>
       </div>
       {view === "chart" ? (

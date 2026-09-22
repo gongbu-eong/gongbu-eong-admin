@@ -107,7 +107,7 @@ export function DashboardFilterBar({
         </AdminSelect>
       </label>
       <div className={styles.rangeControls}>
-        <label className={styles.customToggle}>
+        <label className={`${styles.customToggle} ${showCustomRange ? styles.customToggleActive : ""}`}>
           <input
             type="checkbox"
             checked={showCustomRange}
@@ -135,7 +135,7 @@ export function DashboardFilterBar({
             </div>
           ) : (
             <form className={styles.dateForm} onSubmit={applyDateRange}>
-              <label>
+              <label className={styles.dateField}>
                 <span>조회 시작</span>
                 <input
                   type="date"
@@ -144,7 +144,7 @@ export function DashboardFilterBar({
                   onChange={(event) => setDraftStartDate(event.target.value)}
                 />
               </label>
-              <label>
+              <label className={styles.dateField}>
                 <span>조회 종료</span>
                 <input
                   type="date"

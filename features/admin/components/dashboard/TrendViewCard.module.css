@@ -2,15 +2,24 @@
   scroll-margin-top: 112px;
   display: flex;
   flex-direction: column;
-  height: 440px;
   overflow: hidden;
   padding: 20px 22px;
+}
+
+.chartView {
+  height: 420px;
+}
+
+.listView {
+  height: 440px;
 }
 
 .chartSlot {
   position: relative;
   flex: 1;
+  width: min(100%, 1040px);
   min-height: 332px;
+  margin: 0 auto;
 }
 
 .header {
@@ -45,7 +54,7 @@
 
 .viewToggle {
   flex-shrink: 0;
-  min-width: 68px;
+  min-width: 84px;
   height: 34px;
   border: 1px solid #d8e0ed;
   border-radius: 8px;
