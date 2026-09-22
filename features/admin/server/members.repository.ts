@@ -488,11 +488,11 @@ const memberFilterSql = `
     )
     AND (
       $2::text = 'all'
-      OR ($2::text = 'active' AND users.status = 'active')
-      OR ($2::text = 'pending_signup' AND users.status = 'pending_signup')
-      OR ($2::text = 'blocked' AND users.status = 'blocked')
-      OR ($2::text = 'withdrawn' AND users.status = 'withdrawn')
-      OR ($2::text = 'forced_withdrawn' AND users.status = 'forced_withdrawn')
+      OR ($2::text = 'active' AND users.status::text = 'active')
+      OR ($2::text = 'pending_signup' AND users.status::text = 'pending_signup')
+      OR ($2::text = 'blocked' AND users.status::text = 'blocked')
+      OR ($2::text = 'withdrawn' AND users.status::text = 'withdrawn')
+      OR ($2::text = 'forced_withdrawn' AND users.status::text = 'forced_withdrawn')
     )
     AND (
       $3::text = 'all'
@@ -530,23 +530,33 @@ export async function getMemberListData(
       `
         SELECT
           COUNT(*) AS total_members,
-          COUNT(*) FILTER (WHERE users.status = 'active') AS active_members,
-          COUNT(*) FILTER (WHERE users.status = 'pending_signup') AS pending_signup_members,
-          COUNT(*) FILTER (WHERE users.status = 'blocked') AS blocked_members,
-          COUNT(*) FILTER (WHERE users.status = 'withdrawn') AS withdrawn_members,
-          COUNT(*) FILTER (WHERE users.status = 'forced_withdrawn') AS forced_withdrawn_members,
+          COUNT(*) FILTER (WHERE users.status::text = 'active') AS active_members,
+          COUNT(*) FILTER (WHERE users.status::text = 'pending_signup') AS pending_signup_members,
+          COUNT(*) FILTER (WHERE users.status::text = 'blocked') AS blocked_members,
+          COUNT(*) FILTER (WHERE users.status::text = 'withdrawn') AS withdrawn_members,
+          COUNT(*) FILTER (WHERE users.status::text = 'forced_withdrawn') AS forced_withdrawn_members,
           COUNT(*) FILTER (
             WHERE COALESCE(users.signup_completed_at, users.created_at) >= NOW() - INTERVAL '7 days'
           ) AS new_week_members,
-          COUNT(DISTINCT diagnosis.user_id) AS diagnosis_members,
-          COUNT(DISTINCT coaching.user_id) AS coaching_members
+          COUNT(*) FILTER (
+            WHERE EXISTS (
+              SELECT 1
+              FROM public.diagnosis_results diagnosis
+              WHERE diagnosis.user_id = users.id
+            )
+          ) AS diagnosis_members,
+          COUNT(*) FILTER (
+            WHERE EXISTS (
+              SELECT 1
+              FROM public.resume_coaching_requests resume
+              WHERE resume.user_id = users.id
+            ) OR EXISTS (
+              SELECT 1
+              FROM public.interview_coaching_sessions interview
+              WHERE interview.user_id = users.id
+            )
+          ) AS coaching_members
         FROM public.users users
-        LEFT JOIN public.diagnosis_results diagnosis ON diagnosis.user_id = users.id
-        LEFT JOIN (
-          SELECT user_id FROM public.resume_coaching_requests WHERE user_id IS NOT NULL
-          UNION
-          SELECT user_id FROM public.interview_coaching_sessions WHERE user_id IS NOT NULL
-        ) coaching ON coaching.user_id = users.id
       `,
     ),
     query<MemberRow>(

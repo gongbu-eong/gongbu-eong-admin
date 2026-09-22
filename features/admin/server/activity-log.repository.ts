@@ -245,6 +245,8 @@ function jobCohortSql() {
   const trafficCtes = trafficFactsCtes(
     "($1::date AT TIME ZONE 'Asia/Seoul')",
     "(($2::date + 1) AT TIME ZONE 'Asia/Seoul')",
+    "($1::date AT TIME ZONE 'Asia/Seoul')",
+    "(($2::date + 1) AT TIME ZONE 'Asia/Seoul')",
   );
 
   return `

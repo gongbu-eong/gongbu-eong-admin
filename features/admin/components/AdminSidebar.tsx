@@ -51,7 +51,7 @@ export function AdminSidebar({ activeNav, activeSubNav }: AdminSidebarProps) {
                 <span>{item.label}</span>
                 {item.expandable ? <span className={styles.navArrow}>▾</span> : null}
               </Link>
-              {isActive && item.children ? (
+              {item.children ? (
                 <div className={styles.subNav}>
                   {item.children.map((child) => (
                     <Link

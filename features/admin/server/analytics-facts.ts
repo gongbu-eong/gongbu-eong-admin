@@ -76,7 +76,62 @@ function analyticsExcludedCondition(userExpression: string, ipExpression: string
 }
 
 // start/end are SQL expressions supplied by callers, never user input.
-export function trafficFactsCtes(start: string, end: string) {
+export function trafficFactsCtes(
+  start: string,
+  end: string,
+  candidateStart?: string,
+  candidateEnd?: string,
+) {
+  const limitToJobCandidates = Boolean(candidateStart && candidateEnd);
+  const candidateCte = limitToJobCandidates
+    ? `,
+    analytics_job_candidates AS MATERIALIZED (
+      SELECT DISTINCT p.anonymous_id, p.user_id
+      FROM public.access_logs p
+      WHERE p.event_name = 'page_view'
+        AND p.created_at >= (${candidateStart})
+        AND p.created_at < (${candidateEnd})
+        AND split_part(p.path, '?', 1) ~ '^/jobs/[^/]+'
+        AND ${cookieKey("p")} IS NOT NULL
+        AND ${analyticsExcludedCondition("p.user_id", "p.ip_address")}
+        AND ${nonAutomatedUserAgentCondition("p.user_agent")}
+    )`
+    : "";
+  const pageCandidateCondition = limitToJobCandidates
+    ? `AND (
+          p.anonymous_id IN (
+            SELECT candidate.anonymous_id
+            FROM analytics_job_candidates candidate
+            WHERE candidate.anonymous_id IS NOT NULL
+          )
+          OR (
+            p.anonymous_id IS NULL
+            AND p.user_id IN (
+              SELECT candidate.user_id
+              FROM analytics_job_candidates candidate
+              WHERE candidate.anonymous_id IS NULL AND candidate.user_id IS NOT NULL
+            )
+          )
+        )`
+    : "";
+  const productCandidateCondition = limitToJobCandidates
+    ? `AND (
+          e.anonymous_id IN (
+            SELECT candidate.anonymous_id
+            FROM analytics_job_candidates candidate
+            WHERE candidate.anonymous_id IS NOT NULL
+          )
+          OR (
+            e.anonymous_id IS NULL
+            AND e.user_id IN (
+              SELECT candidate.user_id
+              FROM analytics_job_candidates candidate
+              WHERE candidate.anonymous_id IS NULL AND candidate.user_id IS NOT NULL
+            )
+          )
+        )`
+    : "";
+
   return `
     analytics_excluded_ip_hosts AS MATERIALIZED (
       SELECT DISTINCT HOST(ip_address) AS ip
@@ -93,7 +148,7 @@ export function trafficFactsCtes(start: string, end: string) {
             ON excluded_ips.ip = HOST(l.ip_address)
           WHERE l.user_id = u.id
         )
-    ),
+    )${candidateCte},
     analytics_pages_raw AS MATERIALIZED (
       SELECT p.id AS id, p.user_id, p.anonymous_id, ${cookieKey("p")} AS visitor_key,
         p.created_at AS event_at, (p.created_at AT TIME ZONE 'Asia/Seoul')::date AS day,
@@ -110,6 +165,7 @@ export function trafficFactsCtes(start: string, end: string) {
         AND p.created_at < (${end})
         AND ${analyticsExcludedCondition("p.user_id", "p.ip_address")}
         AND ${nonAutomatedUserAgentCondition("p.user_agent")}
+        ${pageCandidateCondition}
     ),
     analytics_pages AS MATERIALIZED (
       SELECT p.*, ${screenSql("p.path")} AS screen,
@@ -133,6 +189,7 @@ export function trafficFactsCtes(start: string, end: string) {
         )
         AND ${analyticsExcludedCondition("e.user_id", "NULLIF(e.properties->>'ip_address', '')")}
         AND ${nonAutomatedUserAgentCondition("NULLIF(e.properties->>'user_agent', '')")}
+        ${productCandidateCondition}
     ),
     analytics_daily_users AS MATERIALIZED (
       SELECT DISTINCT ON (day, visitor_key) day, visitor_key, channel
