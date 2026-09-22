@@ -97,6 +97,9 @@ type DashboardFactDetailSelector = {
   funnelLabel: string;
 };
 
+let factDetailSchemaCache: { ready: boolean; expiresAt: number } | null = null;
+const factDetailReadinessCache = new Map<string, { ready: boolean; expiresAt: number }>();
+
 const pageSize = 40;
 
 function dateValue(value: string | undefined, fallback: string) {
@@ -429,11 +432,23 @@ async function hasCompleteDashboardFactDetails(
     return false;
   }
 
-  const relation = await query<{ details: string | null; status: string | null }>(
-    `SELECT to_regclass('public.analytics_dashboard_fact_details')::text AS details,
-      to_regclass('public.analytics_dashboard_fact_detail_status')::text AS status`,
-  );
-  if (!relation.rows[0]?.details || !relation.rows[0]?.status) return false;
+  const now = Date.now();
+  if (!factDetailSchemaCache || factDetailSchemaCache.expiresAt <= now) {
+    const relation = await query<{ details: string | null; status: string | null }>(
+      `SELECT to_regclass('public.analytics_dashboard_fact_details')::text AS details,
+        to_regclass('public.analytics_dashboard_fact_detail_status')::text AS status`,
+    );
+    const schemaReady = Boolean(relation.rows[0]?.details && relation.rows[0]?.status);
+    factDetailSchemaCache = {
+      ready: schemaReady,
+      expiresAt: now + (schemaReady ? 300_000 : 5_000),
+    };
+  }
+  if (!factDetailSchemaCache.ready) return false;
+
+  const cacheKey = `${selector.scope}:${startDate}:${endDate}`;
+  const cached = factDetailReadinessCache.get(cacheKey);
+  if (cached && cached.expiresAt > now) return cached.ready;
 
   const ready = await query<{ ready: boolean }>(
     `
@@ -451,7 +466,12 @@ async function hasCompleteDashboardFactDetails(
     `,
     [selector.scope, startDate, endDate],
   );
-  return ready.rows[0]?.ready === true;
+  const isReady = ready.rows[0]?.ready === true;
+  factDetailReadinessCache.set(cacheKey, {
+    ready: isReady,
+    expiresAt: now + (isReady ? 60_000 : 5_000),
+  });
+  return isReady;
 }
 
 async function getDashboardFactDetailRows({
@@ -482,8 +502,8 @@ async function getDashboardFactDetailRows({
     AND ($5::text = '' OR details.channel = $5)
     AND ($6::text = '' OR details.dimension = $6)
   `;
-  const countResult = selector.metric === "product_start_drop"
-    ? await query<{ count: string }>(
+  const countPromise = selector.metric === "product_start_drop"
+    ? query<{ count: string }>(
         `SELECT GREATEST(
             COALESCE(SUM(facts.value) FILTER (WHERE facts.metric = 'product_start'), 0)
             - COALESCE(SUM(facts.value) FILTER (WHERE facts.metric = 'product_complete'), 0),
@@ -498,7 +518,7 @@ async function getDashboardFactDetailRows({
             AND ($6::text = '' OR facts.dimension = $6)`,
         values,
       )
-    : await query<{ count: string }>(
+    : query<{ count: string }>(
         `SELECT COALESCE(SUM(facts.value), 0)::text AS count
           FROM public.analytics_dashboard_facts facts
           WHERE facts.scope = $1
@@ -508,10 +528,7 @@ async function getDashboardFactDetailRows({
             AND ($6::text = '' OR facts.dimension = $6)`,
         values,
       );
-  const totalCount = Number(countResult.rows[0]?.count || 0);
-  const totalPages = Math.max(1, Math.ceil(totalCount / requestedPageSize));
-  const effectivePage = Math.min(page, totalPages);
-  const rowsResult = await query<ActivityLogDbRow>(
+  const queryRows = (targetPage: number) => query<ActivityLogDbRow>(
     `
       SELECT
         details.scope || ':' || details.day::text || ':' || details.metric || ':' || details.entity_key AS id,
@@ -527,15 +544,20 @@ async function getDashboardFactDetailRows({
         details.detail,
         details.channel AS acquisition_channel,
         ${screenSql("split_part(details.path, '?', 1)")} AS screen_key,
-        $7::text AS total_count
+        NULL::text AS total_count
       FROM public.analytics_dashboard_fact_details details
       LEFT JOIN public.users users ON users.id = details.user_id
       WHERE ${whereSql}
       ORDER BY details.event_at DESC, details.entity_key DESC
-      LIMIT $8 OFFSET $9
+      LIMIT $7 OFFSET $8
     `,
-    [...values, String(totalCount), requestedPageSize, (effectivePage - 1) * requestedPageSize],
+    [...values, requestedPageSize, (targetPage - 1) * requestedPageSize],
   );
+  let [countResult, rowsResult] = await Promise.all([countPromise, queryRows(page)]);
+  const totalCount = Number(countResult.rows[0]?.count || 0);
+  const totalPages = Math.max(1, Math.ceil(totalCount / requestedPageSize));
+  const effectivePage = Math.min(page, totalPages);
+  if (effectivePage !== page) rowsResult = await queryRows(effectivePage);
 
   return {
     rows: rowsResult.rows,
