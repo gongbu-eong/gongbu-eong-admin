@@ -71,12 +71,20 @@ export function BehaviorPatternList({
             <span className={styles.channelCell}>
               <strong>{item.channelLabel}</strong>
             </span>
-            <MetricLink href={item.visitorHref} className={styles.metricCell}>
-              <strong>{item.visitors}</strong>
-              <em>
-                30일 내 재방문 {item.revisit} ({item.revisitRate})
-              </em>
-            </MetricLink>
+            <span className={styles.metricCell}>
+              {item.visitorHref ? (
+                <Link className={styles.metricValueLink} href={item.visitorHref}>
+                  <strong>{item.visitors}</strong>
+                </Link>
+              ) : <strong>{item.visitors}</strong>}
+              {item.revisitHref ? (
+                <Link className={styles.revisitLink} href={item.revisitHref}>
+                  30일 내 재방문 {item.revisit} ({item.revisitRate})
+                </Link>
+              ) : (
+                <em>30일 내 재방문 {item.revisit} ({item.revisitRate})</em>
+              )}
+            </span>
             <MetricLink href={item.applyHref} className={styles.metricCell}>
               <b>{item.apply}</b>
               <em>{item.applyRate}</em>

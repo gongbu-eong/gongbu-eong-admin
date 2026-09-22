@@ -80,8 +80,8 @@ function makeIdentityHref(
     endDate: data.endDate,
     event: "activity",
   });
-  if (selected.ip) params.set("ip", selected.ip);
-  if (selected.keyword) params.set("keyword", selected.keyword);
+  const keyword = selected.keyword || selected.ip;
+  if (keyword) params.set("keyword", keyword);
   if (data.includeExcluded) params.set("includeExcluded", "1");
   return `/activity-logs?${params.toString()}`;
 }

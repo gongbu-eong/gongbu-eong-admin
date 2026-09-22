@@ -174,8 +174,11 @@ export function trafficFactsCtes(
     ),
     analytics_products AS MATERIALIZED (
       SELECT e.id::text AS id, ${cookieKey("e")} AS visitor_key,
+        e.user_id, e.anonymous_id,
         e.created_at AS event_at, (e.created_at AT TIME ZONE 'Asia/Seoul')::date AS day,
         e.event_type, split_part(e.properties->>'path', '?', 1) AS path,
+        NULLIF(e.properties->>'ip_address', '') AS ip_address,
+        NULLIF(e.properties->>'user_agent', '') AS user_agent,
         CASE WHEN e.event_type = 'banner_click' THEN e.properties->>'banner_key'
           WHEN e.event_type IN ('job_detail_bookmark_click', 'job_detail_apply_click') THEN e.event_type END AS banner_key
       FROM public.product_events e
@@ -361,6 +364,21 @@ export function conversionCtes(
 
 export type AnalyticsFact = { day: string; metric: string; channel: string; dimension: string; value: string };
 
+export type AnalyticsFactDetail = {
+  day: string;
+  metric: string;
+  channel: string;
+  dimension: string;
+  entity_key: string;
+  event_at: string;
+  user_id: string | null;
+  anonymous_id: string | null;
+  ip_address: string | null;
+  user_agent: string | null;
+  path: string | null;
+  detail: string | null;
+};
+
 const dashboardBoundsSql = `
     bounds AS (
       SELECT LEAST($1::date - ($2::date - $1::date + 1), (NOW() AT TIME ZONE 'Asia/Seoul')::date - 6) AS first_day,
@@ -451,6 +469,70 @@ export function dashboardTrafficFactsForDaySql() {
   return dashboardTrafficFactsSqlWithBounds(dashboardFactDayBoundsSql);
 }
 
+export function dashboardTrafficFactDetailsForDaySql() {
+  return `WITH ${dashboardFactDayBoundsSql},
+    ${trafficFactsCtes("(SELECT first_day::timestamp AT TIME ZONE 'Asia/Seoul' FROM bounds)", "(SELECT (last_day + 1)::timestamp AT TIME ZONE 'Asia/Seoul' FROM bounds)")},
+    analytics_daily_people AS MATERIALIZED (
+      SELECT DISTINCT ON (p.day, p.visitor_key) p.*
+      FROM analytics_pages p
+      WHERE p.visitor_key IS NOT NULL
+      ORDER BY p.day, p.visitor_key, p.event_at, p.id
+    ),
+    details AS (
+      SELECT p.day, 'visitor'::text AS metric, p.channel, ''::text AS dimension,
+        p.visitor_key AS entity_key, p.event_at, p.user_id, p.anonymous_id,
+        p.ip_address, p.user_agent, p.original_path AS path,
+        '일별 첫 방문'::text AS detail
+      FROM analytics_daily_people p
+      UNION ALL
+      SELECT p.day, 'screen', COALESCE(u.channel, p.channel), p.screen,
+        'p:' || p.id, p.event_at, p.user_id, p.anonymous_id,
+        p.ip_address, p.user_agent, p.original_path,
+        '페이지 방문'::text
+      FROM analytics_pages p
+      LEFT JOIN analytics_daily_users u USING (day, visitor_key)
+      UNION ALL
+      SELECT p.day, 'banner', COALESCE(u.channel, '식별 불가'), p.banner_key,
+        'e:' || p.id, p.event_at, p.user_id, p.anonymous_id,
+        p.ip_address, p.user_agent, p.path,
+        CASE p.banner_key
+          WHEN 'job_detail_apply_click' THEN '지원 버튼 클릭'
+          WHEN 'job_detail_bookmark_click' THEN '찜 버튼 클릭'
+          ELSE '배너·버튼 클릭'
+        END
+      FROM analytics_products p
+      LEFT JOIN analytics_daily_users u USING (day, visitor_key)
+      WHERE p.banner_key IN ('job_detail_resume_a','job_detail_resume_b','job_detail_strength_a','job_detail_strength_b','job_detail_bookmark_click','job_detail_apply_click')
+      UNION ALL
+      SELECT j.day, item.metric, j.channel, ''::text,
+        j.visitor_key, item.event_at, p.user_id, p.anonymous_id,
+        p.ip_address, p.user_agent, item.path, item.detail
+      FROM analytics_job_people j
+      JOIN analytics_pages p ON 'p:' || p.id = j.entry_id
+      CROSS JOIN LATERAL (
+        VALUES
+          ('job_entry'::text, j.session_start, p.original_path, '세션의 첫 화면이 공고 상세'::text, true),
+          ('job_' || j.outcome, COALESCE(j.outcome_at, j.session_start),
+            CASE WHEN j.outcome = 'move' THEN j.outcome_path ELSE p.original_path END,
+            CASE j.outcome
+              WHEN 'apply' THEN '첫 후속 결과: 지원 버튼 클릭'
+              WHEN 'move' THEN '첫 후속 결과: 다른 화면 이동'
+              WHEN 'exit' THEN '후속 행동 없이 세션 종료'
+              ELSE '세션 종료 전 판정 대기'
+            END,
+            true),
+          ('job_returning', j.session_start, p.original_path, '이전 30일 이내 방문 이력', j.returning)
+      ) AS item(metric, event_at, path, detail, enabled)
+      WHERE item.enabled
+    )
+    SELECT day::text AS day, metric, COALESCE(channel, '') AS channel,
+      COALESCE(dimension, '') AS dimension, entity_key, event_at,
+      user_id::text AS user_id, anonymous_id::text AS anonymous_id, ip_address,
+      user_agent, path, detail
+    FROM details
+    WHERE day = $1::date`;
+}
+
 function dashboardProductFactsSqlWithBounds(product: string, boundsSql: string) {
   const path = product === "resume_coaching"
     ? "/ai-tools/coaching"
@@ -518,6 +600,47 @@ export function dashboardProductFactsSql(product: string) {
 
 export function dashboardProductFactsForDaySql(product: string) {
   return dashboardProductFactsSqlWithBounds(product, dashboardFactDayBoundsSql);
+}
+
+export function dashboardProductFactDetailsForDaySql(product: string) {
+  const path = product === "resume_coaching"
+    ? "/ai-tools/coaching"
+    : product === "interview_coaching"
+      ? "/ai-tools/interview-coaching"
+      : "/events/diagnosis";
+
+  return `WITH ${dashboardFactDayBoundsSql},
+    ${dashboardConversionPageCte(path)},
+    ${conversionCtes(product, "(SELECT first_day::timestamp AT TIME ZONE 'Asia/Seoul' FROM bounds)", "conversion_pages")},
+    details AS (
+      SELECT v.day, 'product_visit'::text AS metric, ''::text AS channel,
+        ''::text AS dimension, v.visitor_key AS entity_key, v.event_at,
+        v.user_id, v.anonymous_id, v.ip_address, v.user_agent, v.path,
+        '페이지 방문'::text AS detail
+      FROM conversion_visits v
+      UNION ALL
+      SELECT p.day, 'product_start', '', '', p.visitor_key, p.event_at,
+        p.user_id, p.anonymous_id, p.ip_address, p.user_agent, p.path,
+        '기능 시작'::text
+      FROM conversion_people p
+      UNION ALL
+      SELECT p.day, 'product_complete', '', '', p.visitor_key, p.completed_at,
+        p.user_id, p.anonymous_id, p.ip_address, p.user_agent, p.path,
+        '기능 완료'::text
+      FROM conversion_people p
+      WHERE p.completed
+      UNION ALL
+      SELECT p.day, 'product_start_drop', '', '', p.visitor_key, p.event_at,
+        p.user_id, p.anonymous_id, p.ip_address, p.user_agent, p.path,
+        '시작 후 미완료'::text
+      FROM conversion_people p
+      WHERE NOT p.completed
+    )
+    SELECT day::text AS day, metric, channel, dimension, entity_key, event_at,
+      user_id::text AS user_id, anonymous_id::text AS anonymous_id,
+      ip_address, user_agent, path, detail
+    FROM details
+    WHERE day = $1::date`;
 }
 
 export function dashboardFactsSql(product: string) {

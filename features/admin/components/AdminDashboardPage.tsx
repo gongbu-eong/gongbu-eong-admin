@@ -270,10 +270,9 @@ export async function AdminDashboardPage({
             </p>
           </div>
         </div>
-        <div className={styles.channelInsight}>
+        <div id="channel-visitors" className={styles.channelInsight}>
           <div className={styles.channelChartGrid}>
             <TrendViewCard
-              id="channel-visitors"
               title="유입 채널 순 방문자 추이"
               subtitle="최근 7일 · 일별 순 방문자, 당일 최초 유입 채널"
               listSubtitle={`목록 · ${dashboardPeriodText}`}

@@ -1,8 +1,12 @@
 import { db, query } from "./db";
+import type { PoolClient } from "pg";
 import {
+  dashboardProductFactDetailsForDaySql,
   dashboardProductFactsForDaySql,
+  dashboardTrafficFactDetailsForDaySql,
   dashboardTrafficFactsForDaySql,
   type AnalyticsFact,
+  type AnalyticsFactDetail,
 } from "./analytics-facts";
 import { excludedUserCondition } from "./analytics-exclusion.repository";
 
@@ -52,6 +56,12 @@ function factsSql(scope: AnalyticsFactScope) {
   return dashboardProductFactsForDaySql(scope);
 }
 
+function factDetailsSql(scope: AnalyticsFactScope) {
+  if (scope === "traffic") return dashboardTrafficFactDetailsForDaySql();
+  if (productScopes.has(scope)) return dashboardProductFactDetailsForDaySql(scope);
+  return null;
+}
+
 function factsForScope(scope: AnalyticsFactScope, rows: AnalyticsFact[]) {
   if (scope === "accounts") {
     return rows.filter((row) => row.metric === "signup" || row.metric === "new_signup");
@@ -84,7 +94,11 @@ async function claimNext(workerId: string): Promise<QueueItem | null> {
         FROM public.analytics_fact_refresh_queue
         WHERE available_at <= NOW()
           AND (locked_at IS NULL OR locked_at < NOW() - interval '10 minutes')
-        ORDER BY available_at, day, scope
+        ORDER BY
+          (day = (NOW() AT TIME ZONE 'Asia/Seoul')::date) DESC,
+          CASE scope WHEN 'traffic' THEN 0 WHEN 'accounts' THEN 1 ELSE 2 END,
+          day DESC,
+          available_at
         FOR UPDATE SKIP LOCKED
         LIMIT 1
       )
@@ -104,21 +118,31 @@ async function claimNext(workerId: string): Promise<QueueItem | null> {
   return result.rows[0] || null;
 }
 
-async function saveFacts(item: QueueItem, rows: AnalyticsFact[]) {
-  const client = await db.connect();
+async function saveFacts(
+  client: PoolClient,
+  item: QueueItem,
+  rows: AnalyticsFact[],
+  details: AnalyticsFactDetail[],
+  detailsSchemaReady: boolean,
+) {
   const hasPendingJobSession =
     item.scope === "traffic" &&
     rows.some((row) => row.metric === "job_pending" && Number(row.value) > 0);
 
-  try {
-    await client.query("BEGIN");
-    await client.query(
+  await client.query(
       `DELETE FROM public.analytics_dashboard_facts WHERE scope = $1 AND day = $2::date`,
       [item.scope, item.day],
-    );
+  );
 
-    if (rows.length) {
-      await client.query(
+  if (detailsSchemaReady && item.scope !== "accounts") {
+    await client.query(
+      `DELETE FROM public.analytics_dashboard_fact_details WHERE scope = $1 AND day = $2::date`,
+      [item.scope, item.day],
+    );
+  }
+
+  if (rows.length) {
+    await client.query(
         `
           INSERT INTO public.analytics_dashboard_facts (
             scope, day, metric, channel, dimension, value, refreshed_at
@@ -140,11 +164,67 @@ async function saveFacts(item: QueueItem, rows: AnalyticsFact[]) {
           )
         `,
         [item.scope, JSON.stringify(rows)],
-      );
-    }
+    );
+  }
+
+  if (detailsSchemaReady && details.length) {
+    await client.query(
+      `
+        INSERT INTO public.analytics_dashboard_fact_details (
+          scope, day, metric, channel, dimension, entity_key, event_at,
+          user_id, anonymous_id, ip_address, user_agent, path, detail, refreshed_at
+        )
+        SELECT
+          $1,
+          item.day::date,
+          item.metric,
+          COALESCE(item.channel, ''),
+          COALESCE(item.dimension, ''),
+          item.entity_key,
+          item.event_at::timestamptz,
+          NULLIF(item.user_id, '')::uuid,
+          NULLIF(item.anonymous_id, '')::uuid,
+          item.ip_address,
+          item.user_agent,
+          item.path,
+          item.detail,
+          NOW()
+        FROM jsonb_to_recordset($2::jsonb) AS item(
+          day text,
+          metric text,
+          channel text,
+          dimension text,
+          entity_key text,
+          event_at text,
+          user_id text,
+          anonymous_id text,
+          ip_address text,
+          user_agent text,
+          path text,
+          detail text
+        )
+      `,
+      [item.scope, JSON.stringify(details)],
+    );
+  }
+
+  if (detailsSchemaReady && item.scope !== "accounts") {
+    await client.query(
+      `
+        INSERT INTO public.analytics_dashboard_fact_detail_status (
+          scope, day, row_count, refreshed_at
+        )
+        VALUES ($1, $2::date, $3, NOW())
+        ON CONFLICT (scope, day) DO UPDATE
+        SET row_count = EXCLUDED.row_count,
+            refreshed_at = EXCLUDED.refreshed_at
+      `,
+      [item.scope, item.day, details.length],
+    );
+  }
 
     // Do not consume work that arrived while this day's SQL was running.
-    const deleted = await client.query(
+  const deleted = await client.query(
       `
         DELETE FROM public.analytics_fact_refresh_queue
         WHERE scope = $1 AND day = $2::date AND revision = $3
@@ -152,19 +232,19 @@ async function saveFacts(item: QueueItem, rows: AnalyticsFact[]) {
       [item.scope, item.day, item.revision],
     );
 
-    if ((deleted.rowCount || 0) === 0) {
-      await client.query(
+  if ((deleted.rowCount || 0) === 0) {
+    await client.query(
         `
           UPDATE public.analytics_fact_refresh_queue
           SET locked_at = NULL, locked_by = NULL, updated_at = NOW()
           WHERE scope = $1 AND day = $2::date
         `,
         [item.scope, item.day],
-      );
-    } else if (hasPendingJobSession) {
+    );
+  } else if (hasPendingJobSession) {
       // No event is emitted when a quiet session reaches its 30-minute
       // timeout. Keep one delayed refresh so pending visitors can become exits.
-      await client.query(
+    await client.query(
         `
           INSERT INTO public.analytics_fact_refresh_queue (
             scope, day, revision, available_at, updated_at
@@ -181,10 +261,30 @@ async function saveFacts(item: QueueItem, rows: AnalyticsFact[]) {
               updated_at = NOW()
         `,
         [item.scope, item.day, item.revision],
-      );
-    }
+    );
+  }
+}
 
+async function refreshItem(item: QueueItem) {
+  const client = await db.connect();
+
+  try {
+    await client.query("BEGIN ISOLATION LEVEL REPEATABLE READ");
+    const factResult = await client.query<AnalyticsFact>(factsSql(item.scope), [item.day]);
+    const relation = await client.query<{ ready: boolean }>(
+      `SELECT to_regclass('public.analytics_dashboard_fact_details') IS NOT NULL
+          AND to_regclass('public.analytics_dashboard_fact_detail_status') IS NOT NULL AS ready`,
+    );
+    const detailsSchemaReady = relation.rows[0]?.ready === true;
+    const detailSql = detailsSchemaReady ? factDetailsSql(item.scope) : null;
+    const detailResult = detailSql
+      ? await client.query<AnalyticsFactDetail>(detailSql, [item.day])
+      : { rows: [] as AnalyticsFactDetail[] };
+    const rows = factsForScope(item.scope, factResult.rows);
+
+    await saveFacts(client, item, rows, detailResult.rows, detailsSchemaReady);
     await client.query("COMMIT");
+    return rows.length;
   } catch (error) {
     await client.query("ROLLBACK");
     throw error;
@@ -226,10 +326,8 @@ export async function processAnalyticsFactQueue({
     if (!item) break;
 
     try {
-      const result = await query<AnalyticsFact>(factsSql(item.scope), [item.day]);
-      const rows = factsForScope(item.scope, result.rows);
-      await saveFacts(item, rows);
-      processed.push({ scope: item.scope, day: item.day, rowCount: rows.length });
+      const rowCount = await refreshItem(item);
+      processed.push({ scope: item.scope, day: item.day, rowCount });
     } catch (error) {
       await releaseFailedItem(item, error);
       throw error;

@@ -122,8 +122,8 @@ function memberIdentityLogHref(
     logEndDate: data.logEndDate,
     logEvent: "activity",
   });
-  if (selected.ip) params.set("logIp", selected.ip);
-  if (selected.keyword) params.set("logKeyword", selected.keyword);
+  const keyword = selected.keyword || selected.ip;
+  if (keyword) params.set("logKeyword", keyword);
   if (data.logIncludeExcluded) params.set("logIncludeExcluded", "1");
   return `/members/${userId}?${params.toString()}`;
 }

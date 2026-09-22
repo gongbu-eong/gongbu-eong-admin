@@ -89,6 +89,14 @@ type ActivityLogDbRow = {
   total_count: string;
 };
 
+type DashboardFactDetailSelector = {
+  scope: string;
+  metric: string;
+  channel: string;
+  dimension: string;
+  funnelLabel: string;
+};
+
 const pageSize = 40;
 
 function dateValue(value: string | undefined, fallback: string) {
@@ -322,6 +330,221 @@ function jobCohortSql() {
     LIMIT $4 OFFSET $5`;
 }
 
+function dashboardChannelLabel(value: string) {
+  const labels: Record<string, string> = {
+    instagram: "인스타그램",
+    blog: "블로그",
+    threads: "스레드",
+    search: "검색",
+    direct: "직접유입",
+  };
+  return labels[value] || value;
+}
+
+function dashboardFactDetailSelector({
+  cohort,
+  bannerKey,
+  screen,
+  event,
+  channel,
+  funnelProduct,
+  funnelStep,
+}: {
+  cohort: string;
+  bannerKey: string;
+  screen: string;
+  event: string;
+  channel: string;
+  funnelProduct: string;
+  funnelStep: string;
+}): DashboardFactDetailSelector | null {
+  if (funnelProduct && funnelStep) {
+    const metricByStep: Record<string, string> = {
+      visit: "product_visit",
+      start: "product_start",
+      complete: "product_complete",
+      start_drop: "product_start_drop",
+    };
+    const productLabels: Record<string, string> = {
+      diagnosis: "강점·성향 진단",
+      resume_coaching: "AI NCS 자소서 코칭",
+      interview_coaching: "AI NCS 면접 코칭",
+    };
+    const stepLabels: Record<string, string> = {
+      visit: "방문",
+      start: "시작",
+      complete: "완료",
+      start_drop: "시작 후 미완료",
+    };
+    const metric = metricByStep[funnelStep];
+    if (!metric) return null;
+    return {
+      scope: funnelProduct,
+      metric,
+      channel: "",
+      dimension: "",
+      funnelLabel: `${productLabels[funnelProduct] || funnelProduct} ${stepLabels[funnelStep]}`,
+    };
+  }
+
+  if (cohort) {
+    return {
+      scope: "traffic",
+      metric: cohort,
+      channel: channel === "all" ? "" : dashboardChannelLabel(channel),
+      dimension: "",
+      funnelLabel: "",
+    };
+  }
+
+  if (bannerKey) {
+    return {
+      scope: "traffic",
+      metric: "banner",
+      channel: "",
+      dimension: bannerKey,
+      funnelLabel: "",
+    };
+  }
+
+  if (event === "visit" && screen !== "all") {
+    return {
+      scope: "traffic",
+      metric: "screen",
+      channel: channel === "all" ? "" : dashboardChannelLabel(channel),
+      dimension: screen,
+      funnelLabel: "",
+    };
+  }
+
+  return null;
+}
+
+async function hasCompleteDashboardFactDetails(
+  selector: DashboardFactDetailSelector,
+  startDate: string,
+  endDate: string,
+) {
+  if (process.env.ANALYTICS_FACT_SOURCE !== "facts") {
+    return false;
+  }
+
+  const relation = await query<{ details: string | null; status: string | null }>(
+    `SELECT to_regclass('public.analytics_dashboard_fact_details')::text AS details,
+      to_regclass('public.analytics_dashboard_fact_detail_status')::text AS status`,
+  );
+  if (!relation.rows[0]?.details || !relation.rows[0]?.status) return false;
+
+  const ready = await query<{ ready: boolean }>(
+    `
+      SELECT NOT EXISTS (
+        SELECT DISTINCT facts.day
+        FROM public.analytics_dashboard_facts facts
+        WHERE facts.scope = $1
+          AND facts.day BETWEEN $2::date AND $3::date
+        EXCEPT
+        SELECT status.day
+        FROM public.analytics_dashboard_fact_detail_status status
+        WHERE status.scope = $1
+          AND status.day BETWEEN $2::date AND $3::date
+      ) AS ready
+    `,
+    [selector.scope, startDate, endDate],
+  );
+  return ready.rows[0]?.ready === true;
+}
+
+async function getDashboardFactDetailRows({
+  selector,
+  startDate,
+  endDate,
+  page,
+  pageSize: requestedPageSize,
+}: {
+  selector: DashboardFactDetailSelector;
+  startDate: string;
+  endDate: string;
+  page: number;
+  pageSize: number;
+}) {
+  const values = [
+    selector.scope,
+    startDate,
+    endDate,
+    selector.metric,
+    selector.channel,
+    selector.dimension,
+  ];
+  const whereSql = `
+    details.scope = $1
+    AND details.day BETWEEN $2::date AND $3::date
+    AND details.metric = $4
+    AND ($5::text = '' OR details.channel = $5)
+    AND ($6::text = '' OR details.dimension = $6)
+  `;
+  const countResult = selector.metric === "product_start_drop"
+    ? await query<{ count: string }>(
+        `SELECT GREATEST(
+            COALESCE(SUM(facts.value) FILTER (WHERE facts.metric = 'product_start'), 0)
+            - COALESCE(SUM(facts.value) FILTER (WHERE facts.metric = 'product_complete'), 0),
+            0
+          )::text AS count
+          FROM public.analytics_dashboard_facts facts
+          WHERE facts.scope = $1
+            AND facts.day BETWEEN $2::date AND $3::date
+            AND $4::text = 'product_start_drop'
+            AND facts.metric IN ('product_start', 'product_complete')
+            AND ($5::text = '' OR facts.channel = $5)
+            AND ($6::text = '' OR facts.dimension = $6)`,
+        values,
+      )
+    : await query<{ count: string }>(
+        `SELECT COALESCE(SUM(facts.value), 0)::text AS count
+          FROM public.analytics_dashboard_facts facts
+          WHERE facts.scope = $1
+            AND facts.day BETWEEN $2::date AND $3::date
+            AND facts.metric = $4
+            AND ($5::text = '' OR facts.channel = $5)
+            AND ($6::text = '' OR facts.dimension = $6)`,
+        values,
+      );
+  const totalCount = Number(countResult.rows[0]?.count || 0);
+  const totalPages = Math.max(1, Math.ceil(totalCount / requestedPageSize));
+  const effectivePage = Math.min(page, totalPages);
+  const rowsResult = await query<ActivityLogDbRow>(
+    `
+      SELECT
+        details.scope || ':' || details.day::text || ':' || details.metric || ':' || details.entity_key AS id,
+        details.event_at,
+        details.metric AS event_type,
+        COALESCE(users.nickname, users.display_name) AS user_name,
+        users.email::text AS user_email,
+        details.anonymous_id,
+        NULL::uuid AS session_id,
+        details.ip_address,
+        details.user_agent,
+        details.path,
+        details.detail,
+        details.channel AS acquisition_channel,
+        ${screenSql("split_part(details.path, '?', 1)")} AS screen_key,
+        $7::text AS total_count
+      FROM public.analytics_dashboard_fact_details details
+      LEFT JOIN public.users users ON users.id = details.user_id
+      WHERE ${whereSql}
+      ORDER BY details.event_at DESC, details.entity_key DESC
+      LIMIT $8 OFFSET $9
+    `,
+    [...values, String(totalCount), requestedPageSize, (effectivePage - 1) * requestedPageSize],
+  );
+
+  return {
+    rows: rowsResult.rows,
+    totalCount,
+    totalPages,
+    page: effectivePage,
+  };
+}
+
 export async function getActivityLogData(args?: ActivityLogQuery): Promise<ActivityLogData> {
   const today = new Intl.DateTimeFormat("en-CA", {
     timeZone: "Asia/Seoul",
@@ -361,6 +584,51 @@ export async function getActivityLogData(args?: ActivityLogQuery): Promise<Activ
   const pattern = keyword ? `%${keyword}%` : "";
   const offset = (page - 1) * resultPageSize;
   await ensureAnalyticsExclusionSchema();
+
+  const factDetailSelector = dashboardFactDetailSelector({
+    cohort,
+    bannerKey,
+    screen,
+    event,
+    channel,
+    funnelProduct,
+    funnelStep,
+  });
+  if (
+    factDetailSelector &&
+    await hasCompleteDashboardFactDetails(factDetailSelector, startDate, endDate)
+  ) {
+    const stored = await getDashboardFactDetailRows({
+      selector: factDetailSelector,
+      startDate,
+      endDate,
+      page,
+      pageSize: resultPageSize,
+    });
+    return {
+      startDate,
+      endDate,
+      event: funnelProduct ? "activity" : event,
+      eventType,
+      cohort,
+      bannerKey,
+      screen,
+      keyword,
+      ip,
+      channel,
+      uniqueOnly,
+      includeExcluded,
+      from,
+      funnelProduct,
+      funnelStep,
+      funnelLabel: factDetailSelector.funnelLabel,
+      page: stored.page,
+      totalPages: stored.totalPages,
+      totalCount: stored.totalCount,
+      userId: userId || "",
+      rows: mapActivityRows(stored.rows),
+    };
+  }
 
   if (funnelProduct && funnelStep) {
     const funnel = await getFunnelLogData({
