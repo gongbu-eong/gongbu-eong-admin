@@ -13,7 +13,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: false, message: "Unauthorized" }, { status: 401 });
   }
 
-  const requestedLimit = Number(request.nextUrl.searchParams.get("limit") || "3");
+  const requestedLimit = Number(request.nextUrl.searchParams.get("limit") || "20");
   const processed = await processAnalyticsFactQueue({ limit: requestedLimit });
 
   return NextResponse.json({ ok: true, processed });
