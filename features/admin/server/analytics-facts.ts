@@ -367,7 +367,7 @@ function dashboardProductFactsSqlWithBounds(product: string, boundsSql: string) 
     days AS (SELECT d::date AS day FROM bounds, generate_series(first_day::timestamp, last_day::timestamp, interval '1 day') d),
     eligible_users AS MATERIALIZED (
       SELECT id, (COALESCE(signup_completed_at, created_at) AT TIME ZONE 'Asia/Seoul')::date AS day
-      FROM public.users u WHERE status = 'active' AND ${excludedUserCondition("u.id")}
+      FROM public.users u WHERE ${excludedUserCondition("u.id")}
     ),
     daily_signups AS (
       SELECT d.day, COUNT(u.id) AS count
@@ -434,8 +434,7 @@ export function dashboardFactsSql(product: string) {
     eligible_users AS MATERIALIZED (
       SELECT id, (COALESCE(signup_completed_at, created_at) AT TIME ZONE 'Asia/Seoul')::date AS day
       FROM public.users u
-      WHERE status = 'active'
-        AND NOT EXISTS (SELECT 1 FROM analytics_excluded_user_ids excluded_users WHERE excluded_users.id = u.id)
+      WHERE NOT EXISTS (SELECT 1 FROM analytics_excluded_user_ids excluded_users WHERE excluded_users.id = u.id)
     ),
     daily_signups AS (
       SELECT d.day, COUNT(u.id) AS count

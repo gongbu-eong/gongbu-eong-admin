@@ -13,6 +13,7 @@ const statusFilters: Array<{ label: string; value: MemberStatusFilter }> = [
   { label: "전체", value: "all" },
   { label: "활동중", value: "active" },
   { label: "정지", value: "blocked" },
+  { label: "탈퇴", value: "withdrawn" },
 ];
 
 const channelFilters: Array<{ label: string; value: MemberChannelFilter }> = [

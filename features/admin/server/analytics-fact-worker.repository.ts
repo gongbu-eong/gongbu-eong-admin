@@ -34,8 +34,7 @@ function accountFactsForDaySql() {
     WITH eligible_users AS MATERIALIZED (
       SELECT id, (COALESCE(signup_completed_at, created_at) AT TIME ZONE 'Asia/Seoul')::date AS day
       FROM public.users u
-      WHERE status = 'active'
-        AND ${excludedUserCondition("u.id")}
+      WHERE ${excludedUserCondition("u.id")}
     )
     SELECT $1::date::text AS day, 'signup'::text AS metric, ''::text AS channel,
       ''::text AS dimension, COUNT(*)::text AS value

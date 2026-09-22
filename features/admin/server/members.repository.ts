@@ -1,7 +1,7 @@
 import { query } from "@/features/admin/server/db";
 import { getActivityLogData, type ActivityLogRow } from "@/features/admin/server/activity-log.repository";
 
-export type MemberStatusFilter = "all" | "active" | "blocked";
+export type MemberStatusFilter = "all" | "active" | "blocked" | "withdrawn";
 export type MemberChannelFilter =
   | "all"
   | "instagram"
@@ -154,6 +154,7 @@ type MetricRow = {
   total_members: string;
   active_members: string;
   blocked_members: string;
+  withdrawn_members: string;
   new_week_members: string;
   diagnosis_members: string;
   coaching_members: string;
@@ -358,7 +359,7 @@ function maskEmail(value: string | null) {
 }
 
 function normalizeStatus(value?: string | null): MemberStatusFilter {
-  if (value === "active" || value === "blocked") {
+  if (value === "active" || value === "blocked" || value === "withdrawn") {
     return value;
   }
 
@@ -475,8 +476,7 @@ function createMemberSelectSql(whereClause: string) {
 }
 
 const memberFilterSql = `
-  WHERE users.status <> 'withdrawn'
-    AND (
+  WHERE (
       $1::text = ''
       OR users.nickname ILIKE $1::text
       OR users.display_name ILIKE $1::text
@@ -487,6 +487,7 @@ const memberFilterSql = `
       $2::text = 'all'
       OR ($2::text = 'active' AND users.status = 'active')
       OR ($2::text = 'blocked' AND users.status = 'blocked')
+      OR ($2::text = 'withdrawn' AND users.status = 'withdrawn')
     )
     AND (
       $3::text = 'all'
@@ -523,12 +524,12 @@ export async function getMemberListData(
     query<MetricRow>(
       `
         SELECT
-          COUNT(*) FILTER (WHERE users.status <> 'withdrawn') AS total_members,
+          COUNT(*) AS total_members,
           COUNT(*) FILTER (WHERE users.status = 'active') AS active_members,
           COUNT(*) FILTER (WHERE users.status = 'blocked') AS blocked_members,
+          COUNT(*) FILTER (WHERE users.status = 'withdrawn') AS withdrawn_members,
           COUNT(*) FILTER (
-            WHERE users.status <> 'withdrawn'
-              AND COALESCE(users.signup_completed_at, users.created_at) >= NOW() - INTERVAL '7 days'
+            WHERE COALESCE(users.signup_completed_at, users.created_at) >= NOW() - INTERVAL '7 days'
           ) AS new_week_members,
           COUNT(DISTINCT diagnosis.user_id) AS diagnosis_members,
           COUNT(DISTINCT coaching.user_id) AS coaching_members
@@ -566,6 +567,7 @@ export async function getMemberListData(
   const totalMembers = numberValue(metrics?.total_members);
   const activeMembers = numberValue(metrics?.active_members);
   const blockedMembers = numberValue(metrics?.blocked_members);
+  const withdrawnMembers = numberValue(metrics?.withdrawn_members);
   const diagnosisMembers = numberValue(metrics?.diagnosis_members);
   const coachingMembers = numberValue(metrics?.coaching_members);
   const totalCount = numberValue(memberResult.rows[0]?.total_filtered);
@@ -578,7 +580,7 @@ export async function getMemberListData(
         label: "전체 회원",
         value: formatNumber(totalMembers),
         unit: "명",
-        note: `활동중 ${formatNumber(activeMembers)}명 · 정지 ${formatNumber(blockedMembers)}명`,
+        note: `활동중 ${formatNumber(activeMembers)}명 · 정지 ${formatNumber(blockedMembers)}명 · 탈퇴 ${formatNumber(withdrawnMembers)}명`,
       },
       {
         label: "이번 주 신규 가입",
@@ -628,8 +630,7 @@ export async function getMemberDetailData(
     `
       ${createMemberSelectSql(`
         WHERE (
-          ($1::uuid IS NULL AND users.status <> 'withdrawn')
-          OR ($1::uuid IS NOT NULL AND users.id = $1::uuid)
+          $1::uuid IS NULL OR users.id = $1::uuid
         )
       `)}
       ORDER BY COALESCE(users.signup_completed_at, users.created_at) DESC

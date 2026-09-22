@@ -241,10 +241,16 @@ function createTrendSeries(
     label: definition.label,
     color: definition.color,
     valueSuffix: definition.key === "behavior:apply_clicks" || definition.key.startsWith("banner:") || definition.key.startsWith("screen:") ? "건" : "명",
-    data: labels.map((label) => ({
-      label,
-      value: values.get(definition.key)?.get(label) || 0,
-    })),
+    data: (() => {
+      let snapshot = 0;
+      return labels.map((label) => {
+        const value = values.get(definition.key)?.get(label);
+        if (definition.key === "signup" && value !== undefined) {
+          snapshot = Math.max(snapshot, value);
+        }
+        return { label, value: definition.key === "signup" ? snapshot : value || 0 };
+      });
+    })(),
   }));
 }
 
@@ -435,10 +441,25 @@ async function getDashboardFacts(
   const lastDay = [endDate, today].sort().at(-1)!;
   const result = await query<AnalyticsFact>(
     `
+      WITH range_facts AS (
+        SELECT day, metric, channel, dimension, value
+        FROM public.analytics_dashboard_facts
+        WHERE scope IN ('traffic', 'accounts', $3)
+          AND day BETWEEN $1::date AND $2::date
+      ), account_baseline AS (
+        SELECT DISTINCT ON (metric, channel, dimension)
+          $1::date AS day, metric, channel, dimension, value
+        FROM public.analytics_dashboard_facts
+        WHERE scope = 'accounts'
+          AND metric = 'signup'
+          AND day < $1::date
+        ORDER BY metric, channel, dimension, day DESC
+      )
       SELECT day::text AS day, metric, channel, dimension, value::text AS value
-      FROM public.analytics_dashboard_facts
-      WHERE scope IN ('traffic', 'accounts', $3)
-        AND day BETWEEN $1::date AND $2::date
+      FROM range_facts
+      UNION ALL
+      SELECT day::text AS day, metric, channel, dimension, value::text AS value
+      FROM account_baseline
       ORDER BY day, metric, channel, dimension
     `,
     [firstDay, lastDay, product],
@@ -563,9 +584,19 @@ export async function getDashboardData({
   const daily = (rows: AnalyticsFact[], metric: string) => [...new Set(rows.map(f => f.day))].sort().map(day => ({
     label: day, value: sum(rows.filter(f => f.day === day), metric),
   }));
+  const snapshotDaily = (rows: AnalyticsFact[], metric: string) => {
+    let snapshot = 0;
+    return [...new Set(rows.map((fact) => fact.day))].sort().map((day) => {
+      const values = rows
+        .filter((fact) => fact.day === day && fact.metric === metric)
+        .map((fact) => Number(fact.value));
+      if (values.length) snapshot = Math.max(snapshot, ...values);
+      return { label: day, value: snapshot };
+    });
+  };
   const visitorTrendResult = { rows: daily(graphFacts, "visitor") };
   const coachingTrendResult = { rows: daily(graphFacts, "product_start") };
-  const signupTrendResult = { rows: daily(graphFacts, "signup") };
+  const signupTrendResult = { rows: snapshotDaily(graphFacts, "signup") };
   const newSignupTrendResult = { rows: daily(graphFacts, "new_signup") };
   const productRateTrendResult = { rows: daily(graphFacts, "product_complete") };
   const productConversionTrendResult = { rows: daily(graphFacts, "calendar").map(({ label }) => {
@@ -585,29 +616,10 @@ export async function getDashboardData({
       startDate: dashboardDateRange.startDate,
       endDate: dashboardDateRange.endDate,
       event: "activity",
+      funnelProduct: selectedProductKey,
+      funnelStep: step,
       from: "dashboard",
     });
-    const screenByProduct = {
-      diagnosis: "diagnosis",
-      resume_coaching: "resume_coaching",
-      interview_coaching: "interview_coaching",
-    } as const;
-    const eventByProduct = {
-      diagnosis: { start: "diagnosis_start", complete: "diagnosis_complete" },
-      resume_coaching: { start: "coaching_start", complete: "coaching_complete" },
-      interview_coaching: {
-        start: "interview_coaching_start",
-        complete: "interview_coaching_complete",
-      },
-    } as const;
-
-    if (step === "visit") {
-      params.set("event", "visit");
-      params.set("screen", screenByProduct[selectedProductKey as keyof typeof screenByProduct]);
-    } else {
-      params.set("eventType", eventByProduct[selectedProductKey as keyof typeof eventByProduct][step === "complete" ? "complete" : "start"]);
-    }
-
     return "/activity-logs?" + params.toString();
   };
   const sortedChannels = dashboardChannelOptions.slice(1).map(item =>
@@ -959,7 +971,7 @@ export async function getDashboardData({
         label: "공고 상세 방문자",
         value: formatCount(jobDetailVisitors),
         unit: "명",
-        delta: "일별 순 방문자 합산",
+        delta: "다른 화면 방문자와 중복될 수 있음",
         trend: "down",
       },
       {

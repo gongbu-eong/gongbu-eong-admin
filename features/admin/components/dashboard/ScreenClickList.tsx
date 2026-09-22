@@ -19,7 +19,7 @@ export function ScreenClickList({
         <div>
           <h2>
             화면별 방문 건수
-            <span className={styles.titleNote}>순 방문자 수와 다름</span>
+            <span className={styles.titleNote}>(동일 방문자의 반복 방문 포함)</span>
           </h2>
           <p>{channelLabel} 기준 · 페이지 이동·방문 로그 합계 {total}건 (중복 포함)</p>
         </div>

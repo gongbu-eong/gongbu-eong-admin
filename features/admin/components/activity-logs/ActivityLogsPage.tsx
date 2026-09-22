@@ -52,6 +52,8 @@ function makeHref(data: Awaited<ReturnType<typeof getActivityLogData>>, page: nu
   if (data.channel !== "all") params.set("channel", data.channel);
   if (data.uniqueOnly) params.set("unique", "1");
   if (data.from) params.set("from", data.from);
+  if (data.funnelProduct) params.set("funnelProduct", data.funnelProduct);
+  if (data.funnelStep) params.set("funnelStep", data.funnelStep);
   if (selectedIp) params.set("ip", selectedIp);
   if (page > 1) params.set("page", String(page));
   return `/activity-logs?${params.toString()}`;
@@ -105,6 +107,8 @@ export async function ActivityLogsPage({ filters }: ActivityLogsPageProps) {
           {data.bannerKey ? <input type="hidden" name="bannerKey" value={data.bannerKey} /> : null}
           {data.uniqueOnly ? <input type="hidden" name="unique" value="1" /> : null}
           {data.from ? <input type="hidden" name="from" value={data.from} /> : null}
+          {data.funnelProduct ? <input type="hidden" name="funnelProduct" value={data.funnelProduct} /> : null}
+          {data.funnelStep ? <input type="hidden" name="funnelStep" value={data.funnelStep} /> : null}
           {data.ip ? <input type="hidden" name="ip" value={data.ip} /> : null}
           <input type="hidden" name="page" value="1" />
           <button type="submit">조회</button>
@@ -117,10 +121,10 @@ export async function ActivityLogsPage({ filters }: ActivityLogsPageProps) {
         <AdminCard className={styles.tableCard}>
           <div className={styles.tableTop}>
             <div>
-              <h2>{data.event === "visit" ? "방문 이력" : data.event === "activity" ? "사용자 활동 이력" : data.event === "all" ? "원본 전체 방문·이벤트 이력" : "이벤트 이력"}</h2>
+              <h2>{data.funnelLabel || (data.event === "visit" ? "방문 이력" : data.event === "activity" ? "사용자 활동 이력" : data.event === "all" ? "원본 전체 방문·이벤트 이력" : "이벤트 이력")}</h2>
               {data.bannerKey ? <p>선택한 배너·버튼의 실제 클릭만 조회 중</p> : null}
               {data.cohort ? <p>{cohortLabels[data.cohort]} · 대시보드와 동일한 일별 중복 제거 기준</p> : null}
-              <p>총 <strong>{formatCount(data.totalCount)}</strong>{totalUnit} · {data.uniqueOnly ? "순 방문자 기준 · " : data.cohort ? "대시보드 코호트 기준 · " : data.event === "activity" ? "방문·사용자 행동 기준 · " : "원본 이벤트 기준 · "}비회원은 IP와 익명 식별자로 확인합니다.{data.ip ? ` · ${data.ip} 로그만 조회 중` : ""}</p>
+              <p>총 <strong>{formatCount(data.totalCount)}</strong>{data.funnelLabel ? "명 · 대시보드 전환 퍼널과 동일한 시작 코호트 기준 · " : totalUnit + " · "}{data.uniqueOnly ? "순 방문자 기준 · " : data.cohort ? "대시보드 코호트 기준 · " : data.event === "activity" ? "방문·사용자 행동 기준 · " : "원본 이벤트 기준 · "}비회원은 IP와 익명 식별자로 확인합니다.{data.ip ? ` · ${data.ip} 로그만 조회 중` : ""}</p>
             </div>
             <span className={styles.tableActions}>
               {data.ip ? <Link className={styles.backButtonSecondary} href={makeHref(data, 1, "")}>전체 IP 보기</Link> : null}

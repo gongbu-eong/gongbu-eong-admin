@@ -4,6 +4,7 @@ import {
   trafficChannelKeySql,
   trafficFactsCtes,
 } from "./analytics-facts";
+import { getFunnelLogData } from "./traffic.repository";
 import { query } from "@/features/admin/server/db";
 import {
   ensureAnalyticsExclusionSchema,
@@ -26,6 +27,8 @@ export type ActivityLogQuery = {
   channel?: string;
   unique?: string;
   from?: string;
+  funnelProduct?: string;
+  funnelStep?: string;
   page?: string;
 };
 
@@ -42,6 +45,9 @@ export type ActivityLogData = {
   channel: string;
   uniqueOnly: boolean;
   from: string;
+  funnelProduct: string;
+  funnelStep: string;
+  funnelLabel: string;
   page: number;
   totalPages: number;
   totalCount: number;
@@ -314,6 +320,12 @@ export async function getActivityLogData(args?: ActivityLogQuery): Promise<Activ
   const keywordIp = isIpSearch(keyword) ? normalizeIp(keyword) : "";
   const channel = args?.channel || "all";
   const from = args?.from || "";
+  const funnelProduct = ["diagnosis", "resume_coaching", "interview_coaching"].includes(args?.funnelProduct || "")
+    ? args?.funnelProduct || ""
+    : "";
+  const funnelStep = ["visit", "start", "complete", "visit_drop", "start_drop"].includes(args?.funnelStep || "")
+    ? args?.funnelStep || ""
+    : "";
   const uniqueOnly = args?.unique === "1";
   const userId = args?.userId || null;
   const resultPageSize = Math.min(10000, Math.max(1, Number(args?.limit || pageSize)));
@@ -321,6 +333,50 @@ export async function getActivityLogData(args?: ActivityLogQuery): Promise<Activ
   const pattern = keyword ? `%${keyword}%` : "";
   const offset = (page - 1) * resultPageSize;
   await ensureAnalyticsExclusionSchema();
+
+  if (funnelProduct && funnelStep) {
+    const funnel = await getFunnelLogData({
+      product: funnelProduct,
+      step: funnelStep,
+      startDate,
+      endDate,
+      keyword,
+      page,
+    });
+
+    return {
+      startDate,
+      endDate,
+      event: "activity",
+      eventType: "",
+      cohort: "",
+      bannerKey,
+      screen,
+      keyword,
+      ip,
+      channel,
+      uniqueOnly: false,
+      from,
+      funnelProduct,
+      funnelStep,
+      funnelLabel: `${funnel.productLabel} ${funnel.stepLabel}`,
+      page: funnel.page,
+      totalPages: funnel.totalPages,
+      totalCount: funnel.totalCount,
+      rows: funnel.rows.map((row) => ({
+        id: row.id,
+        eventAt: row.eventAt,
+        event: funnel.stepLabel,
+        userName: row.userName,
+        userEmail: row.userEmail === "-" ? "" : row.userEmail,
+        identity: row.anonymousId,
+        ipAddress: row.ipAddress,
+        path: row.path,
+        detail: row.lastAction,
+        device: row.device,
+      })),
+    };
+  }
 
   if (cohort) {
     const cohortResult = await query<ActivityLogDbRow>(jobCohortSql(), [
@@ -346,6 +402,9 @@ export async function getActivityLogData(args?: ActivityLogQuery): Promise<Activ
       channel,
       uniqueOnly,
       from,
+      funnelProduct,
+      funnelStep,
+      funnelLabel: "",
       page,
       totalPages: Math.max(1, Math.ceil(totalCount / pageSize)),
       totalCount,
@@ -594,6 +653,9 @@ export async function getActivityLogData(args?: ActivityLogQuery): Promise<Activ
     channel,
     uniqueOnly,
     from,
+    funnelProduct,
+    funnelStep,
+    funnelLabel: "",
     page,
     totalPages: Math.max(1, Math.ceil(totalCount / resultPageSize)),
     totalCount,
