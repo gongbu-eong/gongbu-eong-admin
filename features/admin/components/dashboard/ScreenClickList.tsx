@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { ScreenInflowItem } from "@/features/admin/data/dashboard";
+import { DashboardNote } from "./DashboardNote";
 import styles from "./ScreenClickList.module.css";
 
 type ScreenClickListProps = {
@@ -21,7 +22,7 @@ export function ScreenClickList({
             화면별 방문 건수
             <span className={styles.titleNote}>(동일 방문자의 반복 방문 포함)</span>
           </h2>
-          <p>{channelLabel} 기준 · 페이지 이동·방문 로그 합계 {total}건 (중복 포함)</p>
+          <DashboardNote>{channelLabel}에서 각 화면을 연 횟수입니다. 같은 사람이 반복해서 열면 모두 포함됩니다. 총 {total}건</DashboardNote>
         </div>
       </header>
       <div className={styles.list}>

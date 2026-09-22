@@ -4,6 +4,7 @@ import { useState } from "react";
 import { AdminCard } from "@/features/admin/components/common/AdminCard";
 import type { DashboardTrendSeries } from "@/features/admin/data/dashboard";
 import { LineChart } from "./LineChart";
+import { DashboardNote } from "./DashboardNote";
 import styles from "./TrendViewCard.module.css";
 
 type TrendViewCardProps = {
@@ -63,7 +64,7 @@ export function TrendViewCard({
             {title}
             {titleNote ? <span className={styles.titleNote}>{titleNote}</span> : null}
           </h2>
-          <p>{view === "list" ? listSubtitle : subtitle}</p>
+          <DashboardNote>{view === "list" ? listSubtitle : subtitle}</DashboardNote>
         </div>
         <label className={styles.viewSelect}>
           <span className={styles.srOnly}>{title} 표시 방식</span>

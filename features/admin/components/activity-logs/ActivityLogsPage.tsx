@@ -2,6 +2,7 @@ import Link from "next/link";
 import { AdminLayout } from "@/features/admin/components/AdminLayout";
 import { AdminCard } from "@/features/admin/components/common/AdminCard";
 import { getActivityLogData, ActivityLogQuery } from "@/features/admin/server/activity-log.repository";
+import { ActivityLogTable } from "./ActivityLogTable";
 import { TrimmedSearchInput } from "./TrimmedSearchInput";
 import styles from "@/features/admin/components/traffic/TrafficLogsPage.module.css";
 
@@ -102,19 +103,10 @@ export async function ActivityLogsPage({ filters }: ActivityLogsPageProps) {
             <span>검색어</span>
             <TrimmedSearchInput name="keyword" placeholder="이름 · 경로 · 이벤트 · IP" defaultValue={data.keyword} />
           </label>
-          {data.channel !== "all" ? <input type="hidden" name="channel" value={data.channel} /> : null}
-          {data.eventType ? <input type="hidden" name="eventType" value={data.eventType} /> : null}
-          {data.cohort ? <input type="hidden" name="cohort" value={data.cohort} /> : null}
-          {data.bannerKey ? <input type="hidden" name="bannerKey" value={data.bannerKey} /> : null}
-          {data.uniqueOnly ? <input type="hidden" name="unique" value="1" /> : null}
           <label className={styles.includeExcluded}>
             <input name="includeExcluded" type="checkbox" value="1" defaultChecked={data.includeExcluded} />
             제외 IP 포함
           </label>
-          {data.from ? <input type="hidden" name="from" value={data.from} /> : null}
-          {data.funnelProduct ? <input type="hidden" name="funnelProduct" value={data.funnelProduct} /> : null}
-          {data.funnelStep ? <input type="hidden" name="funnelStep" value={data.funnelStep} /> : null}
-          {data.ip ? <input type="hidden" name="ip" value={data.ip} /> : null}
           <input type="hidden" name="page" value="1" />
           <button type="submit">조회</button>
         </form>
@@ -135,22 +127,11 @@ export async function ActivityLogsPage({ filters }: ActivityLogsPageProps) {
               {data.ip ? <Link className={styles.backButtonSecondary} href={makeHref(data, 1, "")}>전체 IP 보기</Link> : null}
             </span>
           </div>
-          <div className={styles.tableWrap}>
-            <table className={styles.table}>
-              <thead><tr><th>접속일시</th><th>이벤트</th><th>주체</th><th>식별 정보</th><th>IP</th><th>기기</th><th>대상</th><th>상세</th></tr></thead>
-              <tbody>{data.rows.length ? data.rows.map((row) => (
-                <tr key={row.id}>
-                  <td>{row.eventAt}</td><td>{row.event}</td>
-                  <td><span className={styles.userCell}><strong>{row.userName}</strong>{row.userEmail ? <em>{row.userEmail}</em> : <em>비회원</em>}</span></td>
-                  <td className={styles.pathCell} title={row.identity}>{row.identity}</td>
-                  <td>{row.ipAddress !== "-" ? <Link href={makeHref(data, 1, row.ipAddress)}>{row.ipAddress}</Link> : row.ipAddress}</td>
-                  <td><span className={`${styles.deviceBadge} ${row.device === "모바일" ? styles.deviceMobile : row.device === "웹" ? styles.deviceWeb : styles.deviceUnknown}`}>{row.device}</span></td>
-                  <td className={styles.pathCell} title={row.path}>{row.path}</td>
-                  <td className={styles.pathCell} title={row.detail}>{row.detail}</td>
-                </tr>
-              )) : <tr><td className={styles.emptyCell} colSpan={8}>조회 조건에 해당하는 로그가 없습니다.</td></tr>}</tbody>
-            </table>
-          </div>
+          <ActivityLogTable
+            rows={data.rows}
+            emptyMessage="조회 조건에 해당하는 로그가 없습니다."
+            renderIp={(row) => row.ipAddress !== "-" ? <Link href={makeHref(data, 1, row.ipAddress)}>{row.ipAddress}</Link> : row.ipAddress}
+          />
           <nav className={styles.pagination} aria-label="방문 이벤트 로그 페이지">
             <Link className={data.page <= 1 ? styles.disabledPage : ""} href={makeHref(data, Math.max(1, data.page - 1))}>&lt;</Link>
             {pageItems.map((item) => <Link className={item === data.page ? styles.activePage : ""} href={makeHref(data, item)} key={item}>{item}</Link>)}

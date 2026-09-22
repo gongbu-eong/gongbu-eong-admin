@@ -66,6 +66,8 @@ export type ActivityLogRow = {
   ipAddress: string;
   path: string;
   detail: string;
+  channel: string;
+  screen: string;
   device: "웹" | "모바일" | "알 수 없음";
 };
 
@@ -81,6 +83,8 @@ type ActivityLogDbRow = {
   user_agent: string | null;
   path: string | null;
   detail: string | null;
+  acquisition_channel: string | null;
+  screen_key: string | null;
   total_count: string;
 };
 
@@ -167,6 +171,56 @@ function formatEvent(value: string | null) {
   return labels[value] || value;
 }
 
+function formatChannel(value: string | null) {
+  const labels: Record<string, string> = {
+    instagram: "인스타그램",
+    blog: "블로그",
+    threads: "스레드",
+    search: "검색",
+    direct: "직접유입",
+    "인스타그램": "인스타그램",
+    "블로그": "블로그",
+    "스레드": "스레드",
+    "검색": "검색",
+    "직접유입": "직접유입",
+  };
+  return labels[value || ""] || "직접유입";
+}
+
+function formatScreen(value: string | null) {
+  const labels: Record<string, string> = {
+    home: "홈",
+    jobs: "공고 목록",
+    job_detail: "공고 상세",
+    ai_tools: "AI 도구",
+    resume_coaching: "AI NCS 자소서 코칭",
+    interview_coaching: "AI NCS 면접 코칭",
+    diagnosis: "강점·성향 진단",
+    community: "커뮤니티",
+    calendar: "캘린더",
+    my: "마이페이지",
+    login: "로그인",
+    other: "기타",
+  };
+  return labels[value || ""] || "기타";
+}
+
+function screenKeyFromPath(path: string) {
+  const pathname = path.split("?")[0];
+  if (pathname === "/") return "home";
+  if (pathname === "/jobs") return "jobs";
+  if (/^\/jobs\/[^/]+/.test(pathname)) return "job_detail";
+  if (pathname.startsWith("/ai-tools/interview-coaching")) return "interview_coaching";
+  if (pathname.startsWith("/ai-tools/coaching")) return "resume_coaching";
+  if (pathname.startsWith("/ai-tools")) return "ai_tools";
+  if (pathname.startsWith("/events/diagnosis")) return "diagnosis";
+  if (pathname.startsWith("/community")) return "community";
+  if (pathname.startsWith("/calendar")) return "calendar";
+  if (pathname.startsWith("/my")) return "my";
+  if (pathname.startsWith("/login") || pathname.startsWith("/signup")) return "login";
+  return "other";
+}
+
 function mapActivityRows(rows: ActivityLogDbRow[]): ActivityLogRow[] {
   return rows.map((row) => ({
     id: row.id,
@@ -178,6 +232,8 @@ function mapActivityRows(rows: ActivityLogDbRow[]): ActivityLogRow[] {
     ipAddress: row.ip_address || "-",
     path: row.path || "-",
     detail: row.detail || "-",
+    channel: formatChannel(row.acquisition_channel),
+    screen: formatScreen(row.screen_key),
     device: getDeviceLabel(row.user_agent),
   }));
 }
@@ -284,6 +340,8 @@ function jobCohortSql() {
       c.user_agent,
       c.path,
       c.detail,
+      c.channel AS acquisition_channel,
+      ${screenSql("split_part(c.path, '?', 1)")} AS screen_key,
       COUNT(*) OVER()::text AS total_count
     FROM cohort_rows c
     LEFT JOIN public.users u ON u.id = c.user_id
@@ -378,6 +436,8 @@ export async function getActivityLogData(args?: ActivityLogQuery): Promise<Activ
         ipAddress: row.ipAddress,
         path: row.path,
         detail: row.lastAction,
+        channel: formatChannel(row.channel),
+        screen: formatScreen(screenKeyFromPath(row.path)),
         device: row.device,
       })),
     };
@@ -640,6 +700,7 @@ export async function getActivityLogData(args?: ActivityLogQuery): Promise<Activ
   const rowsResult = await query<ActivityLogDbRow>(`${sourceSql}
     SELECT id, event_at, event_type, COALESCE(nickname, display_name) AS user_name,
       email AS user_email, anonymous_id, session_id, ip_address, user_agent, path, detail,
+      acquisition_channel, normalized_screen_key AS screen_key,
       COUNT(*) OVER()::text AS total_count
     FROM ${rowsSource}
     ORDER BY event_at DESC, id DESC

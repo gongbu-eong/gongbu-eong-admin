@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { FunnelItem } from "@/features/admin/data/dashboard";
+import { DashboardNote } from "./DashboardNote";
 import styles from "./FunnelList.module.css";
 
 type FunnelListProps = {
@@ -43,7 +44,7 @@ export function FunnelList({
     <section className={styles.wrap}>
       <header className={styles.header}>
         <h2>{title}</h2>
-        <p>{description}</p>
+        <DashboardNote>{description}</DashboardNote>
       </header>
       <div className={styles.list}>
         {items.map((item) => {

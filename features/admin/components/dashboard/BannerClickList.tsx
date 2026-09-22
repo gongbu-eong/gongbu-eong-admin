@@ -1,4 +1,5 @@
 import { BannerClickItem } from "@/features/admin/data/dashboard";
+import { DashboardNote } from "./DashboardNote";
 import styles from "./BannerClickList.module.css";
 
 type BannerClickListProps = {
@@ -13,7 +14,7 @@ export function BannerClickList({ items, total, periodLabel }: BannerClickListPr
       <header className={styles.header}>
         <div>
           <h2>배너·버튼 클릭 상세</h2>
-          <p>{periodLabel} 실제 클릭 로그 기준 · 총 {total}건</p>
+          <DashboardNote>{periodLabel}에 배너와 버튼을 누른 횟수입니다. 총 {total}건</DashboardNote>
         </div>
       </header>
 

@@ -1,6 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { ChannelItem } from "@/features/admin/data/dashboard";
+import { DashboardNote } from "./DashboardNote";
 import styles from "./ChannelList.module.css";
 
 type ChannelListProps = {
@@ -19,7 +20,7 @@ export function ChannelList({
       <header className={styles.header}>
         <div>
           <h2>유입 채널 순 방문자</h2>
-          <p>조회 기간 일별 순 방문자 합산 · 총 {total}명</p>
+          <DashboardNote>조회 기간 동안 채널별로 들어온 사람은 총 {total}명입니다.</DashboardNote>
         </div>
       </header>
       <div className={styles.list}>

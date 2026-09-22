@@ -26,14 +26,6 @@
   line-height: 1.35;
 }
 
-.header p {
-  margin: 8px 0 0;
-  color: var(--admin-muted);
-  font-size: 14px;
-  font-weight: 400;
-  line-height: normal;
-}
-
 .list {
   display: flex;
   flex: 1;

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 import type { BehaviorPatternItem } from "@/features/admin/data/dashboard";
+import { DashboardGuide, DashboardNote } from "./DashboardNote";
 import styles from "./BehaviorPatternList.module.css";
 
 type BehaviorPatternListProps = {
@@ -29,18 +30,16 @@ export function BehaviorPatternList({
       <header className={styles.header}>
         <div>
           <h2>공고 상세 방문 후 행동 상세</h2>
-          <p>
-            {periodLabel} 기준 · 각 열은 공고 상세 방문자 안에서 겹칠 수 있는 독립 지표이며, 지원만 실제 클릭 건수입니다.
-          </p>
+          <DashboardNote>{periodLabel}에 공고 상세를 본 사람들의 이후 행동을 보여줍니다.</DashboardNote>
         </div>
       </header>
       <div className={styles.table}>
         <div className={styles.tableHeader}>
           <span>유입 경로</span>
           <span>공고 상세 방문자</span>
-          <span>방문자 중 후속 행동</span>
+          <span>후속 행동한 사람</span>
           <span>지원 버튼 클릭</span>
-          <span>방문자 중 재방문</span>
+          <span>재방문자</span>
         </div>
         {items.map((item) => (
           <div className={styles.tableRow} key={item.key}>
@@ -53,7 +52,7 @@ export function BehaviorPatternList({
             <MetricLink href={item.activityHref} className={styles.metricCell}>
               <b>{item.activity}</b>
               <em>{item.activityRate}</em>
-              <em>페이지 이동 {item.pageMove}</em>
+              <em>다른 화면 이동 {item.pageMove}</em>
             </MetricLink>
             <MetricLink href={item.applyHref} className={styles.metricCell}>
               <b>{item.apply}</b>
@@ -70,7 +69,7 @@ export function BehaviorPatternList({
             <strong>{totals.visitors.toLocaleString("ko-KR")}명</strong>
             <span>
               <strong>{totals.activity.toLocaleString("ko-KR")}명</strong>
-              <em>페이지 이동 {totals.pageMove.toLocaleString("ko-KR")}건</em>
+              <em>다른 화면 이동 {totals.pageMove.toLocaleString("ko-KR")}건</em>
             </span>
             <strong>{totals.apply.toLocaleString("ko-KR")}건</strong>
             <strong>{totals.revisit.toLocaleString("ko-KR")}명</strong>
@@ -80,12 +79,13 @@ export function BehaviorPatternList({
       {!items.length ? (
         <div className={styles.empty}>공고 상세 유입 기록이 없습니다.</div>
       ) : null}
-      <div className={styles.legend}>
-        <span>방문자·후속 행동 방문자·재방문자는 브라우저 익명 ID 기준 일별 중복 제거 후 합산한 명수입니다. 후속 행동·지원·재방문은 모두 공고 상세 방문자와 겹칠 수 있으므로 서로 더하지 않습니다.</span>
-        <span>후속 행동 방문자: 공고 상세 이후 같은 세션에서 다른 화면 이동 또는 클릭·진단·코칭을 진행한 사람입니다. 공고 상세 재조회는 후속 행동과 페이지 이동에서 제외합니다.</span>
-        <span>지원 클릭: 실제 지원·이메일 지원 버튼을 누른 로그 건수입니다.</span>
-        <span>재방문자: 30분 이상 활동이 없어 새 세션이 시작되고, 이전 30일 이내 방문 이력이 있는 사람입니다.</span>
-      </div>
+      <DashboardGuide items={[
+        "사람 수는 같은 날 여러 번 방문해도 한 명으로 셉니다.",
+        "후속 행동·지원·재방문은 같은 사람에게 함께 발생할 수 있어 더하지 않습니다.",
+        "후속 행동은 다른 화면 이동 또는 버튼 클릭입니다. 공고 상세 재조회는 제외합니다.",
+        "지원 버튼 클릭은 같은 사람이 여러 번 누르면 모두 셉니다.",
+        "재방문자는 30분 이상 뒤에 다시 방문한 사람입니다.",
+      ]} />
     </section>
   );
 }

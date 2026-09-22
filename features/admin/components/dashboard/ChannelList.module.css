@@ -21,14 +21,6 @@
   line-height: normal;
 }
 
-.header p {
-  margin: 8px 0 0;
-  color: var(--admin-muted);
-  font-size: 14px;
-  font-weight: 400;
-  line-height: normal;
-}
-
 .header a {
   margin-bottom: 1px;
   color: var(--admin-muted);
