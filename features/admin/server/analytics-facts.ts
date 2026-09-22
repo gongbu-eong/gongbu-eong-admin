@@ -146,11 +146,12 @@ export function trafficFactsCtes(start: string, end: string) {
     ),
     analytics_activity AS (
       SELECT 'p:' || id AS id, visitor_key, event_at, day, path, 'page_view' AS event_type,
-        screen = 'job_detail' AS is_job, NULL::text AS banner_key
+        screen = 'job_detail' AS is_job, screen, NULL::text AS banner_key
       FROM analytics_pages p
       JOIN analytics_job_visitors j USING (visitor_key)
       UNION ALL
-      SELECT 'e:' || id, visitor_key, event_at, day, path, event_type, false, banner_key
+      SELECT 'e:' || id, visitor_key, event_at, day, path, event_type, false,
+        ${screenSql("p.path")} AS screen, banner_key
       FROM analytics_products p
       JOIN analytics_job_visitors j USING (visitor_key)
       WHERE visitor_key IS NOT NULL
@@ -187,6 +188,7 @@ export function trafficFactsCtes(start: string, end: string) {
       FROM analytics_session_flags
       WHERE last_job_at IS NOT NULL AND event_at >= last_job_at
         AND (event_type = 'page_view' OR event_type LIKE '%click%' OR event_type LIKE '%start%' OR event_type LIKE '%complete%')
+        AND (event_type <> 'page_view' OR screen <> 'job_detail')
       GROUP BY 1, 2
     )`;
 }

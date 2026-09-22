@@ -26,6 +26,7 @@ export type ActivityLogQuery = {
   ip?: string;
   channel?: string;
   unique?: string;
+  includeExcluded?: string;
   from?: string;
   funnelProduct?: string;
   funnelStep?: string;
@@ -44,6 +45,7 @@ export type ActivityLogData = {
   ip: string;
   channel: string;
   uniqueOnly: boolean;
+  includeExcluded: boolean;
   from: string;
   funnelProduct: string;
   funnelStep: string;
@@ -218,6 +220,7 @@ function jobCohortSql() {
       WHERE s.last_job_at IS NOT NULL
         AND s.event_at >= s.last_job_at
         AND (s.event_type = 'page_view' OR s.event_type LIKE '%click%' OR s.event_type LIKE '%start%' OR s.event_type LIKE '%complete%')
+        AND (s.event_type <> 'page_view' OR s.screen <> 'job_detail')
         AND (s.last_job_at AT TIME ZONE 'Asia/Seoul')::date BETWEEN $1::date AND $2::date
       ORDER BY (s.last_job_at AT TIME ZONE 'Asia/Seoul')::date, s.visitor_key, s.event_at, s.id
     ),
@@ -327,6 +330,7 @@ export async function getActivityLogData(args?: ActivityLogQuery): Promise<Activ
     ? args?.funnelStep || ""
     : "";
   const uniqueOnly = args?.unique === "1";
+  const includeExcluded = args?.includeExcluded === "1";
   const userId = args?.userId || null;
   const resultPageSize = Math.min(10000, Math.max(1, Number(args?.limit || pageSize)));
   const page = Math.max(1, Number(args?.page || 1));
@@ -356,6 +360,7 @@ export async function getActivityLogData(args?: ActivityLogQuery): Promise<Activ
       ip,
       channel,
       uniqueOnly: false,
+      includeExcluded,
       from,
       funnelProduct,
       funnelStep,
@@ -401,6 +406,7 @@ export async function getActivityLogData(args?: ActivityLogQuery): Promise<Activ
       ip,
       channel,
       uniqueOnly,
+      includeExcluded,
       from,
       funnelProduct,
       funnelStep,
@@ -445,7 +451,7 @@ export async function getActivityLogData(args?: ActivityLogQuery): Promise<Activ
         AND access.created_at < (($2::date + 1) AT TIME ZONE 'Asia/Seoul')
         AND ($11::uuid IS NULL OR access.user_id = $11::uuid)
         AND ($10::text = '' OR SPLIT_PART(access.ip_address::text, '/', 1) = $10::text)
-        AND ${excludedEventCondition("access.user_id", "access.ip_address")}
+        AND (${includeExcluded ? "TRUE" : excludedEventCondition("access.user_id", "access.ip_address")})
         AND ${nonAutomatedUserAgentCondition("access.user_agent")}
       UNION ALL
       SELECT
@@ -487,7 +493,7 @@ export async function getActivityLogData(args?: ActivityLogQuery): Promise<Activ
         AND events.created_at < (($2::date + 1) AT TIME ZONE 'Asia/Seoul')
         AND ($11::uuid IS NULL OR events.user_id = $11::uuid)
         AND ($10::text = '' OR SPLIT_PART(events.properties->>'ip_address', '/', 1) = $10::text)
-        AND ${excludedEventCondition("events.user_id", "NULLIF(events.properties->>'ip_address', '')")}
+        AND (${includeExcluded ? "TRUE" : excludedEventCondition("events.user_id", "NULLIF(events.properties->>'ip_address', '')")})
         AND ${nonAutomatedUserAgentCondition("NULLIF(events.properties->>'user_agent', '')")}
       UNION ALL
       SELECT
@@ -512,7 +518,7 @@ export async function getActivityLogData(args?: ActivityLogQuery): Promise<Activ
         AND events.created_at < (($2::date + 1) AT TIME ZONE 'Asia/Seoul')
         AND ($11::uuid IS NULL OR events.user_id = $11::uuid)
         AND ($10::text = '' OR SPLIT_PART(events.ip_address::text, '/', 1) = $10::text)
-        AND ${excludedEventCondition("events.user_id", "events.ip_address")}
+        AND (${includeExcluded ? "TRUE" : excludedEventCondition("events.user_id", "events.ip_address")})
       UNION ALL
       SELECT
         events.id::text,
@@ -536,7 +542,7 @@ export async function getActivityLogData(args?: ActivityLogQuery): Promise<Activ
         AND events.created_at < (($2::date + 1) AT TIME ZONE 'Asia/Seoul')
         AND ($11::uuid IS NULL OR events.user_id = $11::uuid)
         AND ($10::text = '' OR SPLIT_PART(events.ip_address::text, '/', 1) = $10::text)
-        AND ${excludedEventCondition("events.user_id", "events.ip_address")}
+        AND (${includeExcluded ? "TRUE" : excludedEventCondition("events.user_id", "events.ip_address")})
       UNION ALL
       SELECT
         events.id::text,
@@ -560,7 +566,7 @@ export async function getActivityLogData(args?: ActivityLogQuery): Promise<Activ
         AND events.created_at < (($2::date + 1) AT TIME ZONE 'Asia/Seoul')
         AND ($11::uuid IS NULL OR events.user_id = $11::uuid)
         AND ($10::text = '' OR SPLIT_PART(events.ip_address::text, '/', 1) = $10::text)
-        AND ${excludedEventCondition("events.user_id", "events.ip_address")}
+        AND (${includeExcluded ? "TRUE" : excludedEventCondition("events.user_id", "events.ip_address")})
     ), daily_channels AS (
       SELECT DISTINCT ON ((event_at AT TIME ZONE 'Asia/Seoul')::date, visitor_key)
         (event_at AT TIME ZONE 'Asia/Seoul')::date AS day,
@@ -652,6 +658,7 @@ export async function getActivityLogData(args?: ActivityLogQuery): Promise<Activ
     ip,
     channel,
     uniqueOnly,
+    includeExcluded,
     from,
     funnelProduct,
     funnelStep,
