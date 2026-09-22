@@ -29,6 +29,8 @@ type AdminMemberDetailPageProps = {
 
 function badgeClass(label: string) {
   if (label === "정지") return styles.blockedBadge;
+  if (label === "탈퇴" || label === "강제탈퇴") return styles.withdrawnBadge;
+  if (label === "가입대기") return styles.pendingBadge;
   return styles.statusBadge;
 }
 
@@ -77,7 +79,7 @@ export async function AdminMemberDetailPage({ userId, activeTab, selectedItem }:
           </div>
           <p>{member.gender} · {member.ageGroup} · {member.source} · {member.campaign} · 가입 {member.joinedAt}</p>
         </div>
-        <AdminMemberActions userId={member.id} statusLabel={member.statusLabel} />
+        <AdminMemberActions userId={member.id} status={member.status} statusLabel={member.statusLabel} />
       </section>
 
       <nav className={styles.tabs} aria-label="회원 상세 탭">

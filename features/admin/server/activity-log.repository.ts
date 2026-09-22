@@ -19,7 +19,7 @@ export type ActivityLogQuery = {
   limit?: number;
   event?: string;
   eventType?: string;
-  cohort?: "job_visitor" | "job_activity" | "job_returning";
+  cohort?: "job_entry" | "job_apply" | "job_move" | "job_exit" | "job_pending" | "job_returning";
   bannerKey?: string;
   screen?: string;
   keyword?: string;
@@ -164,8 +164,11 @@ function formatEvent(value: string | null) {
     interview_coaching_start: "면접 코칭 시작",
     interview_coaching_answer: "면접 답변 제출",
     interview_coaching_complete: "면접 코칭 완료",
-    job_detail_visitor: "공고 상세 방문자",
-    job_detail_followup_visitor: "공고 상세 후속 행동 방문자",
+    job_detail_entry_visitor: "공고 상세 첫 유입 방문자",
+    job_detail_apply_visitor: "공고 상세 유입 후 지원",
+    job_detail_move_visitor: "공고 상세 유입 후 다른 화면 이동",
+    job_detail_exit_visitor: "공고 상세 유입 후 이탈",
+    job_detail_pending_visitor: "공고 상세 유입 후 판정 대기",
     job_detail_returning_visitor: "공고 상세 재방문자",
   };
   return labels[value] || value;
@@ -246,87 +249,47 @@ function jobCohortSql() {
 
   return `
     WITH ${trafficCtes},
-    job_visits AS (
-      SELECT DISTINCT ON (p.day, p.visitor_key)
-        p.id,
-        p.user_id,
-        p.anonymous_id,
-        p.event_at,
-        p.day,
-        p.path,
-        p.ip_address,
-        p.user_agent,
-        p.visitor_key,
-        p.channel
-      FROM analytics_pages p
-      WHERE p.visitor_key IS NOT NULL
-        AND p.screen = 'job_detail'
-        AND p.day BETWEEN $1::date AND $2::date
-      ORDER BY p.day, p.visitor_key, p.event_at, p.id
-    ),
-    followup_visitors AS (
-      SELECT DISTINCT ON ((s.last_job_at AT TIME ZONE 'Asia/Seoul')::date, s.visitor_key)
-        s.id,
-        s.event_at,
-        s.path,
-        s.event_type,
-        (s.last_job_at AT TIME ZONE 'Asia/Seoul')::date AS day,
-        s.visitor_key
-      FROM analytics_session_flags s
-      WHERE s.last_job_at IS NOT NULL
-        AND s.event_at >= s.last_job_at
-        AND (s.event_type = 'page_view' OR s.event_type LIKE '%click%' OR s.event_type LIKE '%start%' OR s.event_type LIKE '%complete%')
-        AND (s.event_type <> 'page_view' OR s.screen <> 'job_detail')
-        AND (s.last_job_at AT TIME ZONE 'Asia/Seoul')::date BETWEEN $1::date AND $2::date
-      ORDER BY (s.last_job_at AT TIME ZONE 'Asia/Seoul')::date, s.visitor_key, s.event_at, s.id
+    job_people AS (
+      SELECT people.*, page.user_id, page.anonymous_id, page.ip_address,
+        page.user_agent, page.path AS entry_path
+      FROM analytics_job_people people
+      JOIN analytics_pages page ON 'p:' || page.id = people.entry_id
+      WHERE people.day BETWEEN $1::date AND $2::date
     ),
     cohort_rows AS (
       SELECT
-        'job-visitor:' || v.day::text || ':' || v.visitor_key AS id,
-        v.event_at,
-        'job_detail_visitor' AS event_type,
-        v.user_id,
-        v.anonymous_id,
+        'job-' || $6::text || ':' || people.day::text || ':' || people.visitor_key AS id,
+        CASE WHEN people.outcome IN ('apply', 'move') THEN people.outcome_at ELSE people.session_start END AS event_at,
+        CASE $6::text
+          WHEN 'job_apply' THEN 'job_detail_apply_visitor'
+          WHEN 'job_move' THEN 'job_detail_move_visitor'
+          WHEN 'job_exit' THEN 'job_detail_exit_visitor'
+          WHEN 'job_pending' THEN 'job_detail_pending_visitor'
+          WHEN 'job_returning' THEN 'job_detail_returning_visitor'
+          ELSE 'job_detail_entry_visitor'
+        END AS event_type,
+        people.user_id,
+        people.anonymous_id,
         NULL::uuid AS session_id,
-        v.ip_address,
-        v.user_agent,
-        v.path,
-        '공고 상세 방문자' AS detail,
-        v.channel
-      FROM job_visits v
-      WHERE $6::text = 'job_visitor'
-      UNION ALL
-      SELECT
-        'job-followup:' || f.day::text || ':' || f.visitor_key AS id,
-        f.event_at,
-        'job_detail_followup_visitor' AS event_type,
-        v.user_id,
-        v.anonymous_id,
-        NULL::uuid AS session_id,
-        v.ip_address,
-        v.user_agent,
-        f.path,
-        f.event_type AS detail,
-        v.channel
-      FROM followup_visitors f
-      JOIN job_visits v ON v.day = f.day AND v.visitor_key = f.visitor_key
-      WHERE $6::text = 'job_activity'
-      UNION ALL
-      SELECT
-        'job-returning:' || v.day::text || ':' || v.visitor_key AS id,
-        v.event_at,
-        'job_detail_returning_visitor' AS event_type,
-        v.user_id,
-        v.anonymous_id,
-        NULL::uuid AS session_id,
-        v.ip_address,
-        v.user_agent,
-        v.path,
-        '이전 30일 이내 방문 이력' AS detail,
-        v.channel
-      FROM job_visits v
-      JOIN analytics_job_users j ON j.day = v.day AND j.visitor_key = v.visitor_key
-      WHERE $6::text = 'job_returning' AND j.returning
+        people.ip_address,
+        people.user_agent,
+        CASE WHEN people.outcome = 'move' THEN people.outcome_path ELSE people.entry_path END AS path,
+        CASE $6::text
+          WHEN 'job_apply' THEN '첫 후속 결과: 지원 버튼 클릭'
+          WHEN 'job_move' THEN '첫 후속 결과: 다른 화면 이동'
+          WHEN 'job_exit' THEN '후속 지원 또는 화면 이동 없이 세션 종료'
+          WHEN 'job_pending' THEN '세션 종료 전 판정 대기'
+          WHEN 'job_returning' THEN '이전 30일 이내 방문 이력'
+          ELSE '세션의 첫 화면이 공고 상세'
+        END AS detail,
+        people.channel
+      FROM job_people people
+      WHERE $6::text = 'job_entry'
+         OR ($6::text = 'job_apply' AND people.outcome = 'apply')
+         OR ($6::text = 'job_move' AND people.outcome = 'move')
+         OR ($6::text = 'job_exit' AND people.outcome = 'exit')
+         OR ($6::text = 'job_pending' AND people.outcome = 'pending')
+         OR ($6::text = 'job_returning' AND people.returning)
     )
     SELECT
       c.id,
@@ -371,7 +334,7 @@ export async function getActivityLogData(args?: ActivityLogQuery): Promise<Activ
   const eventType = /^[a-z0-9][a-z0-9_.:-]{1,99}$/i.test(args?.eventType || "")
     ? args?.eventType || ""
     : "";
-  const cohort = args?.cohort && ["job_visitor", "job_activity", "job_returning"].includes(args.cohort)
+  const cohort = args?.cohort && ["job_entry", "job_apply", "job_move", "job_exit", "job_pending", "job_returning"].includes(args.cohort)
     ? args.cohort
     : "";
   const screen = args?.screen === "coaching" ? "resume_coaching" : args?.screen || "all";

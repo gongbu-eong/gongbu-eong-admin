@@ -37,19 +37,28 @@ function formatCount(value: number) {
 }
 
 const cohortLabels: Record<string, string> = {
-  job_visitor: "공고 상세 방문자 코호트",
-  job_activity: "공고 상세 후속 행동 방문자 코호트",
+  job_entry: "공고 상세 첫 유입 방문자",
+  job_apply: "공고 상세 유입 후 지원 방문자",
+  job_move: "공고 상세 유입 후 다른 화면 이동 방문자",
+  job_exit: "공고 상세 유입 후 이탈 방문자",
+  job_pending: "공고 상세 유입 후 판정 대기 방문자",
   job_returning: "공고 상세 재방문자 코호트",
 };
 
-function makeHref(data: Awaited<ReturnType<typeof getActivityLogData>>, page: number, selectedIp = data.ip) {
+function makeHref(
+  data: Awaited<ReturnType<typeof getActivityLogData>>,
+  page: number,
+  selected: { ip?: string; keyword?: string } = {},
+) {
+  const selectedIp = selected.ip ?? data.ip;
+  const selectedKeyword = selected.keyword ?? data.keyword;
   const params = new URLSearchParams({ startDate: data.startDate, endDate: data.endDate });
   if (data.event !== "all") params.set("event", data.event);
   if (data.eventType) params.set("eventType", data.eventType);
   if (data.cohort) params.set("cohort", data.cohort);
   if (data.bannerKey) params.set("bannerKey", data.bannerKey);
   if (data.screen !== "all") params.set("screen", data.screen);
-  if (data.keyword) params.set("keyword", data.keyword);
+  if (selectedKeyword) params.set("keyword", selectedKeyword);
   if (data.channel !== "all") params.set("channel", data.channel);
   if (data.uniqueOnly) params.set("unique", "1");
   if (data.includeExcluded) params.set("includeExcluded", "1");
@@ -124,13 +133,16 @@ export async function ActivityLogsPage({ filters }: ActivityLogsPageProps) {
               <p>총 <strong>{formatCount(data.totalCount)}</strong>{data.funnelLabel ? "명 · 대시보드 전환 퍼널과 동일한 시작 코호트 기준 · " : totalUnit + " · "}{data.uniqueOnly ? "순 방문자 기준 · " : data.cohort ? "대시보드 코호트 기준 · " : data.event === "activity" ? "방문·사용자 행동 기준 · " : "원본 이벤트 기준 · "}비회원은 IP와 익명 식별자로 확인합니다.{data.includeExcluded ? " · 제외 IP 포함 조회 중" : ""}{data.ip ? ` · ${data.ip} 로그만 조회 중` : ""}</p>
             </div>
             <span className={styles.tableActions}>
-              {data.ip ? <Link className={styles.backButtonSecondary} href={makeHref(data, 1, "")}>전체 IP 보기</Link> : null}
+              {data.ip ? <Link className={styles.backButtonSecondary} href={makeHref(data, 1, { ip: "" })}>전체 IP 보기</Link> : null}
             </span>
           </div>
           <ActivityLogTable
             rows={data.rows}
             emptyMessage="조회 조건에 해당하는 로그가 없습니다."
-            renderIp={(row) => row.ipAddress !== "-" ? <Link href={makeHref(data, 1, row.ipAddress)}>{row.ipAddress}</Link> : row.ipAddress}
+            renderIp={(row) => row.ipAddress !== "-" ? <Link href={makeHref(data, 1, { ip: row.ipAddress })}>{row.ipAddress}</Link> : row.ipAddress}
+            renderIdentity={(row) => row.identity !== "회원 식별됨"
+              ? <Link href={makeHref(data, 1, { ip: "", keyword: row.identity })}>{row.identity}</Link>
+              : row.identity}
           />
           <nav className={styles.pagination} aria-label="방문 이벤트 로그 페이지">
             <Link className={data.page <= 1 ? styles.disabledPage : ""} href={makeHref(data, Math.max(1, data.page - 1))}>&lt;</Link>

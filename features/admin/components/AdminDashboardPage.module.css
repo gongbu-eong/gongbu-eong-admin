@@ -18,6 +18,7 @@
 .analysisPanel {
   width: 100%;
   margin-top: 16px;
+  scroll-margin-top: 112px;
 }
 
 .insightHeader,
@@ -83,6 +84,7 @@
 .trafficInsightPanel {
   width: 100%;
   margin-top: 16px;
+  scroll-margin-top: 112px;
 }
 
 .trafficTrendGrid {

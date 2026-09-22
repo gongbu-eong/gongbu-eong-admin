@@ -146,50 +146,84 @@ export function trafficFactsCtes(start: string, end: string) {
     ),
     analytics_activity AS (
       SELECT 'p:' || id AS id, visitor_key, event_at, day, path, 'page_view' AS event_type,
-        screen = 'job_detail' AS is_job, screen, NULL::text AS banner_key
+        screen = 'job_detail' AS is_job, screen, NULL::text AS banner_key, channel
       FROM analytics_pages p
       JOIN analytics_job_visitors j USING (visitor_key)
       UNION ALL
       SELECT 'e:' || id, visitor_key, event_at, day, path, event_type, false,
-        ${screenSql("p.path")} AS screen, banner_key
+        ${screenSql("p.path")} AS screen, banner_key, NULL::text AS channel
       FROM analytics_products p
       JOIN analytics_job_visitors j USING (visitor_key)
       WHERE visitor_key IS NOT NULL
         AND event_type <> 'banner_impression'
     ),
     analytics_previous AS (
-      SELECT *, LAG(event_at) OVER (PARTITION BY visitor_key ORDER BY event_at, is_job DESC, id) AS previous_at
+      SELECT *, LAG(event_at) OVER (PARTITION BY visitor_key ORDER BY event_at, id) AS previous_at
       FROM analytics_activity
     ),
     analytics_sessions AS (
       SELECT *, SUM(CASE WHEN previous_at IS NULL OR event_at - previous_at >= interval '30 minutes' THEN 1 ELSE 0 END)
-        OVER (PARTITION BY visitor_key ORDER BY event_at, is_job DESC, id) AS session_no
+        OVER (PARTITION BY visitor_key ORDER BY event_at, id) AS session_no
       FROM analytics_previous
     ),
-    analytics_session_flags AS (
-      SELECT *, FIRST_VALUE(previous_at) OVER session_window AS prior_session_at,
-        FIRST_VALUE(event_at) OVER session_window AS session_start,
-        MAX(event_at) FILTER (WHERE is_job) OVER (
-          PARTITION BY visitor_key, session_no ORDER BY event_at, is_job DESC, id
-          ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING
-        ) AS last_job_at
+    analytics_session_entries AS MATERIALIZED (
+      SELECT DISTINCT ON (visitor_key, session_no)
+        visitor_key, session_no, id AS entry_id, event_at AS session_start,
+        previous_at, day, path, event_type, screen, channel
       FROM analytics_sessions
-      WINDOW session_window AS (PARTITION BY visitor_key, session_no ORDER BY event_at, is_job DESC, id ROWS UNBOUNDED PRECEDING)
+      WHERE event_type = 'page_view'
+      ORDER BY visitor_key, session_no, event_at, id
     ),
-    analytics_job_users AS MATERIALIZED (
-      SELECT day, visitor_key,
-        BOOL_OR(prior_session_at >= session_start - interval '30 days') AS returning
-      FROM analytics_session_flags WHERE is_job
-      GROUP BY day, visitor_key
+    analytics_job_entries AS MATERIALIZED (
+      SELECT DISTINCT ON (day, visitor_key)
+        day, visitor_key, session_no, entry_id, session_start, previous_at,
+        path, channel
+      FROM analytics_session_entries
+      WHERE screen = 'job_detail'
+      ORDER BY day, visitor_key, session_start, entry_id
     ),
-    analytics_followups AS MATERIALIZED (
-      SELECT (last_job_at AT TIME ZONE 'Asia/Seoul')::date AS day, visitor_key,
-        COUNT(*) FILTER (WHERE event_type = 'page_view') AS page_moves
-      FROM analytics_session_flags
-      WHERE last_job_at IS NOT NULL AND event_at >= last_job_at
-        AND (event_type = 'page_view' OR event_type LIKE '%click%' OR event_type LIKE '%start%' OR event_type LIKE '%complete%')
-        AND (event_type <> 'page_view' OR screen <> 'job_detail')
-      GROUP BY 1, 2
+    analytics_session_bounds AS MATERIALIZED (
+      SELECT visitor_key, session_no, MAX(event_at) AS last_activity_at
+      FROM analytics_sessions
+      GROUP BY visitor_key, session_no
+    ),
+    analytics_job_outcomes AS MATERIALIZED (
+      SELECT DISTINCT ON (entry.day, entry.visitor_key)
+        entry.day, entry.visitor_key,
+        CASE
+          WHEN activity.event_type = 'job_detail_apply_click' THEN 'apply'
+          ELSE 'move'
+        END AS outcome,
+        activity.event_at AS outcome_at,
+        activity.path AS outcome_path
+      FROM analytics_job_entries entry
+      JOIN analytics_sessions activity
+        ON activity.visitor_key = entry.visitor_key
+       AND activity.session_no = entry.session_no
+       AND (activity.event_at, activity.id) > (entry.session_start, entry.entry_id)
+      WHERE activity.event_type = 'job_detail_apply_click'
+         OR (activity.event_type = 'page_view' AND activity.screen <> 'job_detail')
+      ORDER BY entry.day, entry.visitor_key, activity.event_at,
+        CASE WHEN activity.event_type = 'job_detail_apply_click' THEN 0 ELSE 1 END,
+        activity.id
+    ),
+    analytics_job_people AS MATERIALIZED (
+      SELECT entry.*,
+        CASE
+          WHEN outcome.outcome IS NOT NULL THEN outcome.outcome
+          WHEN bounds.last_activity_at <= NOW() - interval '30 minutes' THEN 'exit'
+          ELSE 'pending'
+        END AS outcome,
+        outcome.outcome_at,
+        outcome.outcome_path,
+        entry.previous_at >= entry.session_start - interval '30 days' AS returning
+      FROM analytics_job_entries entry
+      JOIN analytics_session_bounds bounds
+        ON bounds.visitor_key = entry.visitor_key
+       AND bounds.session_no = entry.session_no
+      LEFT JOIN analytics_job_outcomes outcome
+        ON outcome.day = entry.day
+       AND outcome.visitor_key = entry.visitor_key
     )`;
 }
 
@@ -297,18 +331,22 @@ const dashboardTrafficFactsSqlBody = `
       SELECT p.day, 'banner_uv', '', p.banner_key, COUNT(DISTINCT p.visitor_key)
       FROM analytics_products p WHERE p.banner_key IN ('job_detail_resume_a','job_detail_resume_b','job_detail_strength_a','job_detail_strength_b','job_detail_bookmark_click','job_detail_apply_click') GROUP BY 1, 4
       UNION ALL
-      SELECT j.day, 'job_visitor', u.channel, '', COUNT(*) FROM analytics_job_users j
-      JOIN analytics_daily_users u USING (day, visitor_key) GROUP BY 1, 3
+      SELECT j.day, 'job_entry', j.channel, '', COUNT(*) FROM analytics_job_people j GROUP BY 1, 3
       UNION ALL
-      SELECT j.day, 'job_activity', u.channel, '', COUNT(*) FROM analytics_job_users j
-      JOIN analytics_daily_users u USING (day, visitor_key)
-      JOIN analytics_followups f USING (day, visitor_key) GROUP BY 1, 3
+      SELECT j.day, 'job_apply', j.channel, '', COUNT(*) FROM analytics_job_people j
+      WHERE j.outcome = 'apply' GROUP BY 1, 3
       UNION ALL
-      SELECT j.day, 'job_returning', u.channel, '', COUNT(*) FROM analytics_job_users j
-      JOIN analytics_daily_users u USING (day, visitor_key) WHERE j.returning GROUP BY 1, 3
+      SELECT j.day, 'job_move', j.channel, '', COUNT(*) FROM analytics_job_people j
+      WHERE j.outcome = 'move' GROUP BY 1, 3
       UNION ALL
-      SELECT f.day, 'job_page_moves', u.channel, '', SUM(f.page_moves)::bigint FROM analytics_followups f
-      JOIN analytics_daily_users u USING (day, visitor_key) GROUP BY 1, 3
+      SELECT j.day, 'job_exit', j.channel, '', COUNT(*) FROM analytics_job_people j
+      WHERE j.outcome = 'exit' GROUP BY 1, 3
+      UNION ALL
+      SELECT j.day, 'job_pending', j.channel, '', COUNT(*) FROM analytics_job_people j
+      WHERE j.outcome = 'pending' GROUP BY 1, 3
+      UNION ALL
+      SELECT j.day, 'job_returning', j.channel, '', COUNT(*) FROM analytics_job_people j
+      WHERE j.returning GROUP BY 1, 3
       UNION ALL
       SELECT d.day, 'calendar', '', '', 0 FROM days d
       UNION ALL
@@ -461,18 +499,22 @@ export function dashboardFactsSql(product: string) {
       SELECT p.day, 'banner_uv', '', p.banner_key, COUNT(DISTINCT p.visitor_key)
       FROM analytics_products p WHERE p.banner_key IN (${bannerKeys.map(k => `'${k}'`).join(",")}) GROUP BY 1, 4
       UNION ALL
-      SELECT j.day, 'job_visitor', u.channel, '', COUNT(*) FROM analytics_job_users j
-      JOIN analytics_daily_users u USING (day, visitor_key) GROUP BY 1, 3
+      SELECT j.day, 'job_entry', j.channel, '', COUNT(*) FROM analytics_job_people j GROUP BY 1, 3
       UNION ALL
-      SELECT j.day, 'job_activity', u.channel, '', COUNT(*) FROM analytics_job_users j
-      JOIN analytics_daily_users u USING (day, visitor_key)
-      JOIN analytics_followups f USING (day, visitor_key) GROUP BY 1, 3
+      SELECT j.day, 'job_apply', j.channel, '', COUNT(*) FROM analytics_job_people j
+      WHERE j.outcome = 'apply' GROUP BY 1, 3
       UNION ALL
-      SELECT j.day, 'job_returning', u.channel, '', COUNT(*) FROM analytics_job_users j
-      JOIN analytics_daily_users u USING (day, visitor_key) WHERE j.returning GROUP BY 1, 3
+      SELECT j.day, 'job_move', j.channel, '', COUNT(*) FROM analytics_job_people j
+      WHERE j.outcome = 'move' GROUP BY 1, 3
       UNION ALL
-      SELECT f.day, 'job_page_moves', u.channel, '', SUM(f.page_moves)::bigint FROM analytics_followups f
-      JOIN analytics_daily_users u USING (day, visitor_key) GROUP BY 1, 3
+      SELECT j.day, 'job_exit', j.channel, '', COUNT(*) FROM analytics_job_people j
+      WHERE j.outcome = 'exit' GROUP BY 1, 3
+      UNION ALL
+      SELECT j.day, 'job_pending', j.channel, '', COUNT(*) FROM analytics_job_people j
+      WHERE j.outcome = 'pending' GROUP BY 1, 3
+      UNION ALL
+      SELECT j.day, 'job_returning', j.channel, '', COUNT(*) FROM analytics_job_people j
+      WHERE j.returning GROUP BY 1, 3
       UNION ALL
       SELECT day, 'product_start', '', '', COUNT(*) FROM conversion_people GROUP BY day
       UNION ALL

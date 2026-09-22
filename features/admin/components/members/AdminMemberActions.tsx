@@ -6,21 +6,24 @@ import styles from "./AdminMemberDetailPage.module.css";
 
 type AdminMemberActionsProps = {
   userId: string;
+  status: string;
   statusLabel: string;
 };
 
 export function AdminMemberActions({
   userId,
+  status,
   statusLabel,
 }: AdminMemberActionsProps) {
   const router = useRouter();
   const [pendingAction, setPendingAction] = useState<
-    "active" | "blocked" | "withdrawn" | null
+    "active" | "blocked" | "forced_withdrawn" | null
   >(null);
-  const isWithdrawn = statusLabel === "탈퇴";
-  const isBlocked = statusLabel === "정지";
+  const isWithdrawn = status === "withdrawn";
+  const isForcedWithdrawn = status === "forced_withdrawn";
+  const isBlocked = status === "blocked";
 
-  const getDurationDays = (nextStatus: "blocked" | "withdrawn") => {
+  const getDurationDays = (nextStatus: "blocked" | "forced_withdrawn") => {
     const message =
       nextStatus === "blocked"
         ? "정지 기간(일)을 입력해 주세요."
@@ -38,7 +41,7 @@ export function AdminMemberActions({
     return days;
   };
 
-  const changeStatus = async (nextStatus: "active" | "blocked" | "withdrawn") => {
+  const changeStatus = async (nextStatus: "active" | "blocked" | "forced_withdrawn") => {
     const label =
       nextStatus === "active"
         ? "계정 복구"
@@ -88,7 +91,7 @@ export function AdminMemberActions({
       <button
         className={styles.pauseButton}
         type="button"
-        disabled={isWithdrawn || pendingAction !== null}
+        disabled={isWithdrawn || isForcedWithdrawn || pendingAction !== null}
         onClick={() => changeStatus(isBlocked ? "active" : "blocked")}
       >
         {pendingAction === "blocked" || (isBlocked && pendingAction === "active")
@@ -100,12 +103,12 @@ export function AdminMemberActions({
       <button
         className={styles.withdrawButton}
         type="button"
-        disabled={pendingAction !== null}
-        onClick={() => changeStatus(isWithdrawn ? "active" : "withdrawn")}
+        disabled={isWithdrawn || pendingAction !== null}
+        onClick={() => changeStatus(isForcedWithdrawn ? "active" : "forced_withdrawn")}
       >
-        {pendingAction === "withdrawn" || (isWithdrawn && pendingAction === "active")
+        {pendingAction === "forced_withdrawn" || (isForcedWithdrawn && pendingAction === "active")
           ? "처리 중"
-          : isWithdrawn
+          : isForcedWithdrawn
             ? "계정 복구"
             : "강제 탈퇴"}
       </button>

@@ -28,7 +28,7 @@ export async function PATCH(
   } | null;
   const status = body?.status;
 
-  if (status !== "active" && status !== "blocked" && status !== "withdrawn") {
+  if (status !== "active" && status !== "blocked" && status !== "forced_withdrawn") {
     return NextResponse.json(
       { ok: false, message: "변경할 상태가 올바르지 않습니다." },
       { status: 400 },

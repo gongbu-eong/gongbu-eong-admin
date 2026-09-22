@@ -211,7 +211,7 @@
 
 .table {
   width: 100%;
-  min-width: 1520px;
+  min-width: 1410px;
   border-collapse: collapse;
   table-layout: fixed;
   color: var(--admin-text);
@@ -221,23 +221,21 @@
 .table th:nth-child(1),
 .table td:nth-child(1) { width: 150px; }
 .table th:nth-child(2),
-.table td:nth-child(2) { width: 130px; }
+.table td:nth-child(2) { width: 180px; }
 .table th:nth-child(3),
-.table td:nth-child(3) { width: 180px; }
+.table td:nth-child(3) { width: 195px; }
 .table th:nth-child(4),
-.table td:nth-child(4) { width: 195px; }
+.table td:nth-child(4) { width: 115px; }
 .table th:nth-child(5),
-.table td:nth-child(5) { width: 115px; }
+.table td:nth-child(5) { width: 90px; }
 .table th:nth-child(6),
-.table td:nth-child(6) { width: 90px; }
+.table td:nth-child(6) { width: 110px; }
 .table th:nth-child(7),
-.table td:nth-child(7) { width: 110px; }
+.table td:nth-child(7) { width: 130px; }
 .table th:nth-child(8),
-.table td:nth-child(8) { width: 130px; }
+.table td:nth-child(8) { width: 220px; }
 .table th:nth-child(9),
-.table td:nth-child(9) { width: 220px; }
-.table th:nth-child(10),
-.table td:nth-child(10) { width: 260px; }
+.table td:nth-child(9) { width: 260px; }
 
 .table th {
   height: 46px;

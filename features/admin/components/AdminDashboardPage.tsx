@@ -154,7 +154,7 @@ export async function AdminDashboardPage({
         </p>
       ) : null}
 
-      <section className={styles.insightPanel} aria-label="주요 추이">
+      <section id="visit-signup" className={styles.insightPanel} aria-label="주요 추이">
         <div className={styles.insightHeader}>
           <div>
             <h2>방문·가입 흐름</h2>
@@ -204,7 +204,7 @@ export async function AdminDashboardPage({
         </div>
       </section>
 
-      <section className={styles.analysisPanel} aria-label="전환 분석">
+      <section id="conversion" className={styles.analysisPanel} aria-label="전환 분석">
         <div className={styles.analysisHeader}>
           <div>
             <h2>전환 분석</h2>
@@ -258,6 +258,7 @@ export async function AdminDashboardPage({
       </section>
 
       <section
+        id="traffic-flow"
         className={styles.trafficInsightPanel}
         aria-label="최근 7일 유입과 행동 추이"
       >
@@ -272,6 +273,7 @@ export async function AdminDashboardPage({
         <div className={styles.channelInsight}>
           <div className={styles.channelChartGrid}>
             <TrendViewCard
+              id="channel-visitors"
               title="유입 채널 순 방문자 추이"
               subtitle="최근 7일 · 일별 순 방문자, 당일 최초 유입 채널"
               listSubtitle={`목록 · ${dashboardPeriodText}`}
@@ -312,6 +314,7 @@ export async function AdminDashboardPage({
         </div>
         <div className={styles.trafficPairGrid}>
           <TrendViewCard
+              id="banner-clicks"
               title="배너·버튼 클릭 추이"
               subtitle="최근 7일 · 전체 클릭 / 찜 / 지원 (모두 건수)"
               listSubtitle={`목록 · ${dashboardPeriodText}`}
@@ -324,9 +327,10 @@ export async function AdminDashboardPage({
             <BannerClickList items={bannerClicks} total={bannerClickTotal} periodLabel={dashboardPeriodText} />
           </AdminCard>
           <TrendViewCard
+            id="job-entry-behavior"
             className={styles.behaviorTrendCard}
-              title="공고 상세 방문 후 행동 추이"
-              subtitle="최근 7일 · 방문자 / 후속 행동 방문자 / 지원 클릭 / 재방문자"
+              title="공고 상세 첫 유입 후 행동 추이"
+              subtitle="최근 7일 · 공고 상세 첫 유입 / 지원 / 다른 화면 이동 / 이탈 / 판정 대기 (모두 명수)"
               listSubtitle={`목록 · ${dashboardPeriodText}`}
               yLabels={jobDetailBehaviorScale.yLabels}
               series={jobDetailBehaviorTrend}

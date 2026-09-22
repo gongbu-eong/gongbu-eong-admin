@@ -76,15 +76,21 @@ export type BehaviorPatternItem = {
   channelLabel: string;
   visitors: string;
   visitorHref?: string;
-  activity: string;
-  activityHref?: string;
-  activityRate: string;
+  apply: string;
+  applyHref?: string;
+  applyRate: string;
+  move: string;
+  moveHref?: string;
+  moveRate: string;
+  exit: string;
+  exitHref?: string;
+  exitRate: string;
+  pending: string;
+  pendingHref?: string;
+  pendingRate: string;
   revisit: string;
   revisitHref?: string;
   revisitRate: string;
-  apply: string;
-  applyHref?: string;
-  pageMove: string;
 };
 
 export type DashboardProductOption = {
@@ -106,6 +112,15 @@ export const navItems: NavItem[] = [
     key: "dashboard",
     href: "/",
     icon: "/admin-assets/nav-dashboard.png",
+    expandable: true,
+    children: [
+      { label: "방문·가입 흐름", key: "visit-signup", href: "/#visit-signup" },
+      { label: "전환 분석", key: "conversion", href: "/#conversion" },
+      { label: "유입·행동 흐름", key: "traffic-flow", href: "/#traffic-flow" },
+      { label: "유입 채널 순 방문자", key: "channel-visitors", href: "/#channel-visitors" },
+      { label: "배너·버튼 클릭 추이", key: "banner-clicks", href: "/#banner-clicks" },
+      { label: "공고 상세 유입 후 행동", key: "job-entry-behavior", href: "/#job-entry-behavior" },
+    ],
   },
   {
     label: "방문·이벤트 로그",

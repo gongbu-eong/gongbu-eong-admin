@@ -1,5 +1,8 @@
+"use client";
+
 import Image from "next/image";
 import Link from "next/link";
+import { useEffect, useState } from "react";
 import { navItems } from "@/features/admin/data/dashboard";
 import styles from "./AdminLayout.module.css";
 
@@ -9,6 +12,15 @@ type AdminSidebarProps = {
 };
 
 export function AdminSidebar({ activeNav, activeSubNav }: AdminSidebarProps) {
+  const [activeHash, setActiveHash] = useState("");
+
+  useEffect(() => {
+    const syncHash = () => setActiveHash(window.location.hash);
+    syncHash();
+    window.addEventListener("hashchange", syncHash);
+    return () => window.removeEventListener("hashchange", syncHash);
+  }, []);
+
   return (
     <aside className={styles.sidebar}>
       <Link className={styles.logo} href="/" aria-label="공부엉이 관리자 홈">
@@ -44,10 +56,14 @@ export function AdminSidebar({ activeNav, activeSubNav }: AdminSidebarProps) {
                   {item.children.map((child) => (
                     <Link
                       className={`${styles.subNavItem} ${
-                        child.key === activeSubNav ? styles.subNavItemActive : ""
+                        child.key === activeSubNav ||
+                        activeHash === `#${child.key}`
+                          ? styles.subNavItemActive
+                          : ""
                       }`}
                       href={child.href}
                       key={child.key}
+                      onClick={() => setActiveHash(`#${child.key}`)}
                     >
                       {child.label}
                     </Link>

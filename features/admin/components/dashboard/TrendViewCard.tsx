@@ -18,6 +18,7 @@ type TrendViewCardProps = {
   maxValue: number;
   valueSuffix?: string;
   className?: string;
+  id?: string;
 };
 
 function formatValue(value: number, suffix: string) {
@@ -35,6 +36,7 @@ export function TrendViewCard({
   maxValue,
   valueSuffix = "건",
   className = "",
+  id,
 }: TrendViewCardProps) {
   const [view, setView] = useState<"chart" | "list">("chart");
   const displayListSeries = listSeries.map((item) => ({
@@ -57,7 +59,7 @@ export function TrendViewCard({
   });
 
   return (
-    <AdminCard className={`${styles.card} ${className}`}>
+    <AdminCard id={id} className={`${styles.card} ${className}`}>
       <div className={styles.header}>
         <div>
           <h2>

@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  useEffect,
   useMemo,
   useRef,
   useState,
@@ -90,13 +89,6 @@ export function LineChart({
   const [visibleSeries, setVisibleSeries] = useState(() =>
     series.map(() => true),
   );
-  const seriesSignature = series
-    .map((item) => `${item.label || ""}:${item.color}`)
-    .join("|");
-  useEffect(() => {
-    setVisibleSeries(series.map(() => true));
-    setSelectedPoint(null);
-  }, [seriesSignature]);
   const activeSeries = series.filter((_, index) => visibleSeries[index] !== false);
   const xLabels = activeSeries[0]?.data.map((point) => point.label) ?? [];
   const showStaticLabels = activeSeries.length === 1;
@@ -201,6 +193,17 @@ export function LineChart({
       (yLabels.length > 1 ? (plotHeight / (yLabels.length - 1)) * index : 0),
   }));
   const xAxisPoints = plottedSeries[0]?.points ?? [];
+  const tooltipIsWide = (selectedPoint?.items.length ?? 0) > 4;
+  const tooltipRows = Math.ceil(
+    (selectedPoint?.items.length ?? 0) / (tooltipIsWide ? 2 : 1),
+  );
+  const tooltipHeight = 42 + tooltipRows * 22;
+  const tooltipTop = selectedPoint
+    ? Math.min(
+        Math.max(4, selectedPoint.y - tooltipHeight / 2),
+        Math.max(4, chartHeight - tooltipHeight - 4),
+      )
+    : 0;
   const getValueLabelProps = () => {
     return { xOffset: 0, textAnchor: "middle" as const };
   };
@@ -347,16 +350,20 @@ export function LineChart({
         </svg>
         {selectedPoint ? (
           <div
-            className={styles.tooltip}
+            className={`${styles.tooltip} ${tooltipIsWide ? styles.tooltipWide : ""}`}
             style={{
-              left: `clamp(42px, calc(${(selectedPoint.x / chartWidth) * 100}% + 12px), calc(100% - 150px))`,
-              top: Math.max(0, selectedPoint.y - 48),
+              left: `${(selectedPoint.x / chartWidth) * 100}%`,
+              top: tooltipTop,
+              transform:
+                selectedPoint.x > chartWidth * 0.55
+                  ? "translateX(calc(-100% - 10px))"
+                  : "translateX(10px)",
             }}
             role="status"
             aria-live="polite"
           >
             <span className={styles.tooltipDate}>{selectedPoint.pointLabel}</span>
-            <span className={styles.tooltipList}>
+            <span className={`${styles.tooltipList} ${tooltipIsWide ? styles.tooltipListWide : ""}`}>
               {selectedPoint.items.map((item) => (
                 <span
                   className={`${styles.tooltipRow} ${
@@ -364,7 +371,7 @@ export function LineChart({
                       ? styles.tooltipRowFaded
                       : ""
                   }`}
-                  key={item.label}
+                  key={`${item.label}-${item.seriesIndex}`}
                 >
                   <span className={styles.tooltipTitle}>
                     <i style={{ backgroundColor: item.color }} />

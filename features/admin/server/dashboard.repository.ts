@@ -240,7 +240,7 @@ function createTrendSeries(
   return definitions.map((definition) => ({
     label: definition.label,
     color: definition.color,
-    valueSuffix: definition.key === "behavior:apply_clicks" || definition.key.startsWith("banner:") || definition.key.startsWith("screen:") ? "건" : "명",
+    valueSuffix: definition.key.startsWith("banner:") || definition.key.startsWith("screen:") ? "건" : "명",
     data: (() => {
       let snapshot = 0;
       return labels.map((label) => {
@@ -552,7 +552,10 @@ export async function getDashboardData({
   const completionDelta = createPeriodDelta(todayCompletionRate, yesterdayCompletionRate);
   const metricAliases: Record<string, string> = {
     product_visit: "product:visit", product_start: "product:start", product_complete: "product:complete",
-    job_visitor: "behavior:job_detail_visitors", job_activity: "behavior:activity_visitors", job_returning: "behavior:revisit_visitors",
+    job_entry: "behavior:job_entry_visitors", job_apply: "behavior:apply_visitors",
+    job_move: "behavior:move_visitors", job_exit: "behavior:exit_visitors",
+    job_pending: "behavior:pending_visitors",
+    job_returning: "behavior:revisit_visitors",
   };
   const trendRows = (rows: AnalyticsFact[]) => {
     const values = new Map<string, { label: string; metric_key: string; count: number }>();
@@ -572,7 +575,6 @@ export async function getDashboardData({
       } else if (f.metric === "banner") {
         add(f.day, "banner:" + f.dimension, value);
         add(f.day, "banner:total", value);
-        if (f.dimension === "job_detail_apply_click") add(f.day, "behavior:apply_clicks", value);
       } else if (f.metric === "signup" || f.metric === "new_signup" || f.metric === "calendar" || metricAliases[f.metric]) {
         add(f.day, metricAliases[f.metric] || f.metric, value);
       }
@@ -635,13 +637,17 @@ export async function getDashboardData({
     channel_source: f.channel, screen_key: f.dimension, inflow_count: Number(f.value),
   })) };
   const behaviorPatternResult = { rows: [...new Set(selectedFacts.filter(f =>
-    f.metric.startsWith("job_") || (f.metric === "banner" && f.dimension === "job_detail_apply_click"),
+    f.metric.startsWith("job_"),
   ).map(f => f.channel))].map(channel => {
     const rows = selectedFacts.filter(f => f.channel === channel);
     return {
-      channel_label: channel, visitors: sum(rows, "job_visitor"), activity_count: sum(rows, "job_activity"),
-      revisit_count: sum(rows, "job_returning"), apply_count: sum(rows, "banner", "job_detail_apply_click"),
-      page_move_count: sum(rows, "job_page_moves"),
+      channel_label: channel,
+      visitors: sum(rows, "job_entry"),
+      apply_count: sum(rows, "job_apply"),
+      move_count: sum(rows, "job_move"),
+      exit_count: sum(rows, "job_exit"),
+      pending_count: sum(rows, "job_pending"),
+      revisit_count: sum(rows, "job_returning"),
     };
   }).sort((a, b) => b.visitors - a.visitors) };
   const bannerClickRows = bannerClickResult.rows;
@@ -688,10 +694,11 @@ export async function getDashboardData({
   };
   const behaviorPatterns = behaviorPatternResult.rows.map((row) => {
     const visitors = numberValue(row.visitors);
-    const activity = numberValue(row.activity_count);
-    const revisit = numberValue(row.revisit_count);
     const apply = numberValue(row.apply_count);
-    const pageMove = numberValue(row.page_move_count);
+    const move = numberValue(row.move_count);
+    const exit = numberValue(row.exit_count);
+    const pending = numberValue(row.pending_count);
+    const revisit = numberValue(row.revisit_count);
     const channelKey =
       dashboardChannelOptions.find((option) => option.label === row.channel_label)?.key ||
       "direct";
@@ -706,16 +713,37 @@ export async function getDashboardData({
       visitors: `${formatCount(visitors)}명`,
       visitorHref: createBehaviorLogHref({
         event: "activity",
-        cohort: "job_visitor",
+        cohort: "job_entry",
         ...channelParam,
       }),
-      activity: `${formatCount(activity)}명`,
-      activityHref: createBehaviorLogHref({
+      apply: `${formatCount(apply)}명`,
+      applyHref: createBehaviorLogHref({
         event: "activity",
-        cohort: "job_activity",
+        cohort: "job_apply",
         ...channelParam,
       }),
-      activityRate: formatBehaviorRate(activity),
+      applyRate: formatBehaviorRate(apply),
+      move: `${formatCount(move)}명`,
+      moveHref: createBehaviorLogHref({
+        event: "activity",
+        cohort: "job_move",
+        ...channelParam,
+      }),
+      moveRate: formatBehaviorRate(move),
+      exit: `${formatCount(exit)}명`,
+      exitHref: createBehaviorLogHref({
+        event: "activity",
+        cohort: "job_exit",
+        ...channelParam,
+      }),
+      exitRate: formatBehaviorRate(exit),
+      pending: `${formatCount(pending)}명`,
+      pendingHref: createBehaviorLogHref({
+        event: "activity",
+        cohort: "job_pending",
+        ...channelParam,
+      }),
+      pendingRate: formatBehaviorRate(pending),
       revisit: `${formatCount(revisit)}명`,
       revisitHref: createBehaviorLogHref({
         event: "activity",
@@ -723,13 +751,6 @@ export async function getDashboardData({
         ...channelParam,
       }),
       revisitRate: formatBehaviorRate(revisit),
-      apply: `${formatCount(apply)}건`,
-      applyHref: createBehaviorLogHref({
-        event: "product",
-        eventType: "job_detail_apply_click",
-        ...channelParam,
-      }),
-      pageMove: `${formatCount(pageMove)}건`,
     };
   });
   const productVisitTrend = productConversionTrendResult.rows.map((row) => ({
@@ -780,24 +801,29 @@ export async function getDashboardData({
     trafficTrendResult.rows,
     [
       {
-        key: "behavior:job_detail_visitors",
-        label: "공고 상세 방문자",
+        key: "behavior:job_entry_visitors",
+        label: "공고 상세 첫 유입",
         color: "#2f7ff0",
       },
       {
-        key: "behavior:activity_visitors",
-        label: "후속 행동 방문자",
+        key: "behavior:apply_visitors",
+        label: "지원",
         color: "#1fb573",
       },
       {
-        key: "behavior:apply_clicks",
-        label: "지원 클릭",
+        key: "behavior:move_visitors",
+        label: "다른 화면 이동",
         color: "#f5b91e",
       },
       {
-        key: "behavior:revisit_visitors",
-        label: "재방문자",
+        key: "behavior:exit_visitors",
+        label: "이탈",
         color: "#e65c5c",
+      },
+      {
+        key: "behavior:pending_visitors",
+        label: "판정 대기",
+        color: "#8a94a8",
       },
     ],
   );
@@ -874,24 +900,29 @@ export async function getDashboardData({
     listTrendResult.rows,
     [
       {
-        key: "behavior:job_detail_visitors",
-        label: "공고 상세 방문자",
+        key: "behavior:job_entry_visitors",
+        label: "공고 상세 첫 유입",
         color: "#2f7ff0",
       },
       {
-        key: "behavior:activity_visitors",
-        label: "후속 행동 방문자",
+        key: "behavior:apply_visitors",
+        label: "지원",
         color: "#1fb573",
       },
       {
-        key: "behavior:apply_clicks",
-        label: "지원 클릭",
+        key: "behavior:move_visitors",
+        label: "다른 화면 이동",
         color: "#f5b91e",
       },
       {
-        key: "behavior:revisit_visitors",
-        label: "재방문자",
+        key: "behavior:exit_visitors",
+        label: "이탈",
         color: "#e65c5c",
+      },
+      {
+        key: "behavior:pending_visitors",
+        label: "판정 대기",
+        color: "#8a94a8",
       },
     ],
   );
@@ -899,8 +930,8 @@ export async function getDashboardData({
     (sum, row) => sum + numberValue(row.visitors),
     0,
   );
-  const jobDetailActivityVisitors = behaviorPatternResult.rows.reduce(
-    (sum, row) => sum + numberValue(row.activity_count),
+  const jobDetailApplyVisitors = behaviorPatternResult.rows.reduce(
+    (sum, row) => sum + numberValue(row.apply_count),
     0,
   );
   const createDashboardHref = (channelKey: string) => {
@@ -968,17 +999,17 @@ export async function getDashboardData({
     ],
     jobDetailMetrics: [
       {
-        label: "공고 상세 방문자",
+        label: "공고 상세 첫 유입",
         value: formatCount(jobDetailVisitors),
         unit: "명",
-        delta: "다른 화면 방문자와 중복될 수 있음",
+        delta: "세션의 첫 화면이 공고 상세인 방문자",
         trend: "down",
       },
       {
-        label: "공고 상세 후 행동",
-        value: formatCount(jobDetailActivityVisitors),
+        label: "공고 상세 유입 후 지원",
+        value: formatCount(jobDetailApplyVisitors),
         unit: "명",
-        delta: "같은 세션 내 페이지 이동·클릭 포함",
+        delta: "첫 후속 결과가 지원인 방문자",
         trend: "down",
       },
     ],

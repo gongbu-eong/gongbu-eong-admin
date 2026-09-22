@@ -236,6 +236,11 @@
     flex: 0 0 auto;
   }
 
+  .navGroup:has(.subNav) {
+    display: grid;
+    gap: 4px;
+  }
+
   .navGroup + .navGroup {
     margin-top: 0;
   }
@@ -248,7 +253,23 @@
   }
 
   .subNav {
-    display: none;
+    display: flex;
+    max-width: calc(100vw - 32px);
+    flex-direction: row;
+    gap: 6px;
+    margin-top: 0;
+    padding-bottom: 2px;
+    overflow-x: auto;
+  }
+
+  .subNavItem {
+    width: auto;
+    min-width: max-content;
+    height: 34px;
+    padding: 0 12px;
+    border: 1px solid var(--admin-border);
+    background: var(--admin-surface);
+    white-space: nowrap;
   }
 
   .logoutForm {

@@ -106,6 +106,9 @@ async function claimNext(workerId: string): Promise<QueueItem | null> {
 
 async function saveFacts(item: QueueItem, rows: AnalyticsFact[]) {
   const client = await db.connect();
+  const hasPendingJobSession =
+    item.scope === "traffic" &&
+    rows.some((row) => row.metric === "job_pending" && Number(row.value) > 0);
 
   try {
     await client.query("BEGIN");
@@ -157,6 +160,27 @@ async function saveFacts(item: QueueItem, rows: AnalyticsFact[]) {
           WHERE scope = $1 AND day = $2::date
         `,
         [item.scope, item.day],
+      );
+    } else if (hasPendingJobSession) {
+      // No event is emitted when a quiet session reaches its 30-minute
+      // timeout. Keep one delayed refresh so pending visitors can become exits.
+      await client.query(
+        `
+          INSERT INTO public.analytics_fact_refresh_queue (
+            scope, day, revision, available_at, updated_at
+          )
+          VALUES ($1, $2::date, $3 + 1, NOW() + interval '30 minutes', NOW())
+          ON CONFLICT (scope, day) DO UPDATE
+          SET revision = public.analytics_fact_refresh_queue.revision + 1,
+              available_at = LEAST(
+                public.analytics_fact_refresh_queue.available_at,
+                NOW() + interval '30 minutes'
+              ),
+              locked_at = NULL,
+              locked_by = NULL,
+              updated_at = NOW()
+        `,
+        [item.scope, item.day, item.revision],
       );
     }
 

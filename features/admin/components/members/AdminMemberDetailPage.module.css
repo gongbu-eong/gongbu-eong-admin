@@ -48,6 +48,8 @@
 
 .statusBadge,
 .blockedBadge,
+.withdrawnBadge,
+.pendingBadge,
 .providerBadge {
   display: inline-flex;
   align-items: center;
@@ -67,8 +69,18 @@
 }
 
 .blockedBadge {
+  background: #fff4e5;
+  color: #c96a00;
+}
+
+.withdrawnBadge {
   background: #fff0ef;
   color: var(--admin-danger);
+}
+
+.pendingBadge {
+  background: #edf4ff;
+  color: #3978d4;
 }
 
 .providerBadge {
@@ -483,6 +495,8 @@
 
   .statusBadge,
   .blockedBadge,
+  .withdrawnBadge,
+  .pendingBadge,
   .providerBadge {
     margin-left: 0;
   }

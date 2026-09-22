@@ -153,7 +153,8 @@
   position: absolute;
   z-index: 3;
   min-width: 158px;
-  max-width: 220px;
+  max-width: min(220px, calc(100% - 8px));
+  max-height: calc(100% - 8px);
   height: auto;
   padding: 9px 10px;
   border: 1px solid var(--admin-border);
@@ -167,6 +168,11 @@
     left 120ms ease,
     top 120ms ease,
     opacity 120ms ease;
+}
+
+.tooltipWide {
+  width: min(340px, calc(100% - 8px));
+  max-width: min(340px, calc(100% - 8px));
 }
 
 .tooltipDate {
@@ -183,6 +189,12 @@
   display: flex;
   flex-direction: column;
   gap: 5px;
+}
+
+.tooltipListWide {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  column-gap: 18px;
 }
 
 .tooltipRow {

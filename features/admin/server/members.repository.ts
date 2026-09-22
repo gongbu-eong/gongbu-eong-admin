@@ -1,7 +1,7 @@
 import { query } from "@/features/admin/server/db";
 import { getActivityLogData, type ActivityLogRow } from "@/features/admin/server/activity-log.repository";
 
-export type MemberStatusFilter = "all" | "active" | "blocked" | "withdrawn";
+export type MemberStatusFilter = "all" | "active" | "pending_signup" | "blocked" | "withdrawn" | "forced_withdrawn";
 export type MemberChannelFilter =
   | "all"
   | "instagram"
@@ -153,8 +153,10 @@ type MemberRow = {
 type MetricRow = {
   total_members: string;
   active_members: string;
+  pending_signup_members: string;
   blocked_members: string;
   withdrawn_members: string;
+  forced_withdrawn_members: string;
   new_week_members: string;
   diagnosis_members: string;
   coaching_members: string;
@@ -331,6 +333,7 @@ function formatStatus(value: string) {
   if (value === "active") return "활동중";
   if (value === "blocked") return "정지";
   if (value === "pending_signup") return "가입대기";
+  if (value === "forced_withdrawn") return "강제탈퇴";
   return "탈퇴";
 }
 
@@ -359,7 +362,7 @@ function maskEmail(value: string | null) {
 }
 
 function normalizeStatus(value?: string | null): MemberStatusFilter {
-  if (value === "active" || value === "blocked" || value === "withdrawn") {
+  if (value === "active" || value === "pending_signup" || value === "blocked" || value === "withdrawn" || value === "forced_withdrawn") {
     return value;
   }
 
@@ -486,8 +489,10 @@ const memberFilterSql = `
     AND (
       $2::text = 'all'
       OR ($2::text = 'active' AND users.status = 'active')
+      OR ($2::text = 'pending_signup' AND users.status = 'pending_signup')
       OR ($2::text = 'blocked' AND users.status = 'blocked')
       OR ($2::text = 'withdrawn' AND users.status = 'withdrawn')
+      OR ($2::text = 'forced_withdrawn' AND users.status = 'forced_withdrawn')
     )
     AND (
       $3::text = 'all'
@@ -526,8 +531,10 @@ export async function getMemberListData(
         SELECT
           COUNT(*) AS total_members,
           COUNT(*) FILTER (WHERE users.status = 'active') AS active_members,
+          COUNT(*) FILTER (WHERE users.status = 'pending_signup') AS pending_signup_members,
           COUNT(*) FILTER (WHERE users.status = 'blocked') AS blocked_members,
           COUNT(*) FILTER (WHERE users.status = 'withdrawn') AS withdrawn_members,
+          COUNT(*) FILTER (WHERE users.status = 'forced_withdrawn') AS forced_withdrawn_members,
           COUNT(*) FILTER (
             WHERE COALESCE(users.signup_completed_at, users.created_at) >= NOW() - INTERVAL '7 days'
           ) AS new_week_members,
@@ -566,8 +573,10 @@ export async function getMemberListData(
   const metrics = metricResult.rows[0];
   const totalMembers = numberValue(metrics?.total_members);
   const activeMembers = numberValue(metrics?.active_members);
+  const pendingSignupMembers = numberValue(metrics?.pending_signup_members);
   const blockedMembers = numberValue(metrics?.blocked_members);
   const withdrawnMembers = numberValue(metrics?.withdrawn_members);
+  const forcedWithdrawnMembers = numberValue(metrics?.forced_withdrawn_members);
   const diagnosisMembers = numberValue(metrics?.diagnosis_members);
   const coachingMembers = numberValue(metrics?.coaching_members);
   const totalCount = numberValue(memberResult.rows[0]?.total_filtered);
@@ -580,7 +589,7 @@ export async function getMemberListData(
         label: "전체 회원",
         value: formatNumber(totalMembers),
         unit: "명",
-        note: `활동중 ${formatNumber(activeMembers)}명 · 정지 ${formatNumber(blockedMembers)}명 · 탈퇴 ${formatNumber(withdrawnMembers)}명`,
+        note: `활동중 ${formatNumber(activeMembers)}명 · 가입대기 ${formatNumber(pendingSignupMembers)}명 · 정지 ${formatNumber(blockedMembers)}명 · 탈퇴 ${formatNumber(withdrawnMembers)}명 · 강제탈퇴 ${formatNumber(forcedWithdrawnMembers)}명`,
       },
       {
         label: "이번 주 신규 가입",
@@ -809,7 +818,7 @@ export async function getMemberDetailData(
 
 export async function updateMemberStatus(
   userId: string,
-  status: "active" | "blocked" | "withdrawn",
+  status: "active" | "blocked" | "forced_withdrawn",
   days?: number,
 ) {
   if (!isUuid(userId)) {
@@ -820,27 +829,34 @@ export async function updateMemberStatus(
     `
       UPDATE public.users
       SET
-        status = $2::public.user_status,
+        status = CASE
+          WHEN $2::text = 'active' THEN COALESCE(status_before_sanction, 'active'::public.user_status)
+          ELSE $2::public.user_status
+        END,
+        status_before_sanction = CASE
+          WHEN $2::text = 'active' THEN NULL
+          ELSE users.status
+        END,
         blocked_until = CASE
           WHEN $2::text = 'blocked' THEN NOW() + ($3::integer * INTERVAL '1 day')
           ELSE NULL
         END,
         rejoin_blocked_until = CASE
-          WHEN $2::text = 'withdrawn' THEN NOW() + ($3::integer * INTERVAL '1 day')
+          WHEN $2::text = 'forced_withdrawn' THEN NOW() + ($3::integer * INTERVAL '1 day')
           ELSE NULL
         END,
         withdrawn_at = CASE
-          WHEN $2::text = 'withdrawn' THEN COALESCE(withdrawn_at, NOW())
+          WHEN $2::text = 'forced_withdrawn' THEN COALESCE(withdrawn_at, NOW())
           WHEN $2::text = 'active' THEN NULL
           ELSE withdrawn_at
         END,
         sanction_reason = CASE
           WHEN $2::text = 'blocked' THEN 'admin_block'
-          WHEN $2::text = 'withdrawn' THEN 'admin_forced_withdrawal'
+          WHEN $2::text = 'forced_withdrawn' THEN 'admin_forced_withdrawal'
           ELSE NULL
         END,
         sanction_updated_at = CASE
-          WHEN $2::text IN ('blocked', 'withdrawn') THEN NOW()
+          WHEN $2::text IN ('blocked', 'forced_withdrawn') THEN NOW()
           ELSE NULL
         END,
         updated_at = NOW()

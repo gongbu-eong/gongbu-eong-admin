@@ -12,8 +12,10 @@ import styles from "./AdminMemberListPage.module.css";
 const statusFilters: Array<{ label: string; value: MemberStatusFilter }> = [
   { label: "전체", value: "all" },
   { label: "활동중", value: "active" },
+  { label: "가입대기", value: "pending_signup" },
   { label: "정지", value: "blocked" },
   { label: "탈퇴", value: "withdrawn" },
+  { label: "강제탈퇴", value: "forced_withdrawn" },
 ];
 
 const channelFilters: Array<{ label: string; value: MemberChannelFilter }> = [
@@ -47,6 +49,8 @@ function createQuery(params: Record<string, string | number | null | undefined>)
 
 function badgeClass(label: string) {
   if (label === "정지") return styles.blockedBadge;
+  if (label === "탈퇴" || label === "강제탈퇴") return styles.withdrawnBadge;
+  if (label === "가입대기") return styles.pendingBadge;
   return styles.statusBadge;
 }
 
