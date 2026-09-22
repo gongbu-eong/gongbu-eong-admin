@@ -330,7 +330,7 @@ export async function AdminDashboardPage({
             id="job-entry-behavior"
             className={styles.behaviorTrendCard}
               title="공고 상세 첫 유입 후 행동 추이"
-              subtitle="최근 7일 · 공고 상세 첫 유입 / 지원 / 다른 화면 이동 / 이탈 / 판정 대기 (모두 명수)"
+              subtitle="최근 7일 · 공고 상세로 시작한 세션을 첫 결과별로 분류 (모두 명수)"
               listSubtitle={`목록 · ${dashboardPeriodText}`}
               yLabels={jobDetailBehaviorScale.yLabels}
               series={jobDetailBehaviorTrend}

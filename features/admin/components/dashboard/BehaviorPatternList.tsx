@@ -1,7 +1,7 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 import type { BehaviorPatternItem } from "@/features/admin/data/dashboard";
-import { DashboardGuide, DashboardNote } from "./DashboardNote";
+import { DashboardNote } from "./DashboardNote";
 import styles from "./BehaviorPatternList.module.css";
 
 type BehaviorPatternListProps = {
@@ -35,6 +35,28 @@ export function BehaviorPatternList({
           <DashboardNote>{periodLabel} · 공고 상세로 시작한 방문이 이후 어디로 이어졌는지 보여줍니다.</DashboardNote>
         </div>
       </header>
+      <dl className={styles.glossary} aria-label="공고 상세 유입 후 행동 지표 설명">
+        <div>
+          <dt><i className={styles.entryDot} />공고 상세 첫 유입</dt>
+          <dd>세션의 첫 화면으로 공고 상세에 들어온 방문자입니다. 한 사람은 하루 첫 유입 한 번만 셉니다.</dd>
+        </div>
+        <div>
+          <dt><i className={styles.applyDot} />지원</dt>
+          <dd>같은 세션에서 다른 화면으로 이동하기 전에 지원하기 또는 이메일 지원하기를 누른 방문자입니다.</dd>
+        </div>
+        <div>
+          <dt><i className={styles.moveDot} />다른 화면 이동</dt>
+          <dd>같은 세션에서 지원 버튼을 누르기 전에 공부엉이의 다른 화면으로 이동한 방문자입니다.</dd>
+        </div>
+        <div>
+          <dt><i className={styles.exitDot} />이탈</dt>
+          <dd>지원하거나 다른 화면으로 이동하지 않고, 마지막 활동 후 30분이 지나 세션이 끝난 방문자입니다.</dd>
+        </div>
+        <div>
+          <dt><i className={styles.pendingDot} />판정 대기</dt>
+          <dd>마지막 활동 후 30분이 지나지 않아 지원·이동·이탈 중 어느 결과인지 아직 확정할 수 없는 방문자입니다.</dd>
+        </div>
+      </dl>
       <div className={styles.table}>
         <div className={styles.tableHeader}>
           <span>유입 경로</span>
@@ -92,14 +114,9 @@ export function BehaviorPatternList({
           집계 오류: 첫 결과 합계({outcomeTotal.toLocaleString("ko-KR")}명)가 첫 유입 방문자({totals.visitors.toLocaleString("ko-KR")}명)와 다릅니다.
         </p>
       ) : null}
-      <DashboardGuide items={[
-        "세션의 첫 화면이 공고 상세인 방문자만 집계합니다.",
-        "한 사람은 하루 한 번만 집계하며, 그날 첫 공고 상세 유입 세션을 기준으로 봅니다.",
-        "같은 세션의 첫 결과를 지원·다른 화면 이동·이탈·판정 대기 중 하나로 분류하므로 결과 합계는 첫 유입 방문자와 같습니다.",
-        "이탈은 지원 버튼을 누르거나 다른 화면으로 이동하지 않은 채 30분 세션이 끝난 경우입니다.",
-        "판정 대기는 마지막 활동 후 30분이 지나지 않아 아직 이탈 여부를 확정할 수 없는 방문자입니다.",
-        "30일 내 재방문은 결과 분류와 별도인 참고 정보입니다.",
-      ]} />
+      <p className={styles.ruleNote}>
+        지원·다른 화면 이동·이탈·판정 대기는 서로 겹치지 않으며, 네 항목의 합은 공고 상세 첫 유입 방문자와 같습니다. 30일 내 재방문은 결과 분류와 별도입니다.
+      </p>
     </section>
   );
 }

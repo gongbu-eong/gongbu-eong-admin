@@ -15,6 +15,69 @@
   line-height: normal;
 }
 
+.glossary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 18px;
+  margin: 16px 0 0;
+  padding: 14px 16px;
+  border: 1px solid var(--admin-border);
+  border-radius: 8px;
+  background: #f8faff;
+}
+
+.glossary > div {
+  display: grid;
+  grid-template-columns: minmax(116px, auto) minmax(0, 1fr);
+  align-items: start;
+  gap: 10px;
+}
+
+.glossary dt {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--admin-text);
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.5;
+  white-space: nowrap;
+}
+
+.glossary dd {
+  margin: 0;
+  color: var(--admin-muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.glossary i {
+  flex: 0 0 auto;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+}
+
+.entryDot {
+  background: #2f7ff0;
+}
+
+.applyDot {
+  background: #1fb573;
+}
+
+.moveDot {
+  background: #f5b91e;
+}
+
+.exitDot {
+  background: #e65c5c;
+}
+
+.pendingDot {
+  background: #8a94a8;
+}
+
 .table {
   display: grid;
   gap: 0;
@@ -187,8 +250,24 @@
   line-height: 1.5;
 }
 
+.ruleNote {
+  margin: 12px 0 0;
+  color: var(--admin-muted);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
 @media (max-width: 640px) {
   .wrap {
     padding: 20px 14px;
+  }
+
+  .glossary {
+    grid-template-columns: 1fr;
+  }
+
+  .glossary > div {
+    grid-template-columns: 1fr;
+    gap: 2px;
   }
 }
