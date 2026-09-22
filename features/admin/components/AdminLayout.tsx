@@ -8,6 +8,7 @@ type AdminLayoutProps = {
   activeNav: string;
   activeSubNav?: string;
   headerActions?: React.ReactNode;
+  stickyHeader?: boolean;
   children: React.ReactNode;
 };
 
@@ -17,6 +18,7 @@ export async function AdminLayout({
   activeNav,
   activeSubNav,
   headerActions,
+  stickyHeader = false,
   children,
 }: AdminLayoutProps) {
   await requireAdminSession();
@@ -27,8 +29,8 @@ export async function AdminLayout({
       <main className={styles.main}>
         <header
           className={`${styles.header} ${
-            headerActions ? styles.headerWithActions : ""
-          }`}
+            headerActions || stickyHeader ? styles.headerSticky : ""
+          } ${headerActions ? styles.headerWithActions : ""}`}
         >
           <div className={styles.headerText}>
             <h1>{title}</h1>

@@ -29,53 +29,14 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  min-width: 510px;
-}
-
-.customToggle {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 7px;
-  flex: 0 0 122px;
-  width: 122px;
-  height: 46px;
-  box-sizing: border-box;
-  border: 1px solid var(--admin-border);
-  border-radius: 8px;
-  background: #fff;
-  color: var(--admin-muted);
-  font-size: 12px;
-  font-weight: 800;
-  white-space: nowrap;
-  cursor: pointer;
-}
-
-.customToggleActive {
-  border-color: #9fc2f7;
-  background: #eef5ff;
-  color: var(--admin-primary);
-}
-
-.customToggle input {
-  width: 16px;
-  height: 16px;
-  margin: 0;
-  accent-color: var(--admin-primary);
-  cursor: pointer;
-}
-
-.rangeSlot {
-  flex: 0 0 380px;
-  width: 380px;
-  height: 46px;
-  min-width: 380px;
+  min-width: 0;
 }
 
 .presetGroup {
   display: flex;
   align-items: center;
-  width: 100%;
+  flex: 0 0 330px;
+  width: 330px;
   height: 46px;
   gap: 4px;
   padding: 3px;
@@ -102,60 +63,6 @@
 .presetActive {
   background: var(--admin-primary);
   color: #fff;
-}
-
-.dateForm {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 58px;
-  align-items: stretch;
-  width: 100%;
-  height: 46px;
-  gap: 6px;
-}
-
-.dateField {
-  position: relative;
-  min-width: 0;
-  height: 46px;
-}
-
-.dateField span {
-  position: absolute;
-  left: 11px;
-  top: 5px;
-  z-index: 1;
-  color: var(--admin-light);
-  font-size: 9px;
-  font-weight: 800;
-  line-height: 1;
-  pointer-events: none;
-}
-
-.dateField input {
-  width: 100%;
-  height: 46px;
-  min-width: 0;
-  box-sizing: border-box;
-  border: 1px solid var(--admin-border);
-  border-radius: 8px;
-  padding: 13px 8px 0 11px;
-  background: #fff;
-  color: var(--admin-text);
-  font-size: 13px;
-  font-weight: 700;
-}
-
-.dateForm button {
-  width: 58px;
-  height: 46px;
-  border: 0;
-  border-radius: 8px;
-  padding: 0;
-  background: var(--admin-primary);
-  color: #fff;
-  font-size: 13px;
-  font-weight: 800;
-  cursor: pointer;
 }
 
 @media (max-width: 1380px) {
@@ -188,12 +95,6 @@
   .rangeControls {
     min-width: 0;
   }
-
-  .rangeSlot {
-    flex: 1 1 auto;
-    width: auto;
-    min-width: 0;
-  }
 }
 
 @media (max-width: 640px) {
@@ -202,25 +103,9 @@
     grid-template-columns: 1fr;
   }
 
-  .customToggle {
-    justify-content: flex-start;
-    width: 100%;
-    height: 42px;
-    padding: 0 12px;
-  }
-
-  .rangeSlot,
-  .presetGroup,
-  .dateForm {
+  .presetGroup {
     width: 100%;
     height: 46px;
-  }
-
-  .dateForm {
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 54px;
-  }
-
-  .dateForm button {
-    width: 54px;
+    flex-basis: auto;
   }
 }

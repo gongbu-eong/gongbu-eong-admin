@@ -367,12 +367,59 @@ export async function AdminDashboardPage({
         </div>
       </section>
 
-      <section id="traffic-flow" className={styles.dashboardSection} aria-label="유입·행동 흐름">
+      <section id="channel-visitors" className={styles.dashboardSection} aria-label="유입 채널 순 방문자">
+        <div className={styles.sectionHeader}>
+          <div>
+            <h2>유입 채널 순 방문자</h2>
+            <p>먼저 분석할 유입 채널을 선택하세요. 선택한 채널은 바로 아래 화면별 방문 데이터에 적용됩니다.</p>
+          </div>
+        </div>
+        <SectionSummary
+          items={[
+            {
+              label: "조회 기간 순 방문자 합계",
+              value: `${numberFrom(channelTotal).toLocaleString("ko-KR")}명`,
+              description: "채널별 일별 순 방문자 합계",
+            },
+            {
+              label: "가장 큰 유입 채널",
+              value: topChannel?.label || "-",
+              description: topChannel ? `${topChannel.count}으로 가장 많은 채널` : "조회된 채널 유입 없음",
+            },
+            {
+              label: "상위 채널 비중",
+              value: topChannel?.value || "0%",
+              description: "전체 채널 순 방문자 중 가장 큰 채널의 비중",
+            },
+          ]}
+        />
+        <div className={styles.sectionGrid}>
+          <TrendViewCard
+            title="유입 채널 순 방문자 추이"
+            subtitle="최근 7일 · 일별 순 방문자, 당일 최초 유입 채널"
+            listSubtitle={`목록 · ${dashboardPeriodText}`}
+            yLabels={trafficChannelScale.yLabels}
+            series={trafficChannelTrend}
+            listSeries={trafficChannelListTrend}
+            maxValue={trafficChannelScale.maxValue}
+            valueSuffix="명"
+          />
+          <AdminCard className={styles.channelCard}>
+            <ChannelList
+              items={channels}
+              total={channelTotal}
+              selectedChannel={selectedChannelKey}
+            />
+          </AdminCard>
+        </div>
+      </section>
+
+      <section id="traffic-flow" className={`${styles.dashboardSection} ${styles.dependentSection}`} aria-label="유입·행동 흐름">
         <div className={styles.sectionHeader}>
           <div>
             <h2>유입·행동 흐름</h2>
             <p>
-              {selectedChannelLabel} 방문자가 어떤 화면을 얼마나 열었는지 확인합니다. 반복 방문은 모두 포함합니다.
+              위에서 선택한 <strong>{selectedChannelLabel}</strong> 방문자가 어떤 화면을 얼마나 열었는지 보여줍니다. 반복 방문은 모두 포함합니다.
             </p>
           </div>
         </div>
@@ -414,53 +461,6 @@ export async function AdminDashboardPage({
               items={screenInflows}
               total={screenInflowTotal}
               channelLabel={selectedChannelLabel}
-            />
-          </AdminCard>
-        </div>
-      </section>
-
-      <section id="channel-visitors" className={styles.dashboardSection} aria-label="유입 채널 순 방문자">
-        <div className={styles.sectionHeader}>
-          <div>
-            <h2>유입 채널 순 방문자</h2>
-            <p>방문자를 그날 처음 들어온 채널에 한 번만 배정해 채널별 유입 규모를 비교합니다.</p>
-          </div>
-        </div>
-        <SectionSummary
-          items={[
-            {
-              label: "조회 기간 순 방문자 합계",
-              value: `${numberFrom(channelTotal).toLocaleString("ko-KR")}명`,
-              description: "채널별 일별 순 방문자 합계",
-            },
-            {
-              label: "가장 큰 유입 채널",
-              value: topChannel?.label || "-",
-              description: topChannel ? `${topChannel.count}으로 가장 많은 채널` : "조회된 채널 유입 없음",
-            },
-            {
-              label: "상위 채널 비중",
-              value: topChannel?.value || "0%",
-              description: "전체 채널 순 방문자 중 가장 큰 채널의 비중",
-            },
-          ]}
-        />
-        <div className={styles.sectionGrid}>
-          <TrendViewCard
-            title="유입 채널 순 방문자 추이"
-            subtitle="최근 7일 · 일별 순 방문자, 당일 최초 유입 채널"
-            listSubtitle={`목록 · ${dashboardPeriodText}`}
-            yLabels={trafficChannelScale.yLabels}
-            series={trafficChannelTrend}
-            listSeries={trafficChannelListTrend}
-            maxValue={trafficChannelScale.maxValue}
-            valueSuffix="명"
-          />
-          <AdminCard className={styles.channelCard}>
-            <ChannelList
-              items={channels}
-              total={channelTotal}
-              selectedChannel={selectedChannelKey}
             />
           </AdminCard>
         </div>
@@ -515,35 +515,48 @@ export async function AdminDashboardPage({
             <p>세션의 첫 화면이 공고 상세인 방문만 지원·다른 화면 이동·이탈·판정 대기 중 첫 결과 하나로 분류합니다. 다른 화면을 먼저 본 방문은 제외합니다.</p>
           </div>
         </div>
-        <SectionSummary
-          items={[
-            {
-              label: "지원 전환율",
-              value: percent(behaviorTotals.apply, behaviorTotals.visitors),
-              description: "공고 상세로 시작한 방문자 중 지원이 첫 결과인 비율",
-            },
-            {
-              label: "다른 화면 이동률",
-              value: percent(behaviorTotals.move, behaviorTotals.visitors),
-              description: "지원 전에 공부엉이의 다른 화면으로 이동한 비율",
-            },
-            {
-              label: "30일 내 재방문자",
-              value: `${behaviorTotals.revisit.toLocaleString("ko-KR")}명`,
-              description: `${percent(behaviorTotals.revisit, behaviorTotals.visitors)} · 첫 결과 분류와 별도 집계`,
-            },
-          ]}
-        />
         <div className={styles.sectionStack}>
-          <TrendViewCard
-            title="공고 상세 시작 방문 후 행동 추이"
-            subtitle="최근 7일 · 공고 상세로 시작한 세션을 첫 결과별로 분류 (모두 명수)"
-            listSubtitle={`목록 · ${dashboardPeriodText}`}
-            yLabels={jobDetailBehaviorScale.yLabels}
-            series={jobDetailBehaviorTrend}
-            listSeries={jobDetailBehaviorListTrend}
-            maxValue={jobDetailBehaviorScale.maxValue}
-          />
+          <div className={styles.sectionGrid}>
+            <TrendViewCard
+              title="공고 상세 시작 방문 후 행동 추이"
+              subtitle="최근 7일 · 공고 상세로 시작한 세션을 첫 결과별로 분류 (모두 명수)"
+              listSubtitle={`목록 · ${dashboardPeriodText}`}
+              yLabels={jobDetailBehaviorScale.yLabels}
+              series={jobDetailBehaviorTrend}
+              listSeries={jobDetailBehaviorListTrend}
+              maxValue={jobDetailBehaviorScale.maxValue}
+            />
+            <AdminCard className={styles.behaviorOverviewCard}>
+              <section className={styles.behaviorOverview} aria-label="공고 상세 시작 방문 핵심 결과">
+                <header>
+                  <h2>공고 상세 시작 방문 핵심 결과</h2>
+                  <p>{dashboardPeriodText} · 총 {behaviorTotals.visitors.toLocaleString("ko-KR")}명 기준</p>
+                </header>
+                <dl>
+                  <div className={styles.exitMetric}>
+                    <dt>이탈률</dt>
+                    <dd>{percent(behaviorTotals.exit, behaviorTotals.visitors)}</dd>
+                    <dd className={styles.metricDescription}>{behaviorTotals.exit.toLocaleString("ko-KR")}명 · 지원이나 다른 화면 이동 없이 세션 종료</dd>
+                  </div>
+                  <div>
+                    <dt>지원 전환율</dt>
+                    <dd>{percent(behaviorTotals.apply, behaviorTotals.visitors)}</dd>
+                    <dd className={styles.metricDescription}>{behaviorTotals.apply.toLocaleString("ko-KR")}명 · 지원이 첫 결과인 방문자</dd>
+                  </div>
+                  <div>
+                    <dt>다른 화면 이동률</dt>
+                    <dd>{percent(behaviorTotals.move, behaviorTotals.visitors)}</dd>
+                    <dd className={styles.metricDescription}>{behaviorTotals.move.toLocaleString("ko-KR")}명 · 지원 전에 다른 화면으로 이동</dd>
+                  </div>
+                  <div>
+                    <dt>30일 내 재방문율</dt>
+                    <dd>{percent(behaviorTotals.revisit, behaviorTotals.visitors)}</dd>
+                    <dd className={styles.metricDescription}>{behaviorTotals.revisit.toLocaleString("ko-KR")}명 · 첫 결과와 별도로 집계</dd>
+                  </div>
+                </dl>
+              </section>
+            </AdminCard>
+          </div>
           <AdminCard className={styles.behaviorCard}>
             <BehaviorPatternList
               items={behaviorPatterns}

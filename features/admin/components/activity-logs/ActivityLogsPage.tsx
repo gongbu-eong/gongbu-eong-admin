@@ -3,32 +3,8 @@ import { AdminLayout } from "@/features/admin/components/AdminLayout";
 import { AdminCard } from "@/features/admin/components/common/AdminCard";
 import { getActivityLogData, ActivityLogQuery } from "@/features/admin/server/activity-log.repository";
 import { ActivityLogTable } from "./ActivityLogTable";
-import { TrimmedSearchInput } from "./TrimmedSearchInput";
+import { ActivityLogFilterBar } from "./ActivityLogFilterBar";
 import styles from "@/features/admin/components/traffic/TrafficLogsPage.module.css";
-
-const eventOptions = [
-  ["activity", "사용자 활동"],
-  ["all", "원본 전체"],
-  ["visit", "방문"],
-  ["product", "기능·버튼 이벤트"],
-  ["login", "로그인"],
-] as const;
-
-const screenOptions = [
-  ["all", "전체 화면"],
-  ["home", "홈"],
-  ["jobs", "공고 목록"],
-  ["job_detail", "공고 상세"],
-  ["ai_tools", "AI 도구"],
-  ["resume_coaching", "AI NCS 자소서 코칭"],
-  ["interview_coaching", "AI NCS 면접 코칭"],
-  ["diagnosis", "강약점"],
-  ["community", "커뮤니티"],
-  ["calendar", "캘린더"],
-  ["my", "마이페이지"],
-  ["login", "로그인"],
-  ["other", "기타"],
-] as const;
 
 type ActivityLogsPageProps = { filters?: ActivityLogQuery };
 
@@ -103,39 +79,15 @@ export async function ActivityLogsPage({ filters }: ActivityLogsPageProps) {
       title="방문·이벤트 로그"
       description="가입자와 비회원의 방문 및 실제 사용자 행동을 시간순으로 확인합니다."
       headerActions={
-        <form className={styles.headerFilters} action="/activity-logs">
-          <label className={styles.headerDateField}>
-            <span>시작일</span>
-            <input type="date" name="startDate" defaultValue={data.startDate} />
-          </label>
-          <label className={styles.headerDateField}>
-            <span>종료일</span>
-            <input type="date" name="endDate" defaultValue={data.endDate} />
-          </label>
-          <label className={styles.headerSelectField}>
-            <span>이벤트</span>
-            <select name="event" defaultValue={data.event}>
-              {eventOptions.map(([value, label]) => <option value={value} key={value}>{label}</option>)}
-            </select>
-          </label>
-          <label className={styles.headerSelectField}>
-            <span>화면</span>
-            <select name="screen" defaultValue={data.screen}>
-              {screenOptions.map(([value, label]) => <option value={value} key={value}>{label}</option>)}
-            </select>
-          </label>
-          <label className={styles.headerKeywordField}>
-            <span>검색어</span>
-            <TrimmedSearchInput name="keyword" placeholder="이름 · 경로 · 이벤트 · IP" defaultValue={data.keyword} />
-          </label>
-          <label className={styles.includeExcluded}>
-            <input name="includeExcluded" type="checkbox" value="1" defaultChecked={data.includeExcluded} />
-            제외 IP 포함
-          </label>
-          <input type="hidden" name="page" value="1" />
-          {data.userId ? <input type="hidden" name="userId" value={data.userId} /> : null}
-          <button type="submit">조회</button>
-        </form>
+        <ActivityLogFilterBar
+          startDate={data.startDate}
+          endDate={data.endDate}
+          event={data.event}
+          screen={data.screen}
+          keyword={data.keyword}
+          includeExcluded={data.includeExcluded}
+          userId={data.userId}
+        />
       }
     >
       <section className={styles.page} aria-label="방문·이벤트 로그">

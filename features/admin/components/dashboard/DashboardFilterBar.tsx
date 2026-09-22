@@ -1,8 +1,8 @@
 "use client";
 
-import { FormEvent, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { AdminSelect } from "@/features/admin/components/common/AdminSelect";
+import { DateRangePicker } from "@/features/admin/components/common/DateRangePicker";
 import type { DashboardProductOption } from "@/features/admin/data/dashboard";
 import styles from "./DashboardFilterBar.module.css";
 
@@ -25,21 +25,16 @@ export function DashboardFilterBar({
 }: DashboardFilterBarProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [showCustomRange, setShowCustomRange] = useState(preset === "custom");
-  const [draftStartDate, setDraftStartDate] = useState(startDate);
-  const [draftEndDate, setDraftEndDate] = useState(endDate);
-
   const pushDashboard = (nextParams: URLSearchParams) => {
     const query = nextParams.toString();
     router.push(query ? `/?${query}` : "/", { scroll: false });
   };
 
-  const applyDateRange = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
+  const applyDateRange = (nextStartDate: string, nextEndDate: string) => {
     const params = new URLSearchParams(searchParams.toString());
 
-    params.set("startDate", draftStartDate);
-    params.set("endDate", draftEndDate);
+    params.set("startDate", nextStartDate);
+    params.set("endDate", nextEndDate);
     params.set("period", "custom");
 
     if (selectedChannel !== "all") {
@@ -58,24 +53,11 @@ export function DashboardFilterBar({
   };
 
   const changePreset = (nextPreset: "today" | "7d" | "30d") => {
-    setShowCustomRange(false);
     const params = new URLSearchParams(searchParams.toString());
     params.set("period", nextPreset);
     params.delete("startDate");
     params.delete("endDate");
     pushDashboard(params);
-  };
-
-  const toggleCustomRange = (checked: boolean) => {
-    setShowCustomRange(checked);
-
-    if (checked) {
-      const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Seoul" }).format(new Date());
-      setDraftStartDate(today);
-      setDraftEndDate(today);
-    } else {
-      changePreset("today");
-    }
   };
 
   const changeProduct = (nextProduct: string) => {
@@ -107,56 +89,28 @@ export function DashboardFilterBar({
         </AdminSelect>
       </label>
       <div className={styles.rangeControls}>
-        <label className={`${styles.customToggle} ${showCustomRange ? styles.customToggleActive : ""}`}>
-          <input
-            type="checkbox"
-            checked={showCustomRange}
-            onChange={(event) => toggleCustomRange(event.target.checked)}
-          />
-          <span>직접 기간 조회</span>
-        </label>
-        <div className={styles.rangeSlot}>
-          {!showCustomRange ? (
-            <div className={styles.presetGroup} aria-label="조회 기간">
-              {[
-                ["today", "오늘"],
-                ["7d", "최근 7일"],
-                ["30d", "최근 30일"],
-              ].map(([key, label]) => (
-                <button
-                  className={preset === key ? styles.presetActive : styles.preset}
-                  key={key}
-                  type="button"
-                  onClick={() => changePreset(key as "today" | "7d" | "30d")}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-          ) : (
-            <form className={styles.dateForm} onSubmit={applyDateRange}>
-              <label className={styles.dateField}>
-                <span>조회 시작</span>
-                <input
-                  type="date"
-                  required
-                  value={draftStartDate}
-                  onChange={(event) => setDraftStartDate(event.target.value)}
-                />
-              </label>
-              <label className={styles.dateField}>
-                <span>조회 종료</span>
-                <input
-                  type="date"
-                  required
-                  value={draftEndDate}
-                  onChange={(event) => setDraftEndDate(event.target.value)}
-                />
-              </label>
-              <button type="submit">적용</button>
-            </form>
-          )}
+        <div className={styles.presetGroup} aria-label="빠른 조회 기간">
+          {[
+            ["today", "오늘"],
+            ["7d", "최근 7일"],
+            ["30d", "최근 30일"],
+          ].map(([key, label]) => (
+            <button
+              className={preset === key ? styles.presetActive : styles.preset}
+              key={key}
+              type="button"
+              onClick={() => changePreset(key as "today" | "7d" | "30d")}
+            >
+              {label}
+            </button>
+          ))}
         </div>
+        <DateRangePicker
+          startDate={startDate}
+          endDate={endDate}
+          active={preset === "custom"}
+          onApply={applyDateRange}
+        />
       </div>
     </section>
   );

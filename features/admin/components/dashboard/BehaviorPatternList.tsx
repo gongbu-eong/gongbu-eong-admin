@@ -26,6 +26,11 @@ export function BehaviorPatternList({
     { visitors: 0, apply: 0, move: 0, exit: 0, pending: 0, revisit: 0 },
   );
   const outcomeTotal = totals.apply + totals.move + totals.exit + totals.pending;
+  const totalRate = (value: number) => {
+    if (!totals.visitors) return "0%";
+    const rate = (value / totals.visitors) * 100;
+    return `${Number.isInteger(rate) ? rate.toFixed(0) : rate.toFixed(1)}%`;
+  };
 
   return (
     <section className={styles.wrap}>
@@ -56,6 +61,10 @@ export function BehaviorPatternList({
           <dt><i className={styles.pendingDot} />판정 대기</dt>
           <dd>마지막 활동 후 30분이 지나지 않아 지원·이동·이탈 중 어느 결과인지 아직 확정할 수 없는 방문자입니다.</dd>
         </div>
+        <div>
+          <dt><i className={styles.revisitDot} />30일 내 재방문</dt>
+          <dd>공고 상세 시작 방문자 중 해당 방문일 이전 30일 안에도 방문 기록이 있는 사람입니다. 첫 결과와는 별도로 집계합니다.</dd>
+        </div>
       </dl>
       <div className={styles.table}>
         <div className={styles.tableHeader}>
@@ -65,6 +74,7 @@ export function BehaviorPatternList({
           <span>다른 화면 이동</span>
           <span>이탈</span>
           <span>판정 대기</span>
+          <span>30일 내 재방문</span>
         </div>
         {items.map((item) => (
           <div className={styles.tableRow} key={item.key}>
@@ -77,13 +87,6 @@ export function BehaviorPatternList({
                   <strong>{item.visitors}</strong>
                 </Link>
               ) : <strong>{item.visitors}</strong>}
-              {item.revisitHref ? (
-                <Link className={styles.revisitLink} href={item.revisitHref}>
-                  30일 내 재방문 {item.revisit} ({item.revisitRate})
-                </Link>
-              ) : (
-                <em>30일 내 재방문 {item.revisit} ({item.revisitRate})</em>
-              )}
             </span>
             <MetricLink href={item.applyHref} className={styles.metricCell}>
               <b>{item.apply}</b>
@@ -101,16 +104,21 @@ export function BehaviorPatternList({
               <b>{item.pending}</b>
               <em>{item.pendingRate}</em>
             </MetricLink>
+            <MetricLink href={item.revisitHref} className={styles.metricCell}>
+              <b>{item.revisit}</b>
+              <em>{item.revisitRate}</em>
+            </MetricLink>
           </div>
         ))}
         {items.length ? (
           <div className={styles.tableFooter}>
             <strong>총계</strong>
             <strong>{totals.visitors.toLocaleString("ko-KR")}명</strong>
-            <strong>{totals.apply.toLocaleString("ko-KR")}명</strong>
-            <strong>{totals.move.toLocaleString("ko-KR")}명</strong>
-            <strong>{totals.exit.toLocaleString("ko-KR")}명</strong>
-            <strong>{totals.pending.toLocaleString("ko-KR")}명</strong>
+            <span><strong>{totals.apply.toLocaleString("ko-KR")}명</strong><em>{totalRate(totals.apply)}</em></span>
+            <span><strong>{totals.move.toLocaleString("ko-KR")}명</strong><em>{totalRate(totals.move)}</em></span>
+            <span><strong>{totals.exit.toLocaleString("ko-KR")}명</strong><em>{totalRate(totals.exit)}</em></span>
+            <span><strong>{totals.pending.toLocaleString("ko-KR")}명</strong><em>{totalRate(totals.pending)}</em></span>
+            <span><strong>{totals.revisit.toLocaleString("ko-KR")}명</strong><em>{totalRate(totals.revisit)}</em></span>
           </div>
         ) : null}
       </div>

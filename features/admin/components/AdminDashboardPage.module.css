@@ -33,6 +33,17 @@
   line-height: 1.55;
 }
 
+.sectionHeader p strong {
+  color: var(--admin-primary);
+  font-weight: 800;
+}
+
+.dependentSection {
+  margin-top: 18px;
+  padding-top: 18px;
+  border-top: 2px solid #dce8f8;
+}
+
 .sectionSummary {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -132,6 +143,80 @@
   overflow: visible;
 }
 
+.behaviorOverviewCard {
+  height: 420px;
+  overflow: hidden;
+}
+
+.behaviorOverview {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  padding: 20px 22px;
+}
+
+.behaviorOverview header h2 {
+  margin: 0;
+  color: var(--admin-text);
+  font-size: 17px;
+  font-weight: 800;
+  line-height: 1.35;
+}
+
+.behaviorOverview header p {
+  margin: 5px 0 0;
+  color: var(--admin-muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.behaviorOverview dl {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  flex: 1;
+  margin: 18px 0 0;
+}
+
+.behaviorOverview dl > div {
+  min-width: 0;
+  padding: 16px 14px;
+  border-top: 1px solid var(--admin-border);
+}
+
+.behaviorOverview dl > div:nth-child(even) {
+  border-left: 1px solid var(--admin-border);
+}
+
+.behaviorOverview .exitMetric {
+  border-top-color: #e98f8f;
+}
+
+.behaviorOverview dt {
+  color: var(--admin-muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.behaviorOverview dd {
+  margin: 6px 0 0;
+  color: var(--admin-text);
+  font-size: 26px;
+  font-weight: 900;
+  line-height: 1.1;
+}
+
+.behaviorOverview .exitMetric dd {
+  color: #c43f3f;
+}
+
+.behaviorOverview .metricDescription {
+  margin: 7px 0 0;
+  color: var(--admin-muted);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
 .dataNotice {
   padding: 12px 16px;
   margin: 12px 0 0;
@@ -214,5 +299,17 @@
   .behaviorCard {
     min-height: 360px;
     height: auto;
+  }
+
+  .behaviorOverviewCard {
+    height: auto;
+  }
+
+  .behaviorOverview dl {
+    grid-template-columns: 1fr;
+  }
+
+  .behaviorOverview dl > div:nth-child(even) {
+    border-left: 0;
   }
 }

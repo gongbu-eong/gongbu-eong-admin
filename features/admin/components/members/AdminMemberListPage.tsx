@@ -63,6 +63,7 @@ export async function AdminMemberListPage({ filters }: AdminMemberListPageProps)
       activeNav="members"
       title="회원 관리"
       description="회원을 클릭하면 회원 정보 상세 페이지로 이동해요."
+      stickyHeader
     >
       <section className={styles.page} aria-label="회원 관리">
         <section className={styles.metrics} aria-label="회원 주요 지표">
@@ -125,7 +126,8 @@ export async function AdminMemberListPage({ filters }: AdminMemberListPageProps)
               <span>성별 · 연령</span>
               <span>유입 경로</span>
               <span>진단</span>
-              <span>AI 코칭</span>
+              <span>AI 자소서</span>
+              <span>AI 면접</span>
               <span>상태</span>
               <span>가입일</span>
               <span />
@@ -171,11 +173,8 @@ export async function AdminMemberListPage({ filters }: AdminMemberListPageProps)
                     {member.source} · {member.campaign}
                   </span>
                   <span>{member.diagnosisCount.toLocaleString("ko-KR")}회</span>
-                  <span>
-                    {(
-                      member.resumeCoachingCount + member.interviewCoachingCount
-                    ).toLocaleString("ko-KR")}회
-                  </span>
+                  <span>{member.resumeCoachingCount.toLocaleString("ko-KR")}회</span>
+                  <span>{member.interviewCoachingCount.toLocaleString("ko-KR")}회</span>
                   <span>
                     <i className={badgeClass(member.statusLabel)}>
                       {member.statusLabel}

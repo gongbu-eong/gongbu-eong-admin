@@ -78,6 +78,10 @@
   background: #8a94a8;
 }
 
+.revisitDot {
+  background: #6b72d6;
+}
+
 .table {
   display: grid;
   gap: 0;
@@ -90,9 +94,9 @@
 .tableRow,
 .tableFooter {
   display: grid;
-  grid-template-columns: minmax(110px, 1fr) minmax(170px, 1.3fr) repeat(4, minmax(108px, 0.9fr));
+  grid-template-columns: minmax(110px, 1fr) minmax(150px, 1.2fr) repeat(5, minmax(108px, 0.9fr));
   align-items: center;
-  min-width: 780px;
+  min-width: 920px;
   column-gap: 12px;
 }
 
@@ -183,23 +187,14 @@
   white-space: nowrap;
 }
 
-.metricValueLink,
-.revisitLink {
+.metricValueLink {
   color: inherit;
   text-decoration: none;
 }
 
-.metricValueLink:hover strong,
-.revisitLink:hover {
+.metricValueLink:hover strong {
   color: var(--admin-primary);
   text-decoration: underline;
-}
-
-.revisitLink {
-  color: var(--admin-muted);
-  font-size: 11px;
-  line-height: 1;
-  white-space: nowrap;
 }
 
 .tableRow b {
