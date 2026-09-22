@@ -509,7 +509,9 @@ export async function getDashboardData({
   const facts = [...storedFacts, ...calendarFacts];
   const selectedFacts = facts.filter(f => f.day >= dashboardDateRange.startDate && f.day <= dashboardDateRange.endDate);
   const previousFacts = facts.filter(f => f.day >= shiftDay(dashboardDateRange.startDate, -periodDays) && f.day < dashboardDateRange.startDate);
-  const today = facts.find(f => f.metric === "clock")?.day || toKstDateInput();
+  // A fact row can have been refreshed yesterday even when the page is opened
+  // today. Graph ranges must follow the current KST date, never refresh time.
+  const today = toKstDateInput();
   const graphFacts = facts.filter(f => f.day >= shiftDay(today, -6) && f.day <= today);
   const sum = (rows: AnalyticsFact[], metric: string, dimension?: string) => rows.reduce((n, f) =>
     n + (f.metric === metric && (dimension === undefined || f.dimension === dimension) ? Number(f.value) : 0), 0);
@@ -925,7 +927,7 @@ export async function getDashboardData({
   return {
     metrics: [
       {
-        label: "조회 기간 방문자 (일별 합산)",
+        label: "조회 기간 순 방문자 (일별 합계)",
         value: formatCount(todayVisitors),
         unit: "명",
         delta: visitorDelta.text,
