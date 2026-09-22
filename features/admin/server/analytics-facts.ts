@@ -357,7 +357,9 @@ export function conversionCtes(
     ),
     conversion_people AS MATERIALIZED (
       SELECT DISTINCT ON (day, visitor_key) s.*,
-        BOOL_OR(completed_at IS NOT NULL) OVER (PARTITION BY day, visitor_key) AS completed
+        BOOL_OR(completed_at IS NOT NULL) OVER (PARTITION BY day, visitor_key) AS completed,
+        MIN(completed_at) FILTER (WHERE completed_at IS NOT NULL)
+          OVER (PARTITION BY day, visitor_key) AS person_completed_at
       FROM conversion_starts s ORDER BY day, visitor_key, event_at, id
     )`;
 }
@@ -624,7 +626,7 @@ export function dashboardProductFactDetailsForDaySql(product: string) {
         '기능 시작'::text
       FROM conversion_people p
       UNION ALL
-      SELECT p.day, 'product_complete', '', '', p.visitor_key, p.completed_at,
+      SELECT p.day, 'product_complete', '', '', p.visitor_key, p.person_completed_at,
         p.user_id, p.anonymous_id, p.ip_address, p.user_agent, p.path,
         '기능 완료'::text
       FROM conversion_people p
