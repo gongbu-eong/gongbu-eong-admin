@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { BannerClickItem } from "@/features/admin/data/dashboard";
 import { DashboardNote } from "./DashboardNote";
 import styles from "./BannerClickList.module.css";
@@ -25,7 +26,13 @@ export function BannerClickList({ items, total, periodLabel }: BannerClickListPr
               <>
                 <div className={styles.top}>
                   <strong>{item.label}</strong>
-                  <b>{item.count}</b>
+                  {item.href ? (
+                    <Link className={styles.countLink} href={item.href}>
+                      {item.count}
+                    </Link>
+                  ) : (
+                    <b>{item.count}</b>
+                  )}
                 </div>
                 <p>일별 중복 제거 클릭자 합산 {item.uniqueCount}</p>
                 <div className={styles.track}>

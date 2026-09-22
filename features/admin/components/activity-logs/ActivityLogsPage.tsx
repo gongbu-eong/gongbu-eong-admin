@@ -37,7 +37,7 @@ function formatCount(value: number) {
 }
 
 const cohortLabels: Record<string, string> = {
-  job_entry: "공고 상세 첫 유입 방문자",
+  job_entry: "공고 상세 시작 방문자",
   job_apply: "공고 상세 유입 후 지원 방문자",
   job_move: "공고 상세 유입 후 다른 화면 이동 방문자",
   job_exit: "공고 상세 유입 후 이탈 방문자",

@@ -51,11 +51,6 @@
   text-decoration: none;
 }
 
-.item:hover .top strong,
-.item:hover .top b {
-  color: var(--admin-primary);
-}
-
 .top {
   display: flex;
   align-items: center;
@@ -79,6 +74,19 @@
   color: var(--admin-text);
   font-weight: 800;
   white-space: nowrap;
+}
+
+.countLink {
+  flex: 0 0 auto;
+  color: var(--admin-primary);
+  font-weight: 800;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  white-space: nowrap;
+}
+
+.countLink:hover {
+  text-decoration-thickness: 2px;
 }
 
 .item p {

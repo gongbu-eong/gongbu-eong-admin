@@ -119,7 +119,7 @@ export const navItems: NavItem[] = [
       { label: "유입·행동 흐름", key: "traffic-flow", href: "/#traffic-flow" },
       { label: "유입 채널 순 방문자", key: "channel-visitors", href: "/#channel-visitors" },
       { label: "배너·버튼 클릭 추이", key: "banner-clicks", href: "/#banner-clicks" },
-      { label: "공고 상세 유입 후 행동", key: "job-entry-behavior", href: "/#job-entry-behavior" },
+      { label: "공고 상세 시작 후 행동", key: "job-entry-behavior", href: "/#job-entry-behavior" },
     ],
   },
   {

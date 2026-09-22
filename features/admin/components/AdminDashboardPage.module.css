@@ -1,56 +1,84 @@
-.dashboardToolbar {
-  display: flex;
-  justify-content: flex-end;
+.dashboardSection {
   width: 100%;
-  margin-top: 8px;
+  margin-top: 28px;
+  scroll-margin-top: 116px;
 }
 
-.dashboardToolbar label {
+.dashboardSection:first-of-type {
+  margin-top: 12px;
+}
+
+.sectionHeader {
   display: flex;
-  align-items: center;
-  gap: 10px;
-  color: var(--admin-muted);
-  font-size: 13px;
-  font-weight: 700;
-}
-
-.insightPanel,
-.analysisPanel {
-  width: 100%;
-  margin-top: 16px;
-  scroll-margin-top: 112px;
-}
-
-.insightHeader,
-.analysisHeader {
-  display: flex;
-  align-items: center;
+  align-items: flex-end;
   justify-content: space-between;
   gap: 16px;
-  padding: 2px 4px 12px;
+  padding: 0 4px 12px;
+  border-bottom: 1px solid var(--admin-border);
 }
 
-.insightHeader h2,
-.analysisHeader h2 {
+.sectionHeader h2 {
   margin: 0;
-  color: var(--admin-muted);
-  font-size: 18px;
+  color: var(--admin-text);
+  font-size: 20px;
   font-weight: 800;
+  line-height: 1.3;
 }
 
-.insightHeader p,
-.analysisHeader p {
-  margin: 6px 0 0;
+.sectionHeader p {
+  max-width: 900px;
+  margin: 5px 0 0;
   color: var(--admin-muted);
   font-size: 13px;
+  line-height: 1.55;
 }
 
-.analysisGrid {
+.sectionSummary {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 16px;
-  width: 100%;
-  margin-top: 16px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin: 12px 0 16px;
+  padding: 14px 16px;
+  border: 1px solid var(--admin-border);
+  border-radius: 8px;
+  background: var(--admin-surface);
+}
+
+.sectionSummary > div {
+  min-width: 0;
+  padding: 0 18px;
+  border-left: 1px solid var(--admin-border);
+}
+
+.sectionSummary > div:first-child {
+  padding-left: 0;
+  border-left: 0;
+}
+
+.sectionSummary > div:last-child {
+  padding-right: 0;
+}
+
+.sectionSummary dt {
+  color: var(--admin-muted);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.sectionSummary dd {
+  margin: 5px 0 0;
+  overflow-wrap: anywhere;
+  color: var(--admin-text);
+  font-size: 20px;
+  font-weight: 800;
+  line-height: 1.25;
+}
+
+.sectionSummary .summaryDescription {
+  margin: 4px 0 0;
+  color: var(--admin-muted);
+  font-size: 11px;
+  line-height: 1.45;
 }
 
 .metrics {
@@ -58,7 +86,6 @@
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 16px;
   width: 100%;
-  margin-top: 12px;
 }
 
 .productMetrics {
@@ -68,90 +95,25 @@
   width: 100%;
 }
 
-.chartGrid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 16px;
-  width: 100%;
-  margin-top: 0;
-}
-
-.chartCard {
-  height: 400px;
-  overflow: hidden;
-}
-
-.trafficInsightPanel {
-  width: 100%;
-  margin-top: 16px;
-  scroll-margin-top: 112px;
-}
-
-.trafficTrendGrid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 16px;
-  width: 100%;
-}
-
-.trafficPairGrid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 16px;
-  width: 100%;
-  margin-top: 20px;
-}
-
-.channelInsight {
-  display: grid;
-  gap: 16px;
-  width: 100%;
-  scroll-margin-top: 80px;
-}
-
-.channelTrendCard {
-  width: 100%;
-}
-
-.channelChartGrid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 16px;
-  width: 100%;
-}
-
-.channelDetailGrid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 16px;
-  width: 100%;
-}
-
-.trafficTrendCard {
-  height: 400px;
-  overflow: hidden;
-}
-
-.behaviorTrendCard {
-  grid-column: auto;
-}
-
-.trafficPairGrid > .behaviorTrendCard,
-.trafficPairGrid > .behaviorCard {
-  grid-column: span 1;
-}
-
-.trafficPairGrid > .screenClickCard {
-  grid-column: 1 / -1;
-}
-
-.lowerGrid {
+.chartGrid,
+.analysisGrid,
+.sectionGrid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   align-items: stretch;
   gap: 16px;
   width: 100%;
+}
+
+.chartGrid,
+.analysisGrid {
   margin-top: 16px;
+}
+
+.sectionStack {
+  display: grid;
+  gap: 16px;
+  width: 100%;
 }
 
 .funnelCard,
@@ -165,12 +127,19 @@
   overflow: hidden;
 }
 
-.funnelCard {
+.funnelCard,
+.behaviorCard {
   overflow: visible;
 }
 
-.behaviorCard {
-  grid-column: 1 / -1;
+.dataNotice {
+  padding: 12px 16px;
+  margin: 12px 0 0;
+  border-left: 3px solid #a77512;
+  background: #fff8e8;
+  color: #65470c;
+  font-size: 13px;
+  line-height: 1.6;
 }
 
 @media (max-width: 1280px) {
@@ -179,48 +148,59 @@
   }
 
   .chartGrid,
-  .trafficTrendGrid,
-  .channelDetailGrid,
-  .channelChartGrid,
-  .trafficPairGrid,
   .analysisGrid,
-  .lowerGrid {
+  .sectionGrid {
     grid-template-columns: 1fr;
   }
 }
 
+@media (max-width: 900px) {
+  .dashboardSection {
+    scroll-margin-top: 214px;
+  }
+}
+
 @media (max-width: 640px) {
-  .dashboardToolbar,
-  .insightHeader,
-  .analysisHeader {
-    flex-direction: column;
+  .dashboardSection {
+    margin-top: 24px;
+    scroll-margin-top: 228px;
+  }
+
+  .sectionHeader {
     align-items: stretch;
-    justify-content: stretch;
+    padding-bottom: 10px;
   }
 
-  .dashboardToolbar label,
-  .insightHeader label,
-  .analysisHeader label {
-    width: 100%;
-    justify-content: space-between;
+  .sectionHeader h2 {
+    font-size: 18px;
   }
 
-  .dashboardToolbar label > span:last-child,
-  .insightHeader label > span:last-child,
-  .analysisHeader label > span:last-child {
-    width: 100%;
-  }
-
-  .metrics {
+  .sectionSummary {
     grid-template-columns: 1fr;
+    padding: 8px 14px;
   }
 
+  .sectionSummary > div,
+  .sectionSummary > div:first-child,
+  .sectionSummary > div:last-child {
+    padding: 10px 0;
+    border-top: 1px solid var(--admin-border);
+    border-left: 0;
+  }
+
+  .sectionSummary > div:first-child {
+    border-top: 0;
+  }
+
+  .sectionSummary dd {
+    font-size: 18px;
+  }
+
+  .metrics,
   .productMetrics {
     grid-template-columns: 1fr;
   }
 
-  .chartCard,
-  .trafficTrendCard,
   .funnelCard,
   .channelCard,
   .screenClickCard,
@@ -229,13 +209,4 @@
     min-height: 360px;
     height: auto;
   }
-}
-.dataNotice {
-  padding: 12px 16px;
-  margin: 12px 0;
-  border-left: 3px solid #a77512;
-  background: #fff8e8;
-  color: #65470c;
-  font-size: 13px;
-  line-height: 1.6;
 }

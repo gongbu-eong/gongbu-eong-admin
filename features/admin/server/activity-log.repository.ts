@@ -114,6 +114,10 @@ function isIpSearch(value: string) {
   return /^[0-9a-f:.]+(?:\/\d+)?$/i.test(value) && (value.includes(".") || value.includes(":"));
 }
 
+function isUuidSearch(value: string) {
+  return /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(value);
+}
+
 function getDeviceLabel(userAgent: string | null) {
   if (!userAgent) return "알 수 없음" as const;
   return /android|iphone|ipad|ipod|mobile|tablet|webos|blackberry/i.test(userAgent)
@@ -176,7 +180,7 @@ function formatEvent(value: string | null) {
     interview_coaching_start: "면접 코칭 시작",
     interview_coaching_answer: "면접 답변 제출",
     interview_coaching_complete: "면접 코칭 완료",
-    job_detail_entry_visitor: "공고 상세 첫 유입 방문자",
+    job_detail_entry_visitor: "공고 상세 시작 방문자",
     job_detail_apply_visitor: "공고 상세 유입 후 지원",
     job_detail_move_visitor: "공고 상세 유입 후 다른 화면 이동",
     job_detail_exit_visitor: "공고 상세 유입 후 이탈",
@@ -553,7 +557,8 @@ async function getDashboardFactDetailRows({
     `,
     [...values, requestedPageSize, (targetPage - 1) * requestedPageSize],
   );
-  let [countResult, rowsResult] = await Promise.all([countPromise, queryRows(page)]);
+  const [countResult, initialRowsResult] = await Promise.all([countPromise, queryRows(page)]);
+  let rowsResult = initialRowsResult;
   const totalCount = Number(countResult.rows[0]?.count || 0);
   const totalPages = Math.max(1, Math.ceil(totalCount / requestedPageSize));
   const effectivePage = Math.min(page, totalPages);
@@ -590,6 +595,7 @@ export async function getActivityLogData(args?: ActivityLogQuery): Promise<Activ
   const keyword = (args?.keyword || "").trim();
   const ip = normalizeIp(args?.ip);
   const keywordIp = isIpSearch(keyword) ? normalizeIp(keyword) : "";
+  const keywordIdentity = isUuidSearch(keyword) ? keyword : "";
   const channel = args?.channel || "all";
   const from = args?.from || "";
   const funnelProduct = ["diagnosis", "resume_coaching", "interview_coaching"].includes(args?.funnelProduct || "")
@@ -603,7 +609,7 @@ export async function getActivityLogData(args?: ActivityLogQuery): Promise<Activ
   const userId = args?.userId || null;
   const resultPageSize = Math.min(10000, Math.max(1, Number(args?.limit || pageSize)));
   const page = Math.max(1, Number(args?.page || 1));
-  const pattern = keyword ? `%${keyword}%` : "";
+  const pattern = keyword && !keywordIdentity ? `%${keyword}%` : "";
   const offset = (page - 1) * resultPageSize;
   await ensureAnalyticsExclusionSchema();
 
@@ -768,6 +774,7 @@ export async function getActivityLogData(args?: ActivityLogQuery): Promise<Activ
       WHERE access.created_at >= ($1::date AT TIME ZONE 'Asia/Seoul')
         AND access.created_at < (($2::date + 1) AT TIME ZONE 'Asia/Seoul')
         AND ($11::uuid IS NULL OR access.user_id = $11::uuid)
+        AND ($12::uuid IS NULL OR access.anonymous_id = $12::uuid OR access.session_id = $12::uuid)
         AND ($10::text = '' OR SPLIT_PART(access.ip_address::text, '/', 1) = $10::text)
         AND (${includeExcluded ? "TRUE" : excludedEventCondition("access.user_id", "access.ip_address")})
         AND ${nonAutomatedUserAgentCondition("access.user_agent")}
@@ -810,6 +817,7 @@ export async function getActivityLogData(args?: ActivityLogQuery): Promise<Activ
       WHERE events.created_at >= ($1::date AT TIME ZONE 'Asia/Seoul')
         AND events.created_at < (($2::date + 1) AT TIME ZONE 'Asia/Seoul')
         AND ($11::uuid IS NULL OR events.user_id = $11::uuid)
+        AND ($12::uuid IS NULL OR events.anonymous_id = $12::uuid)
         AND ($10::text = '' OR SPLIT_PART(events.properties->>'ip_address', '/', 1) = $10::text)
         AND (${includeExcluded ? "TRUE" : excludedEventCondition("events.user_id", "NULLIF(events.properties->>'ip_address', '')")})
         AND ${nonAutomatedUserAgentCondition("NULLIF(events.properties->>'user_agent', '')")}
@@ -835,6 +843,7 @@ export async function getActivityLogData(args?: ActivityLogQuery): Promise<Activ
       WHERE events.created_at >= ($1::date AT TIME ZONE 'Asia/Seoul')
         AND events.created_at < (($2::date + 1) AT TIME ZONE 'Asia/Seoul')
         AND ($11::uuid IS NULL OR events.user_id = $11::uuid)
+        AND ($12::uuid IS NULL OR events.anonymous_id = $12::uuid)
         AND ($10::text = '' OR SPLIT_PART(events.ip_address::text, '/', 1) = $10::text)
         AND (${includeExcluded ? "TRUE" : excludedEventCondition("events.user_id", "events.ip_address")})
       UNION ALL
@@ -859,6 +868,7 @@ export async function getActivityLogData(args?: ActivityLogQuery): Promise<Activ
       WHERE events.created_at >= ($1::date AT TIME ZONE 'Asia/Seoul')
         AND events.created_at < (($2::date + 1) AT TIME ZONE 'Asia/Seoul')
         AND ($11::uuid IS NULL OR events.user_id = $11::uuid)
+        AND $12::uuid IS NULL
         AND ($10::text = '' OR SPLIT_PART(events.ip_address::text, '/', 1) = $10::text)
         AND (${includeExcluded ? "TRUE" : excludedEventCondition("events.user_id", "events.ip_address")})
       UNION ALL
@@ -883,6 +893,7 @@ export async function getActivityLogData(args?: ActivityLogQuery): Promise<Activ
       WHERE events.created_at >= ($1::date AT TIME ZONE 'Asia/Seoul')
         AND events.created_at < (($2::date + 1) AT TIME ZONE 'Asia/Seoul')
         AND ($11::uuid IS NULL OR events.user_id = $11::uuid)
+        AND ($12::uuid IS NULL OR events.anonymous_id = $12::uuid)
         AND ($10::text = '' OR SPLIT_PART(events.ip_address::text, '/', 1) = $10::text)
         AND (${includeExcluded ? "TRUE" : excludedEventCondition("events.user_id", "events.ip_address")})
     ), daily_channels AS (
@@ -939,7 +950,20 @@ export async function getActivityLogData(args?: ActivityLogQuery): Promise<Activ
     AND ($7::text = '' OR ip_address = $7::text)
     AND ($8::text = '' OR (event_source = 'product' AND banner_key = $8::text))
   `;
-  const baseParams = [startDate, endDate, event, screen, channel, pattern, ip, bannerKey, eventType, keywordIp, userId];
+  const baseParams = [
+    startDate,
+    endDate,
+    event,
+    screen,
+    channel,
+    pattern,
+    ip,
+    bannerKey,
+    eventType,
+    keywordIp,
+    userId,
+    keywordIdentity || null,
+  ];
   const sourceSql = uniqueOnly
       ? `${eventsSql}, filtered AS (
         SELECT normalized.*,
@@ -962,7 +986,7 @@ export async function getActivityLogData(args?: ActivityLogQuery): Promise<Activ
       COUNT(*) OVER()::text AS total_count
     FROM ${rowsSource}
     ORDER BY event_at DESC, id DESC
-    LIMIT $12 OFFSET $13`, [...baseParams, resultPageSize, offset]);
+    LIMIT $13 OFFSET $14`, [...baseParams, resultPageSize, offset]);
   const totalCount = Number(rowsResult.rows[0]?.total_count || 0);
 
   return {

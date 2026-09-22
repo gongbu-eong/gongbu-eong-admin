@@ -802,7 +802,7 @@ export async function getDashboardData({
     [
       {
         key: "behavior:job_entry_visitors",
-        label: "공고 상세 첫 유입",
+        label: "공고 상세 시작 방문",
         color: "#2f7ff0",
       },
       {
@@ -901,7 +901,7 @@ export async function getDashboardData({
     [
       {
         key: "behavior:job_entry_visitors",
-        label: "공고 상세 첫 유입",
+        label: "공고 상세 시작 방문",
         color: "#2f7ff0",
       },
       {
@@ -999,7 +999,7 @@ export async function getDashboardData({
     ],
     jobDetailMetrics: [
       {
-        label: "공고 상세 첫 유입",
+        label: "공고 상세 시작 방문",
         value: formatCount(jobDetailVisitors),
         unit: "명",
         delta: "세션의 첫 화면이 공고 상세인 방문자",

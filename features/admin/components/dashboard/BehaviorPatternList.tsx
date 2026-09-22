@@ -31,14 +31,14 @@ export function BehaviorPatternList({
     <section className={styles.wrap}>
       <header className={styles.header}>
         <div>
-          <h2>공고 상세 첫 유입 후 행동 상세</h2>
+          <h2>공고 상세 시작 방문 후 행동 상세</h2>
           <DashboardNote>{periodLabel} · 공고 상세로 시작한 방문이 이후 어디로 이어졌는지 보여줍니다.</DashboardNote>
         </div>
       </header>
       <dl className={styles.glossary} aria-label="공고 상세 유입 후 행동 지표 설명">
         <div>
-          <dt><i className={styles.entryDot} />공고 상세 첫 유입</dt>
-          <dd>세션의 첫 화면으로 공고 상세에 들어온 방문자입니다. 한 사람은 하루 첫 유입 한 번만 셉니다.</dd>
+          <dt><i className={styles.entryDot} />공고 상세 시작 방문</dt>
+          <dd>세션의 첫 화면으로 공고 상세에 들어온 방문자입니다. 다른 화면을 먼저 본 뒤 이동한 방문은 포함하지 않으며, 한 사람은 하루 한 번만 셉니다.</dd>
         </div>
         <div>
           <dt><i className={styles.applyDot} />지원</dt>
@@ -60,7 +60,7 @@ export function BehaviorPatternList({
       <div className={styles.table}>
         <div className={styles.tableHeader}>
           <span>유입 경로</span>
-          <span>공고 상세 첫 유입</span>
+          <span>공고 상세 시작 방문</span>
           <span>지원</span>
           <span>다른 화면 이동</span>
           <span>이탈</span>
@@ -119,11 +119,11 @@ export function BehaviorPatternList({
       ) : null}
       {items.length && outcomeTotal !== totals.visitors ? (
         <p className={styles.integrityError} role="alert">
-          집계 오류: 첫 결과 합계({outcomeTotal.toLocaleString("ko-KR")}명)가 첫 유입 방문자({totals.visitors.toLocaleString("ko-KR")}명)와 다릅니다.
+          집계 오류: 첫 결과 합계({outcomeTotal.toLocaleString("ko-KR")}명)가 공고 상세 시작 방문자({totals.visitors.toLocaleString("ko-KR")}명)와 다릅니다.
         </p>
       ) : null}
       <p className={styles.ruleNote}>
-        지원·다른 화면 이동·이탈·판정 대기는 서로 겹치지 않으며, 네 항목의 합은 공고 상세 첫 유입 방문자와 같습니다. 30일 내 재방문은 결과 분류와 별도입니다.
+        지원·다른 화면 이동·이탈·판정 대기는 서로 겹치지 않으며, 네 항목의 합은 공고 상세 시작 방문자와 같습니다. 30일 내 재방문은 결과 분류와 별도입니다.
       </p>
     </section>
   );
