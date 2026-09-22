@@ -68,18 +68,15 @@ export function TrendViewCard({
           </h2>
           <DashboardNote>{view === "list" ? listSubtitle : subtitle}</DashboardNote>
         </div>
-        <label className={styles.viewSelect}>
-          <span className={styles.srOnly}>{title} 표시 방식</span>
-          <select
-            value={view}
-            onChange={(event) =>
-              setView(event.target.value as "chart" | "list")
-            }
-          >
-            <option value="chart">그래프</option>
-            <option value="list">목록</option>
-          </select>
-        </label>
+        <button
+          className={styles.viewToggle}
+          type="button"
+          aria-label={`${title} ${view === "chart" ? "목록" : "그래프"}으로 전환`}
+          aria-pressed={view === "list"}
+          onClick={() => setView((current) => current === "chart" ? "list" : "chart")}
+        >
+          {view === "chart" ? "그래프" : "목록"}
+        </button>
       </div>
       {view === "chart" ? (
         <div className={styles.chartSlot}>

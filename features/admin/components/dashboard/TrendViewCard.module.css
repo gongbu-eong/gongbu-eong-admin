@@ -43,20 +43,25 @@
   min-width: 0;
 }
 
-.viewSelect {
+.viewToggle {
   flex-shrink: 0;
-}
-
-.viewSelect select {
+  min-width: 68px;
   height: 34px;
   border: 1px solid #d8e0ed;
   border-radius: 8px;
-  padding: 0 28px 0 10px;
+  padding: 0 12px;
   color: var(--admin-text);
   font-size: 12px;
   font-weight: 800;
   background: #fff;
   cursor: pointer;
+}
+
+.viewToggle:hover,
+.viewToggle:focus-visible {
+  border-color: var(--admin-primary);
+  color: var(--admin-primary);
+  outline: none;
 }
 
 .tableWrap {
@@ -128,15 +133,6 @@
   color: var(--admin-muted);
   font-size: 10px;
   font-weight: 700;
-}
-
-.srOnly {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-  clip: rect(0, 0, 0, 0);
-  white-space: nowrap;
 }
 
 @media (max-width: 640px) {

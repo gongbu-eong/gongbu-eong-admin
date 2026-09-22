@@ -53,6 +53,7 @@ export type ActivityLogData = {
   page: number;
   totalPages: number;
   totalCount: number;
+  userId: string;
   rows: ActivityLogRow[];
 };
 
@@ -391,6 +392,7 @@ export async function getActivityLogData(args?: ActivityLogQuery): Promise<Activ
       page: funnel.page,
       totalPages: funnel.totalPages,
       totalCount: funnel.totalCount,
+      userId: userId || "",
       rows: funnel.rows.map((row) => ({
         id: row.id,
         eventAt: row.eventAt,
@@ -439,6 +441,7 @@ export async function getActivityLogData(args?: ActivityLogQuery): Promise<Activ
       page,
       totalPages: Math.max(1, Math.ceil(totalCount / pageSize)),
       totalCount,
+      userId: userId || "",
       rows: mapActivityRows(cohortResult.rows),
     };
   }
@@ -692,6 +695,7 @@ export async function getActivityLogData(args?: ActivityLogQuery): Promise<Activ
     page,
     totalPages: Math.max(1, Math.ceil(totalCount / resultPageSize)),
     totalCount,
+    userId: userId || "",
     rows: mapActivityRows(rowsResult.rows),
   };
 }

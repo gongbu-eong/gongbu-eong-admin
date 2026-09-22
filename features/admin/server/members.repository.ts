@@ -26,6 +26,18 @@ export type MemberListQuery = {
   selectedId?: string | null;
 };
 
+export type MemberLogQuery = {
+  activeTab?: string | null;
+  startDate?: string | null;
+  endDate?: string | null;
+  event?: string | null;
+  screen?: string | null;
+  keyword?: string | null;
+  ip?: string | null;
+  includeExcluded?: string | null;
+  page?: number;
+};
+
 export type MemberMetric = {
   label: string;
   value: string;
@@ -122,6 +134,15 @@ export type MemberDetailData = {
   community: MemberCommunityActivity[];
   logs: ActivityLogRow[];
   logCount: number;
+  logPage: number;
+  logTotalPages: number;
+  logStartDate: string;
+  logEndDate: string;
+  logEvent: string;
+  logScreen: string;
+  logKeyword: string;
+  logIp: string;
+  logIncludeExcluded: boolean;
 };
 
 type MemberRow = {
@@ -634,6 +655,7 @@ export async function getMemberListData(
 
 export async function getMemberDetailData(
   userId?: string | null,
+  logQuery?: MemberLogQuery,
 ): Promise<MemberDetailData> {
   const empty: MemberDetailData = {
     member: null,
@@ -643,6 +665,15 @@ export async function getMemberDetailData(
     community: [],
     logs: [],
     logCount: 0,
+    logPage: 1,
+    logTotalPages: 1,
+    logStartDate: "",
+    logEndDate: "",
+    logEvent: "activity",
+    logScreen: "all",
+    logKeyword: "",
+    logIp: "",
+    logIncludeExcluded: false,
   };
 
   const memberResult = await query<MemberRow>(
@@ -774,12 +805,19 @@ export async function getMemberDetailData(
     ),
   ]);
 
-  const activityLogResult = await getActivityLogData({
-    userId: memberRow.id,
-    allDates: true,
-    event: "activity",
-    limit: 10000,
-  });
+  const activityLogResult = logQuery?.activeTab === "logs"
+    ? await getActivityLogData({
+        userId: memberRow.id,
+        startDate: logQuery.startDate || undefined,
+        endDate: logQuery.endDate || undefined,
+        event: logQuery.event || "activity",
+        screen: logQuery.screen || "all",
+        keyword: logQuery.keyword || "",
+        ip: logQuery.ip || "",
+        includeExcluded: logQuery.includeExcluded || "",
+        page: String(logQuery.page || 1),
+      })
+    : null;
 
   return {
     member: toMemberSummary(memberRow),
@@ -821,8 +859,17 @@ export async function getMemberDetailData(
       status: formatCommunityStatus(row.status),
       href: `/community/${row.post_id}${row.kind === "게시글" ? "" : `#comment-${row.id}`}`,
     })),
-    logs: activityLogResult.rows,
-    logCount: activityLogResult.totalCount,
+    logs: activityLogResult?.rows || [],
+    logCount: activityLogResult?.totalCount || 0,
+    logPage: activityLogResult?.page || 1,
+    logTotalPages: activityLogResult?.totalPages || 1,
+    logStartDate: activityLogResult?.startDate || "",
+    logEndDate: activityLogResult?.endDate || "",
+    logEvent: activityLogResult?.event || "activity",
+    logScreen: activityLogResult?.screen || "all",
+    logKeyword: activityLogResult?.keyword || "",
+    logIp: activityLogResult?.ip || "",
+    logIncludeExcluded: activityLogResult?.includeExcluded || false,
   };
 }
 

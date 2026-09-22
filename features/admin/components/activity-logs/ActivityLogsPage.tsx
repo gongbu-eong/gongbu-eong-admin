@@ -65,8 +65,24 @@ function makeHref(
   if (data.from) params.set("from", data.from);
   if (data.funnelProduct) params.set("funnelProduct", data.funnelProduct);
   if (data.funnelStep) params.set("funnelStep", data.funnelStep);
+  if (data.userId) params.set("userId", data.userId);
   if (selectedIp) params.set("ip", selectedIp);
   if (page > 1) params.set("page", String(page));
+  return `/activity-logs?${params.toString()}`;
+}
+
+function makeIdentityHref(
+  data: Awaited<ReturnType<typeof getActivityLogData>>,
+  selected: { ip?: string; keyword?: string },
+) {
+  const params = new URLSearchParams({
+    startDate: data.startDate,
+    endDate: data.endDate,
+    event: "activity",
+  });
+  if (selected.ip) params.set("ip", selected.ip);
+  if (selected.keyword) params.set("keyword", selected.keyword);
+  if (data.includeExcluded) params.set("includeExcluded", "1");
   return `/activity-logs?${params.toString()}`;
 }
 
@@ -117,6 +133,7 @@ export async function ActivityLogsPage({ filters }: ActivityLogsPageProps) {
             제외 IP 포함
           </label>
           <input type="hidden" name="page" value="1" />
+          {data.userId ? <input type="hidden" name="userId" value={data.userId} /> : null}
           <button type="submit">조회</button>
         </form>
       }
@@ -139,9 +156,9 @@ export async function ActivityLogsPage({ filters }: ActivityLogsPageProps) {
           <ActivityLogTable
             rows={data.rows}
             emptyMessage="조회 조건에 해당하는 로그가 없습니다."
-            renderIp={(row) => row.ipAddress !== "-" ? <Link href={makeHref(data, 1, { ip: row.ipAddress })}>{row.ipAddress}</Link> : row.ipAddress}
+            renderIp={(row) => row.ipAddress !== "-" ? <Link href={makeIdentityHref(data, { ip: row.ipAddress })}>{row.ipAddress}</Link> : row.ipAddress}
             renderIdentity={(row) => row.identity !== "회원 식별됨"
-              ? <Link href={makeHref(data, 1, { ip: "", keyword: row.identity })}>{row.identity}</Link>
+              ? <Link href={makeIdentityHref(data, { keyword: row.identity })}>{row.identity}</Link>
               : row.identity}
           />
           <nav className={styles.pagination} aria-label="방문 이벤트 로그 페이지">
