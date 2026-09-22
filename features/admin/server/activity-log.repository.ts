@@ -1,4 +1,9 @@
-import { screenSql, trafficChannelKeySql, trafficFactsCtes } from "./analytics-facts";
+import {
+  nonAutomatedUserAgentCondition,
+  screenSql,
+  trafficChannelKeySql,
+  trafficFactsCtes,
+} from "./analytics-facts";
 import { query } from "@/features/admin/server/db";
 import {
   ensureAnalyticsExclusionSchema,
@@ -382,6 +387,7 @@ export async function getActivityLogData(args?: ActivityLogQuery): Promise<Activ
         AND ($11::uuid IS NULL OR access.user_id = $11::uuid)
         AND ($10::text = '' OR SPLIT_PART(access.ip_address::text, '/', 1) = $10::text)
         AND ${excludedEventCondition("access.user_id", "access.ip_address")}
+        AND ${nonAutomatedUserAgentCondition("access.user_agent")}
       UNION ALL
       SELECT
         events.id::text,
@@ -423,6 +429,7 @@ export async function getActivityLogData(args?: ActivityLogQuery): Promise<Activ
         AND ($11::uuid IS NULL OR events.user_id = $11::uuid)
         AND ($10::text = '' OR SPLIT_PART(events.properties->>'ip_address', '/', 1) = $10::text)
         AND ${excludedEventCondition("events.user_id", "NULLIF(events.properties->>'ip_address', '')")}
+        AND ${nonAutomatedUserAgentCondition("NULLIF(events.properties->>'user_agent', '')")}
       UNION ALL
       SELECT
         events.id::text,

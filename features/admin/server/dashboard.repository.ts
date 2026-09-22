@@ -927,7 +927,7 @@ export async function getDashboardData({
   return {
     metrics: [
       {
-        label: "조회 기간 순 방문자 (일별 합계)",
+        label: "조회 기간 순 방문자 (자동화 제외·일별 브라우저 합계)",
         value: formatCount(todayVisitors),
         unit: "명",
         delta: visitorDelta.text,

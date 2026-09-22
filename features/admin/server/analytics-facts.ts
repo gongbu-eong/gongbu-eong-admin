@@ -5,6 +5,12 @@ import { excludedEventCondition, excludedUserCondition } from "./analytics-exclu
 export const cookieKey = (alias: string) =>
   `COALESCE(NULLIF(${alias}.anonymous_id::text, ''), NULLIF(${alias}.user_id::text, ''))`;
 
+// Raw logs are retained for investigation, but automated browsers must not
+// inflate visitor, funnel, or dashboard counts.
+export function nonAutomatedUserAgentCondition(userAgent: string) {
+  return `COALESCE(${userAgent}, '') !~* '(bot|crawler|spider|headless|lighthouse|phantomjs|selenium|puppeteer|playwright)'`;
+}
+
 export function channelSql(source: string) {
   return `CASE
     WHEN ${source} ILIKE '%instagram%' OR lower(${source}) = 'ig' OR ${source} = '인스타그램' THEN '인스타그램'
@@ -103,6 +109,7 @@ export function trafficFactsCtes(start: string, end: string) {
         AND p.created_at >= (${start}) - interval '30 days' - interval '30 minutes'
         AND p.created_at < (${end})
         AND ${analyticsExcludedCondition("p.user_id", "p.ip_address")}
+        AND ${nonAutomatedUserAgentCondition("p.user_agent")}
     ),
     analytics_pages AS MATERIALIZED (
       SELECT p.*, ${screenSql("p.path")} AS screen,
@@ -125,6 +132,7 @@ export function trafficFactsCtes(start: string, end: string) {
           OR e.event_type LIKE '%complete'
         )
         AND ${analyticsExcludedCondition("e.user_id", "NULLIF(e.properties->>'ip_address', '')")}
+        AND ${nonAutomatedUserAgentCondition("NULLIF(e.properties->>'user_agent', '')")}
     ),
     analytics_daily_users AS MATERIALIZED (
       SELECT DISTINCT ON (day, visitor_key) day, visitor_key, channel
@@ -324,6 +332,7 @@ function dashboardConversionPageCte(path: string) {
         AND p.created_at < ((bounds.last_day + 1)::timestamp AT TIME ZONE 'Asia/Seoul')
         AND split_part(p.path, '?', 1) = '${path}'
         AND ${excludedEventCondition("p.user_id", "p.ip_address")}
+        AND ${nonAutomatedUserAgentCondition("p.user_agent")}
     )`;
 }
 

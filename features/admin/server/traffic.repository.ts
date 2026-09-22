@@ -1,4 +1,8 @@
-import { trafficFactsCtes, conversionCtes } from "./analytics-facts";
+import {
+  conversionCtes,
+  nonAutomatedUserAgentCondition,
+  trafficFactsCtes,
+} from "./analytics-facts";
 import {
   BannerClickLogData,
   BannerClickLogQuery,
@@ -198,6 +202,7 @@ const trafficEventsSql = `
   FROM public.access_logs
   WHERE event_name = 'page_view'
     AND ${excludedEventCondition("user_id", "ip_address")}
+    AND ${nonAutomatedUserAgentCondition("user_agent")}
 `;
 
 const campaignTrafficEventsSql = `
