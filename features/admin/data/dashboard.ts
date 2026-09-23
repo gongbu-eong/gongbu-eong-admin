@@ -134,4 +134,29 @@ export const navItems: NavItem[] = [
     href: "/members",
     icon: "/admin-assets/nav-user.png",
   },
+  {
+    label: "공고 관리",
+    key: "jobs",
+    href: "/jobs",
+    icon: "/admin-assets/nav-job.png",
+    expandable: true,
+    children: [
+      { label: "공고 목록", key: "job-list", href: "/jobs" },
+      { label: "기관 관리", key: "job-institutions", href: "/jobs/institutions" },
+      { label: "직무 분류", key: "job-categories", href: "/jobs/categories" },
+      { label: "수집 이력", key: "job-sync", href: "/jobs/sync" },
+    ],
+  },
+  {
+    label: "커뮤니티 관리",
+    key: "community",
+    href: "/community/posts",
+    icon: "/admin-assets/nav-community.png",
+    expandable: true,
+    children: [
+      { label: "게시글", key: "community-posts", href: "/community/posts" },
+      { label: "댓글·답글", key: "community-comments", href: "/community/comments" },
+      { label: "신고 처리", key: "community-reports", href: "/community/reports" },
+    ],
+  },
 ];

@@ -16,8 +16,10 @@ type AdminUserRow = {
 
 type AdminSessionRow = {
   id: string;
+  admin_user_id: string;
   login_id: string;
   name: string;
+  role: string;
 };
 
 type LoginMetadata = {
@@ -180,8 +182,10 @@ export async function getAdminSession() {
     `
       SELECT
         sessions.id,
+        users.id AS admin_user_id,
         users.login_id,
-        users.name
+        users.name,
+        users.role
       FROM public.admin_sessions sessions
       JOIN public.admin_users users
         ON users.id = sessions.admin_user_id
@@ -200,8 +204,10 @@ export async function getAdminSession() {
 
   return {
     sessionId: session.id,
+    adminUserId: session.admin_user_id,
     loginId: session.login_id,
     name: session.name,
+    role: session.role,
   };
 }
 
