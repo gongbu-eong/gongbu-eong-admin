@@ -74,6 +74,7 @@ function detailHref(userId: string, tab: MemberDetailTab, item?: string) {
 }
 
 type MemberLogData = Awaited<ReturnType<typeof getMemberDetailData>>;
+type MemberDetailData = Awaited<ReturnType<typeof getMemberDetailData>>;
 
 function memberLogHref(
   userId: string,
@@ -134,10 +135,217 @@ function pageItems(page: number, totalPages: number) {
   return Array.from({ length: end - start + 1 }, (_, index) => start + index);
 }
 
-function formatDetail(value: unknown) {
-  if (value === null || value === undefined || value === "") return "상세 결과가 없습니다.";
-  if (typeof value === "string") return value;
-  return JSON.stringify(value, null, 2);
+type JsonRecord = Record<string, unknown>;
+
+function toRecord(value: unknown): JsonRecord {
+  if (value && typeof value === "object" && !Array.isArray(value)) {
+    return value as JsonRecord;
+  }
+
+  if (typeof value === "string") {
+    try {
+      const parsed = JSON.parse(value);
+      return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+        ? (parsed as JsonRecord)
+        : {};
+    } catch {
+      return {};
+    }
+  }
+
+  return {};
+}
+
+function firstValue(record: JsonRecord, ...keys: string[]) {
+  for (const key of keys) {
+    if (record[key] !== undefined && record[key] !== null && record[key] !== "") {
+      return record[key];
+    }
+  }
+
+  return undefined;
+}
+
+function displayText(value: unknown, fallback = "내용이 없습니다.") {
+  if (typeof value === "string" && value.trim()) return value;
+  if (typeof value === "number" || typeof value === "boolean") return String(value);
+  return fallback;
+}
+
+function displayNumber(value: unknown, fallback = 0) {
+  const number = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(number) ? number : fallback;
+}
+
+function displayList(value: unknown) {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((item) => {
+      if (typeof item === "string" || typeof item === "number") return String(item);
+      if (item && typeof item === "object") {
+        const record = item as JsonRecord;
+        return displayText(firstValue(record, "text", "content", "description", "reason", "name"));
+      }
+      return "";
+    })
+    .filter(Boolean);
+}
+
+function displayRecordList(value: unknown) {
+  if (Array.isArray(value)) return value.map(toRecord).filter((item) => Object.keys(item).length > 0);
+  if (value && typeof value === "object") {
+    return Object.values(value as JsonRecord).map(toRecord).filter((item) => Object.keys(item).length > 0);
+  }
+  return [];
+}
+
+function displayScores(value: unknown) {
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => {
+        const record = toRecord(item);
+        const label = firstValue(record, "label", "name", "title");
+        return label ? [String(label), displayNumber(firstValue(record, "score", "value"))] as [string, number] : null;
+      })
+      .filter((item): item is [string, number] => item !== null);
+  }
+
+  const labels: Record<string, string> = {
+    stability: "안정성",
+    teamwork: "협업",
+    execution: "실행력",
+    principle: "원칙성",
+    stabilityScore: "안정성",
+    challengeScore: "도전성",
+    analyticalScore: "분석력",
+    collaborationScore: "협업",
+    leadershipScore: "리더십",
+    publicServiceScore: "공공서비스",
+  };
+  return Object.entries(toRecord(value)).map(([label, score]) => [labels[label] || label, displayNumber(score)] as [string, number]);
+}
+
+function ResultList({ items, empty = "표시할 내용이 없습니다." }: { items: string[]; empty?: string }) {
+  return items.length > 0 ? (
+    <ul className={styles.resultList}>
+      {items.map((item, index) => <li key={`${item}-${index}`}>{item}</li>)}
+    </ul>
+  ) : <p className={styles.resultEmpty}>{empty}</p>;
+}
+
+function ResultCard({ title, children }: { title: string; children: ReactNode }) {
+  return <section className={styles.resultCard}><h4>{title}</h4>{children}</section>;
+}
+
+function ScoreBars({ scores }: { scores: Array<[string, number]> }) {
+  return (
+    <div className={styles.scoreBars}>
+      {scores.map(([label, score]) => (
+        <div className={styles.scoreBar} key={label}>
+          <div className={styles.scoreBarHeader}><span>{label}</span><strong>{score}점</strong></div>
+          <div className={styles.scoreTrack}><i style={{ width: `${Math.max(0, Math.min(100, score))}%` }} /></div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function DiagnosisResultView({ item }: { item: MemberDetailData["diagnosis"][number] }) {
+  const detail = toRecord(item.detail);
+  const raw = toRecord(firstValue(detail, "rawResult", "raw_result"));
+  const source = { ...detail, ...raw };
+  const score = displayNumber(firstValue(source, "totalScore", "total_score", "score"));
+  const scores = displayScores(firstValue(source, "scores"));
+  const fallbackScores = [
+    ["안정성", displayNumber(firstValue(source, "stabilityScore", "stability_score"))],
+    ["도전성", displayNumber(firstValue(source, "challengeScore", "challenge_score"))],
+    ["분석력", displayNumber(firstValue(source, "analyticalScore", "analytical_score"))],
+    ["협업", displayNumber(firstValue(source, "collaborationScore", "collaboration_score"))],
+    ["리더십", displayNumber(firstValue(source, "leadershipScore", "leadership_score"))],
+    ["공공서비스", displayNumber(firstValue(source, "publicServiceScore", "public_service_score"))],
+  ] as Array<[string, number]>;
+  const visibleScores = scores.length > 0 ? scores : fallbackScores;
+
+  return (
+    <section className={styles.resultView}>
+      <header className={styles.resultHero}>
+        <div><span className={styles.resultEyebrow}>강점·성향 진단 결과</span><h3>{item.title}</h3></div>
+        <div className={styles.resultScore}><strong>{score}</strong><span>/ 100점</span></div>
+        <p>{displayText(firstValue(source, "summary", "overallSummary"))}</p>
+      </header>
+      <ResultCard title="영역별 점수"><ScoreBars scores={visibleScores} /></ResultCard>
+      <div className={styles.resultGrid}>
+        <ResultCard title="강점"><ResultList items={displayList(firstValue(source, "strengths", "strongPoints"))} /></ResultCard>
+        <ResultCard title="보완할 점"><ResultList items={displayList(firstValue(source, "weaknesses", "growthPoints", "growth_points"))} /></ResultCard>
+        <ResultCard title="추천 활용법"><ResultList items={displayList(firstValue(source, "recommendations", "suggestions"))} /></ResultCard>
+      </div>
+    </section>
+  );
+}
+
+function ResumeCoachingResultView({ item }: { item: MemberDetailData["resumeCoachings"][number] }) {
+  const detail = toRecord(item.detail);
+  const feedback = toRecord(firstValue(detail, "feedback", "result"));
+  const score = displayNumber(firstValue(feedback, "score", "totalScore", "total_score", "overallScore"), displayNumber(item.result));
+  const scores = displayScores(firstValue(feedback, "evaluationScores", "evaluation_scores", "scores"));
+  const sections = displayRecordList(firstValue(feedback, "sections", "criteria", "questionResults"));
+  const correctedText = displayText(firstValue(feedback, "correctedText", "corrected_text", "improvedText", "rewrittenText", "rewritten_text"), "첨삭 제안이 없습니다.");
+  const suggestions = displayList(firstValue(feedback, "improvementSuggestions", "improvement_suggestions", "suggestions"));
+  const submissionReview = toRecord(firstValue(feedback, "submissionReview", "submission_review"));
+  const reviewQuestions = displayRecordList(firstValue(submissionReview, "questions"));
+
+  return (
+    <section className={styles.resultView}>
+      <header className={styles.resultHero}>
+        <div><span className={styles.resultEyebrow}>AI NCS 자소서 코칭 결과</span><h3>{item.title}</h3></div>
+        <div className={styles.resultScore}><strong>{score}</strong><span>/ 100점</span></div>
+        <p>{displayText(firstValue(feedback, "summary", "overallSummary"))}</p>
+      </header>
+      {scores.length > 0 ? <ResultCard title="전체 평가"><ScoreBars scores={scores} /></ResultCard> : null}
+      <div className={styles.resultGrid}>
+        <ResultCard title="개선 제안"><ResultList items={suggestions} /></ResultCard>
+        <ResultCard title="지원 정보"><dl className={styles.resultFacts}><div><dt>입력 방식</dt><dd>{item.inputType === "file" ? "파일 업로드" : "직접 입력"}</dd></div><div><dt>지원 직무</dt><dd>{displayText(firstValue(toRecord(detail.job), "title", "name"), "정보 없음")}</dd></div></dl></ResultCard>
+      </div>
+      <ResultCard title="AI 첨삭 제안"><p className={styles.resultText}>{correctedText}</p></ResultCard>
+      <details className={styles.resultDisclosure}>
+        <summary>사용자 입력 보기</summary>
+        <p className={styles.resultText}>{item.inputText || "입력 내용이 없습니다."}</p>
+        {item.sourceFileUrl ? <a className={styles.fileLink} href={item.sourceFileUrl} target="_blank" rel="noreferrer">{item.sourceFilename || "첨부 파일 열기"} →</a> : null}
+      </details>
+      {sections.length > 0 ? <div className={styles.resultGrid}>{sections.map((section, index) => <ResultCard key={index} title={displayText(firstValue(section, "title", "name"), `평가 항목 ${index + 1}`)}><p className={styles.resultText}>{displayText(firstValue(section, "feedback", "comment", "summary", "description"))}</p></ResultCard>)}</div> : null}
+      {reviewQuestions.length > 0 ? <section className={styles.questionResults}><h4>문항별 자소서 코칭</h4>{reviewQuestions.map((question, index) => { const points = toRecord(firstValue(question, "coachingPoints", "coaching_points")); const items = [...displayList(points.strengths), ...displayList(points.improvements), ...displayList(points.ncsSuggestions)]; return <article className={styles.questionCard} key={index}><span className={styles.questionNumber}>Q{index + 1}</span><h5>{displayText(firstValue(question, "question", "title"), "자소서 문항")}</h5><ResultList items={items} /></article>; })}</section> : null}
+    </section>
+  );
+}
+
+function InterviewCoachingResultView({ item, userId }: { item: MemberDetailData["interviewCoachings"][number]; userId: string }) {
+  const detail = toRecord(item.detail);
+  const result = toRecord(firstValue(detail, "result", "finalResult"));
+  const analysis = toRecord(firstValue(detail, "analysis", "profile"));
+  const score = displayNumber(firstValue(result, "score", "totalScore", "total_score"));
+  const questions = displayRecordList(firstValue(detail, "questions", "questionResults", "question_results"));
+  const questionReviews = displayRecordList(firstValue(result, "questionReviews", "question_reviews"));
+  const messages = displayRecordList(firstValue(detail, "messages"));
+  const messageByQuestion = questionReviews.length > 0 ? questionReviews : (messages.length > 0 ? messages : questions);
+
+  return (
+    <section className={styles.resultView}>
+      <header className={styles.resultHero}>
+        <div><span className={styles.resultEyebrow}>AI NCS 면접 코칭 결과</span><h3>{item.title}</h3></div>
+        <div className={styles.resultScore}><strong>{score}</strong><span>/ 100점</span></div>
+        <p>{displayText(firstValue(result, "summary", "overallSummary"), item.status === "completed" ? "면접 코칭 결과가 준비되었습니다." : `현재 상태: ${item.status}`)}</p>
+        <dl className={styles.resultFacts}><div><dt>기업</dt><dd>{displayText(firstValue(detail, "company", "companyName"), "정보 없음")}</dd></div><div><dt>직무</dt><dd>{displayText(firstValue(detail, "position", "positionName"), "정보 없음")}</dd></div></dl>
+      </header>
+      <div className={styles.resultGrid}>
+        <ResultCard title="잘한 점"><ResultList items={displayList(firstValue(result, "strengths", "goodPoints"))} /></ResultCard>
+        <ResultCard title="보완할 점"><ResultList items={displayList(firstValue(result, "improvements", "weaknesses", "growthPoints"))} /></ResultCard>
+        <ResultCard title="추가 연습 질문"><ResultList items={displayList(firstValue(result, "practiceQuestions", "futurePracticeQuestions"))} /></ResultCard>
+      </div>
+      {Object.keys(analysis).length > 0 ? <ResultCard title="면접 분석"><p className={styles.resultText}>{displayText(firstValue(analysis, "summary", "description"))}</p><ResultList items={displayList(firstValue(analysis, "ncsMapping", "keywords", "strengths"))} /></ResultCard> : null}
+      {messageByQuestion.length > 0 ? <section className={styles.questionResults}><h4>문항별 답변 코칭</h4>{messageByQuestion.map((question, index) => <article className={styles.questionCard} key={index}><span className={styles.questionNumber}>Q{index + 1}</span><h5>{displayText(firstValue(question, "question", "text", "content"), "면접 질문")}</h5><p className={styles.resultText}>{displayText(firstValue(question, "feedback", "guide", "summary", "answer"))}</p><ResultList items={[...displayList(firstValue(question, "strengths")), ...displayList(firstValue(question, "improvements")), ...displayList(firstValue(question, "followUpQuestions", "follow_up_questions"))]} /></article>)}</section> : null}
+      {item.materialFileAvailable ? <a className={styles.fileLink} href={`/members/${userId}/interview-coaching/${item.id}/file`}>{item.materialFilename || "면접 자료 다운로드"} 다운로드 ↓</a> : null}
+    </section>
+  );
 }
 
 export async function AdminMemberDetailPage({
@@ -240,7 +448,7 @@ export async function AdminMemberDetailPage({
             item.result,
             <Link href={detailHref(member.id, "diagnosis", item.id)} key={item.id}>결과 보기</Link>,
           ])} />
-          {selectedDiagnosis ? <DetailPanel title={`${selectedDiagnosis.title} 상세 결과`} content={selectedDiagnosis.detail} /> : null}
+      {selectedDiagnosis ? <DiagnosisResultView item={selectedDiagnosis} /> : null}
         </ActivitySection>
       ) : null}
 
@@ -253,13 +461,7 @@ export async function AdminMemberDetailPage({
             item.sourceFilename || (item.inputType === "file" ? "파일 정보 없음" : "직접 입력"),
             <Link href={detailHref(member.id, "resume-coaching", item.id)} key={item.id}>결과 보기</Link>,
           ])} />
-          {selectedResume ? (
-            <DetailPanel title={`${selectedResume.title} 상세 결과`} content={selectedResume.detail}>
-              <h3>사용자 입력</h3>
-              <p className={styles.longText}>{selectedResume.inputText || "입력 내용이 없습니다."}</p>
-              {selectedResume.sourceFileUrl ? <a href={selectedResume.sourceFileUrl} target="_blank" rel="noreferrer" className={styles.fileLink}>{selectedResume.sourceFilename || "첨부 파일 열기"} →</a> : null}
-            </DetailPanel>
-          ) : null}
+      {selectedResume ? <ResumeCoachingResultView item={selectedResume} /> : null}
         </ActivitySection>
       ) : null}
 
@@ -272,11 +474,7 @@ export async function AdminMemberDetailPage({
             item.materialFilename || "없음",
             <Link href={detailHref(member.id, "interview-coaching", item.id)} key={item.id}>결과 보기</Link>,
           ])} />
-          {selectedInterview ? (
-            <DetailPanel title={`${selectedInterview.title} 상세 결과`} content={selectedInterview.detail}>
-              {selectedInterview.materialFileAvailable ? <a className={styles.fileLink} href={`/members/${member.id}/interview-coaching/${selectedInterview.id}/file`}>{selectedInterview.materialFilename || "면접 자료 다운로드"} 다운로드 ↓</a> : null}
-            </DetailPanel>
-          ) : null}
+      {selectedInterview ? <InterviewCoachingResultView item={selectedInterview} userId={member.id} /> : null}
         </ActivitySection>
       ) : null}
 
@@ -365,10 +563,6 @@ function ActivitySection({ title, description, children }: { title: string; desc
   return <section className={styles.tableCard}><h2>{title}</h2>{description ? <p className={styles.sectionDescription}>{description}</p> : null}{children}</section>;
 }
 
-function DetailPanel({ title, content, children }: { title: string; content: unknown; children?: ReactNode }) {
-  return <section className={styles.detailPanel}><h3>{title}</h3><pre>{formatDetail(content)}</pre>{children}</section>;
-}
-
 function StatItem({ label, value }: { label: string; value: string }) {
   return <article className={styles.statItem}><span>{label}</span><strong>{value}</strong></article>;
 }
@@ -380,6 +574,6 @@ function InfoRow({ label, value }: { label: string; value: string }) {
 function DataTable({ columns, rows }: { columns: string[]; rows: ReactNode[][] }) {
   return <table className={styles.dataTable}>
     <thead><tr>{columns.map((column) => <th key={column}>{column}</th>)}</tr></thead>
-    <tbody>{rows.length > 0 ? rows.map((row, rowIndex) => <tr key={rowIndex}>{row.map((cell, cellIndex) => <td key={cellIndex}>{cell}</td>)}</tr>) : <tr><td colSpan={columns.length}>표시할 데이터가 없습니다.</td></tr>}</tbody>
+    <tbody>{rows.length > 0 ? rows.map((row, rowIndex) => <tr key={rowIndex}>{row.map((cell, cellIndex) => <td data-label={columns[cellIndex]} key={cellIndex}>{cell}</td>)}</tr>) : <tr><td colSpan={columns.length}>표시할 데이터가 없습니다.</td></tr>}</tbody>
   </table>;
 }

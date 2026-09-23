@@ -582,4 +582,112 @@
     flex-basis: 100%;
     width: 100%;
   }
+
+  .listCard {
+    min-height: 0;
+    padding: 20px 12px;
+    overflow-x: visible;
+  }
+
+  .filters {
+    gap: 10px;
+  }
+
+  .searchBox {
+    flex-basis: 100%;
+  }
+
+  .segmented {
+    width: 100%;
+  }
+
+  .table {
+    min-width: 0;
+    margin-top: 16px;
+  }
+
+  .tableHeader {
+    display: none;
+  }
+
+  .tableRow {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 0 12px;
+    min-height: 0;
+    margin-bottom: 10px;
+    padding: 14px 12px;
+    border: 1px solid var(--admin-border);
+    border-radius: 10px;
+    background: #ffffff;
+  }
+
+  .tableRow > span:not(.memberCell):not(.arrow) {
+    display: flex;
+    justify-content: space-between;
+    gap: 16px;
+    min-width: 0;
+    padding: 7px 0;
+    color: var(--admin-muted);
+    font-size: 13px;
+    text-align: right;
+  }
+
+  .tableRow > span:not(.memberCell):not(.arrow)::before {
+    color: var(--admin-light);
+    font-size: 12px;
+    text-align: left;
+  }
+
+  .tableRow > span:nth-child(2)::before { content: "성별 · 연령"; }
+  .tableRow > span:nth-child(3)::before { content: "유입 경로"; }
+  .tableRow > span:nth-child(4)::before { content: "진단"; }
+  .tableRow > span:nth-child(5)::before { content: "AI 자소서"; }
+  .tableRow > span:nth-child(6)::before { content: "AI 면접"; }
+  .tableRow > span:nth-child(7)::before { content: "상태"; }
+  .tableRow > span:nth-child(8)::before { content: "가입일"; }
+
+  .tableRow .memberCell {
+    grid-column: 1 / -1;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--admin-border);
+  }
+
+  .tableRow .arrow {
+    grid-column: 2;
+    grid-row: 2;
+    align-self: start;
+    padding-top: 7px;
+  }
+
+  .memberCell > span:last-child {
+    min-width: 0;
+  }
+
+  .memberCell em {
+    overflow-wrap: anywhere;
+  }
+
+  .emptyRow {
+    min-width: 0;
+  }
+
+  .pagination {
+    gap: 16px;
+  }
+
+  .previewCard,
+  .selectHintCard {
+    padding: 20px;
+  }
+
+  .divider {
+    width: 100%;
+  }
+
+  .previewSection strong {
+    max-width: 58%;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
 }
