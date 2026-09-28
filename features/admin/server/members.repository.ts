@@ -1,4 +1,6 @@
 import { query } from "@/features/admin/server/db";
+import type { ManagementDateInput, ManagementDateRange } from "@/features/admin/management-date";
+import { appendManagementDate } from "./management-date-filter";
 import { getActivityLogData, type ActivityLogRow } from "@/features/admin/server/activity-log.repository";
 
 export type MemberStatusFilter = "all" | "active" | "pending_signup" | "blocked" | "withdrawn" | "forced_withdrawn";
@@ -18,7 +20,7 @@ export type MemberDetailTab =
   | "community"
   | "logs";
 
-export type MemberListQuery = {
+export type MemberListQuery = ManagementDateInput & {
   page?: number;
   keyword?: string | null;
   status?: string | null;
@@ -115,6 +117,7 @@ export type MemberCommunityActivity = {
 };
 
 export type MemberListData = {
+  dateRange: ManagementDateRange;
   metrics: MemberMetric[];
   members: MemberSummary[];
   selectedMember: MemberSummary | null;
@@ -531,6 +534,11 @@ export async function getMemberListData(
   const selectedId = isUuid(args?.selectedId) ? String(args?.selectedId) : "";
   const searchPattern = keyword ? `%${keyword}%` : "";
   const offset = (page - 1) * pageSize;
+  const dateWhere: string[] = [];
+  const listValues: unknown[] = [searchPattern, status, channel];
+  const dateRange = appendManagementDate("members", args || {}, dateWhere, listValues);
+  const filterSql = memberFilterSql + (dateWhere.length ? ` AND ${dateWhere.join(" AND ")}` : "");
+  listValues.push(pageSize, offset);
 
   const [metricResult, memberResult, selectedResult] = await Promise.all([
     query<MetricRow>(
@@ -572,11 +580,11 @@ export async function getMemberListData(
     ),
     query<MemberRow>(
       `
-        ${createMemberSelectSql(memberFilterSql)}
+        ${createMemberSelectSql(filterSql)}
         ORDER BY COALESCE(users.signup_completed_at, users.created_at) DESC
-        LIMIT $4 OFFSET $5
+        LIMIT $${listValues.length - 1} OFFSET $${listValues.length}
       `,
-      [searchPattern, status, channel, pageSize, offset],
+      listValues,
     ),
     selectedId
       ? query<MemberRow>(
@@ -605,6 +613,7 @@ export async function getMemberListData(
   const members = memberResult.rows.map(toMemberSummary);
 
   return {
+    dateRange,
     metrics: [
       {
         label: "전체 회원",

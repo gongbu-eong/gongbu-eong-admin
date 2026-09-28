@@ -1,15 +1,19 @@
 import { AdminLayout } from "@/features/admin/components/AdminLayout";
+import { ManagementFilterBar } from "@/features/admin/components/management/ManagementFilterBar";
+import { resolveManagementDate } from "@/features/admin/management-date";
 import { StatusBadge, formatAdminDate } from "@/features/admin/components/management/ManagementCommon";
 import { listJobSyncRuns } from "@/features/admin/server/jobs-management.repository";
 import styles from "@/features/admin/components/management/Management.module.css";
 
 export const dynamic = "force-dynamic";
-export default async function JobSyncPage() {
-  const runs = await listJobSyncRuns();
+export default async function JobSyncPage({ searchParams }: { searchParams?: Promise<Record<string, string | undefined>> }) {
+  const params = await searchParams;
+  const filters = { ...resolveManagementDate("sync", params), status: params?.status || "all" };
+  const runs = await listJobSyncRuns(filters);
   return (
-    <AdminLayout activeNav="jobs" activeSubNav="job-sync" title="공고 수집 이력" description="알리오 공고 수집 결과와 오류를 확인합니다." stickyHeader>
+    <AdminLayout activeNav="jobs" activeSubNav="job-sync" title="공고 수집 이력" description="알리오 공고 수집 결과와 오류를 확인합니다." stickyHeader headerFilters={<ManagementFilterBar screen="sync" filters={filters} />}>
       <main className={styles.page}><section className={styles.surface}>
-        <div className={styles.surfaceHeader}><div><h2>최근 실행</h2><p>최근 100회 · 수집 이력은 운영 기록이므로 이 화면에서 수정하거나 삭제하지 않습니다.</p></div></div>
+        <div className={styles.surfaceHeader}><div><h2>최근 실행</h2><p>조회 조건 내 최근 100회 · {runs.length}건</p></div></div>
         <div className={`${styles.notice} ${styles.noticeWarning}`}>실행 중 상태가 오래 유지되면 마지막 heartbeat와 크론 로그를 함께 확인하세요. 이 화면의 상태만 보고 작업을 재실행하지 않습니다.</div>
         {runs.length ? <div className={styles.tableWrap}><table className={styles.table}>
           <thead><tr><th>시작 시각</th><th>결과</th><th>수집</th><th>추가</th><th>수정</th><th>비활성</th><th>소요 시간</th><th>오류</th></tr></thead>

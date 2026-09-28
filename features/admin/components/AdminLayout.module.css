@@ -176,6 +176,10 @@
   align-items: center;
 }
 
+.headerWithFilters { flex-wrap: wrap; align-items: center; gap: 12px; max-height: 75dvh; overflow-y: auto; }
+.headerFilters { flex: 0 0 100%; min-width: 0; }
+.headerWithFilters .headerActions { width: auto; }
+
 .headerText {
   min-width: 180px;
 }
@@ -317,4 +321,9 @@
     width: 100%;
     justify-content: stretch;
   }
+
+  .headerWithFilters { flex-direction: row; }
+  .headerWithFilters .headerText { flex: 1; min-width: 0; }
+  .headerWithFilters .headerText p { display: none; }
+  .headerWithFilters .headerActions { flex: 0 1 auto; }
 }

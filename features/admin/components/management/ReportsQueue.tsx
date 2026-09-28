@@ -2,43 +2,29 @@ import Link from "next/link";
 import { ReportProcessor } from "./MutationControls";
 import { ManagementPagination, StatusBadge, formatAdminDate } from "./ManagementCommon";
 import type { getManagedReports } from "@/features/admin/server/community-management.repository";
-import { REPORT_DECISIONS, REPORT_REASONS, REPORT_STATUSES } from "@/features/admin/community-reports";
+import { REPORT_DECISIONS, REPORT_STATUSES } from "@/features/admin/community-reports";
+import type { ManagementDateInput } from "@/features/admin/management-date";
 import { publicSiteHref } from "@/features/admin/public-site";
 import styles from "./Management.module.css";
 import reportStyles from "./Reports.module.css";
 
 export function ReportsQueue({ data, filters }: {
   data: Awaited<ReturnType<typeof getManagedReports>>;
-  filters: { status: string; targetType: string; keyword: string; searchBy: string; reason: string; targetId?: string };
+  filters: ManagementDateInput & { status: string; targetType: string; keyword: string; searchBy: string; reason: string; targetId?: string };
 }) {
   const pageHref = (page: number) => {
     const query = new URLSearchParams({ status: filters.status, targetType: filters.targetType, keyword: filters.keyword,
       searchBy: filters.searchBy, reason: filters.reason, page: String(page) });
     if (filters.targetId) query.set("targetId", filters.targetId);
+    for (const key of ["period", "dateField", "startDate", "endDate"] as const) {
+      if (filters[key]) query.set(key, filters[key]);
+    }
     return `/community/reports?${query}`;
   };
   return (
     <main className={`${styles.page} ${reportStyles.page}`}>
       <section className={reportStyles.queue}>
         <div className={styles.surfaceHeader}><h2>신고 대기열 <span className={reportStyles.total}>{data.total.toLocaleString("ko-KR")}건</span></h2></div>
-        <form className={styles.toolbar} action="/community/reports">
-          <select className={styles.select} name="searchBy" defaultValue={filters.searchBy} aria-label="검색 범위">
-            <option value="all">통합 검색</option><option value="content">제목·본문</option><option value="reason">신고 사유·처리 메모</option><option value="author">대상 작성자</option><option value="reporter">신고자</option>
-          </select>
-          <label className={styles.search}><input className={styles.input} name="keyword" defaultValue={filters.keyword} maxLength={100} aria-label="신고 검색어" placeholder="내용 · 신고 사유 · 닉네임 · 이메일" /></label>
-          <select className={styles.select} name="status" defaultValue={filters.status} aria-label="신고 상태">
-            <option value="open">미처리 전체</option><option value="all">상태 전체</option>
-            {Object.entries(REPORT_STATUSES).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-          </select>
-          <select className={styles.select} name="targetType" defaultValue={filters.targetType} aria-label="신고 대상">
-            <option value="all">대상 전체</option><option value="post">게시글</option><option value="comment">댓글·답글</option><option value="reply">답글</option>
-          </select>
-          <select className={styles.select} name="reason" defaultValue={filters.reason} aria-label="신고 사유">
-            <option value="">사유 전체</option>{REPORT_REASONS.map((reason) => <option key={reason}>{reason}</option>)}
-          </select>
-          {filters.targetId ? <input type="hidden" name="targetId" value={filters.targetId} /> : null}
-          <button className={styles.button} type="submit">검색</button><Link className={styles.buttonSecondary} href="/community/reports">초기화</Link>
-        </form>
         {filters.targetId ? <p className={reportStyles.scope}>동일 대상에 접수된 신고</p> : null}
         <div className={reportStyles.columnHeader} aria-hidden="true"><span>신고 대상</span><span>신고 사유</span><span>대상 작성자</span><span>신고자·접수일</span><span>처리 상태</span></div>
         {data.items.map((report) => {

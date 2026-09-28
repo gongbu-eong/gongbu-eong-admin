@@ -1,5 +1,7 @@
 import Link from "next/link";
 import { AdminLayout } from "@/features/admin/components/AdminLayout";
+import { ManagementFilterBar } from "@/features/admin/components/management/ManagementFilterBar";
+import { resolveManagementDate } from "@/features/admin/management-date";
 import { MetricGrid, ManagementPagination, StatusBadge, formatAdminDate } from "@/features/admin/components/management/ManagementCommon";
 import { getManagedJobs, type JobManagementFilters } from "@/features/admin/server/jobs-management.repository";
 import styles from "@/features/admin/components/management/Management.module.css";
@@ -11,6 +13,7 @@ type Props = { searchParams?: Promise<Record<string, string | undefined>> };
 export default async function JobsPage({ searchParams }: Props) {
   const params = await searchParams;
   const filters: JobManagementFilters = {
+    ...resolveManagementDate("jobs", params),
     page: Number(params?.page || 1),
     keyword: params?.keyword || "",
     source: isSource(params?.source) ? params.source : "all",
@@ -26,23 +29,15 @@ export default async function JobsPage({ searchParams }: Props) {
       description="공고의 공개 상태와 지원 정보를 확인하고 수동 공고를 관리합니다."
       stickyHeader
       headerActions={<Link className={styles.button} href="/jobs/new">수동 공고 등록</Link>}
+      headerFilters={<ManagementFilterBar screen="jobs" filters={data.filters} />}
     >
       <main className={styles.page}>
+        <p className={styles.metricsScope}>전체 공고 현황</p>
         <MetricGrid metrics={data.metrics} />
         <section className={styles.surface}>
           <div className={styles.surfaceHeader}>
             <div><h2>공고 목록</h2><p>총 {data.total.toLocaleString("ko-KR")}건 · 제목이나 기관명을 누르면 상세 관리로 이동합니다.</p></div>
           </div>
-          <form className={styles.toolbar} action="/jobs">
-            <label className={styles.search}><input className={styles.input} name="keyword" defaultValue={data.filters.keyword} placeholder="공고명 · 기관 · NCS 검색" /></label>
-            <select className={styles.select} name="source" defaultValue={data.filters.source} aria-label="공고 출처">
-              <option value="all">출처 전체</option><option value="alio">알리오 수집</option><option value="manual">수동 등록</option>
-            </select>
-            <select className={styles.select} name="status" defaultValue={data.filters.status} aria-label="공고 상태">
-              <option value="all">상태 전체</option><option value="open">접수 중</option><option value="closing">3일 내 마감</option><option value="closed">마감</option><option value="hidden">비공개</option>
-            </select>
-            <button className={styles.button} type="submit">조회</button>
-          </form>
           {data.jobs.length ? (
             <div className={styles.tableWrap}>
               <table className={styles.table}>

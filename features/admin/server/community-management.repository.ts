@@ -1,7 +1,9 @@
 import { db, query } from "@/features/admin/server/db";
+import type { ManagementDateInput } from "@/features/admin/management-date";
+import { appendManagementDate } from "./management-date-filter";
 import { availableReportDecisions, REPORT_DECISIONS, REPORT_REASONS, type ReportDecision, type ReportHistoryEntry } from "@/features/admin/community-reports";
 
-export type CommunityPostFilters = {
+export type CommunityPostFilters = ManagementDateInput & {
   page?: number;
   keyword?: string;
   status?: "all" | "active" | "deleted";
@@ -70,6 +72,7 @@ export async function getManagedCommunityPosts(filters: CommunityPostFilters = {
   const category = String(filters.category || "").trim();
   const values: unknown[] = [];
   const where: string[] = [];
+  const dateRange = appendManagementDate("posts", filters, where, values);
 
   if (keyword) {
     values.push(`%${keyword}%`);
@@ -185,7 +188,7 @@ export async function getManagedCommunityPosts(filters: CommunityPostFilters = {
     pageSize: PAGE_SIZE,
     total,
     totalPages: Math.max(1, Math.ceil(total / PAGE_SIZE)),
-    filters: { keyword, status, category, reported: Boolean(filters.reported) },
+    filters: { keyword, status, category, reported: Boolean(filters.reported), ...dateRange },
     metrics: [
       { label: "공개 게시글", value: Number(metrics?.active_count || 0), note: "현재 열람 가능" },
       { label: "오늘 작성", value: Number(metrics?.today_count || 0), note: "자정 이후" },
@@ -290,7 +293,7 @@ export async function getCommunityAttachment(attachmentId: string) {
   return result.rows[0] || null;
 }
 
-export async function getManagedComments(args: {
+export async function getManagedComments(args: ManagementDateInput & {
   page?: number;
   keyword?: string;
   status?: string;
@@ -302,6 +305,7 @@ export async function getManagedComments(args: {
   const keyword = String(args.keyword || "").trim().slice(0, 100);
   const values: unknown[] = [];
   const where: string[] = [];
+  appendManagementDate("comments", args, where, values);
   if (keyword) {
     values.push(`%${keyword}%`);
     where.push(`(comments.content ILIKE $${values.length} OR posts.title ILIKE $${values.length})`);
@@ -398,7 +402,7 @@ export async function getManagedComments(args: {
   };
 }
 
-export async function getManagedReports(args: {
+export async function getManagedReports(args: ManagementDateInput & {
   page?: number;
   keyword?: string;
   searchBy?: string;
@@ -413,6 +417,7 @@ export async function getManagedReports(args: {
   const keyword = String(args.keyword || "").trim().slice(0, 100);
   const values: unknown[] = [];
   const where: string[] = [];
+  appendManagementDate("reports", args, where, values);
   if (args.status === "open") {
     where.push("reports.status IN ('pending', 'reviewing')");
   } else if (["pending", "reviewing", "resolved", "rejected"].includes(args.status || "")) {

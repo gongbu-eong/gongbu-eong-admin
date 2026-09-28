@@ -751,3 +751,4 @@
   .toolbar .select { flex-basis: 100%; }
   .pagination { gap: 2px; }
 }
+.metricsScope { margin: 0; color: var(--admin-muted); font-size: 12px; }

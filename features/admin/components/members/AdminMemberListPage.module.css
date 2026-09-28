@@ -16,7 +16,7 @@
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 16px;
-  margin-top: 16px;
+  margin-top: 0;
 }
 
 .metricCard {
@@ -695,3 +695,4 @@
     overflow-wrap: anywhere;
   }
 }
+.metricsScope { grid-column: 1 / -1; margin: 0; color: var(--admin-muted); font-size: 12px; }

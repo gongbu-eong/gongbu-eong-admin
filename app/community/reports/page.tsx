@@ -1,4 +1,6 @@
 import { AdminLayout } from "@/features/admin/components/AdminLayout";
+import { ManagementFilterBar } from "@/features/admin/components/management/ManagementFilterBar";
+import { resolveManagementDate } from "@/features/admin/management-date";
 import { ReportsQueue } from "@/features/admin/components/management/ReportsQueue";
 import { requireAdminSession } from "@/features/admin/server/auth.repository";
 import { getManagedReports } from "@/features/admin/server/community-management.repository";
@@ -8,13 +10,14 @@ export default async function CommunityReportsPage({ searchParams }: { searchPar
   await requireAdminSession();
   const params = await searchParams;
   const filters = {
+    ...resolveManagementDate("reports", params),
     page: Number(params?.page || 1), status: params?.status || "open", targetType: params?.targetType || "all",
     keyword: (params?.keyword || "").trim().slice(0, 100), searchBy: params?.searchBy || "all", reason: params?.reason || "",
     targetId: /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(params?.targetId || "") ? params!.targetId : undefined,
   };
   const data = await getManagedReports(filters);
   return (
-    <AdminLayout activeNav="community" activeSubNav="community-reports" title="신고 처리" description="접수 · 검토 · 처리 이력" stickyHeader>
+    <AdminLayout activeNav="community" activeSubNav="community-reports" title="신고 처리" description="접수 · 검토 · 처리 이력" stickyHeader headerFilters={<ManagementFilterBar screen="reports" filters={filters} />}>
       <ReportsQueue data={data} filters={filters} />
     </AdminLayout>
   );

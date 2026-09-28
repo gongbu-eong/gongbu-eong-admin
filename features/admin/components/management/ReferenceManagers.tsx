@@ -95,7 +95,7 @@ export function InstitutionManager({ institutions }: { institutions: Institution
   );
 }
 
-export function CategoryManager({ categories }: { categories: Category[] }) {
+export function CategoryManager({ categories, nextSortOrder }: { categories: Category[]; nextSortOrder: number }) {
   const router = useRouter();
   const [editing, setEditing] = useState<Category | null>(null);
   const [pending, setPending] = useState(false);
@@ -137,7 +137,7 @@ export function CategoryManager({ categories }: { categories: Category[] }) {
       <form className={styles.compactForm} key={editing?.id || "new"} onSubmit={save}>
         <Field label="직무 코드"><input className={styles.input} name="sourceCode" defaultValue={editing?.sourceCode || ""} required /></Field>
         <Field label="직무명"><input className={styles.input} name="name" defaultValue={editing?.name || ""} required /></Field>
-        <Field label="노출 순서"><input className={styles.input} name="sortOrder" type="number" defaultValue={editing?.sortOrder ?? categories.length + 1} /></Field>
+        <Field label="노출 순서"><input className={styles.input} name="sortOrder" type="number" defaultValue={editing?.sortOrder ?? nextSortOrder} /></Field>
         <label className={styles.checkbox} style={{ height: 42 }}><input type="checkbox" name="isActive" defaultChecked={editing?.isActive ?? true} />필터에 사용</label>
         <div className={styles.rowActions}>
           {editing ? <button className={styles.buttonSecondary} type="button" onClick={() => setEditing(null)}>취소</button> : null}

@@ -1,7 +1,9 @@
 import { db, query } from "@/features/admin/server/db";
 import type { PoolClient } from "pg";
+import type { ManagementDateInput } from "@/features/admin/management-date";
+import { appendManagementDate } from "./management-date-filter";
 
-export type JobManagementFilters = {
+export type JobManagementFilters = ManagementDateInput & {
   page?: number;
   keyword?: string;
   source?: "all" | "alio" | "manual";
@@ -99,6 +101,7 @@ export async function getManagedJobs(filters: JobManagementFilters = {}) {
   const status = filters.status || "all";
   const values: unknown[] = [];
   const where: string[] = [];
+  const dateRange = appendManagementDate("jobs", filters, where, values);
 
   if (keyword) {
     values.push(`%${keyword}%`);
@@ -204,7 +207,7 @@ export async function getManagedJobs(filters: JobManagementFilters = {}) {
     pageSize: PAGE_SIZE,
     total,
     totalPages: Math.max(1, Math.ceil(total / PAGE_SIZE)),
-    filters: { keyword, source, status },
+    filters: { keyword, source, status, ...dateRange },
     metrics: [
       { label: "전체 공고", value: Number(metrics?.total || 0), note: "수집·수동 공고" },
       { label: "접수 중", value: Number(metrics?.open_count || 0), note: "현재 지원 가능" },
@@ -307,7 +310,14 @@ export async function getManagedJob(jobId: string): Promise<ManagedJobDetail | n
   };
 }
 
-export async function listInstitutions() {
+export async function listInstitutions(filters: ManagementDateInput & { keyword?: string } = {}) {
+  const where: string[] = [];
+  const values: unknown[] = [];
+  appendManagementDate("institutions", filters, where, values);
+  if (filters.keyword?.trim()) {
+    values.push(`%${filters.keyword.trim().slice(0, 100)}%`);
+    where.push(`(institutions.name ILIKE $${values.length} OR institutions.institution_type ILIKE $${values.length} OR institutions.region ILIKE $${values.length})`);
+  }
   const result = await query<{
     id: string;
     name: string;
@@ -325,9 +335,10 @@ export async function listInstitutions() {
       COUNT(postings.id) FILTER (WHERE postings.is_active = true)::text AS active_job_count
     FROM public.public_institutions institutions
     LEFT JOIN public.job_postings postings ON postings.institution_id = institutions.id
+    ${where.length ? `WHERE ${where.join(" AND ")}` : ""}
     GROUP BY institutions.id
     ORDER BY institutions.name
-  `);
+  `, values);
 
   return result.rows.map((row) => ({
     id: row.id,
@@ -342,7 +353,18 @@ export async function listInstitutions() {
   }));
 }
 
-export async function listJobCategories() {
+export async function listJobCategories(filters: ManagementDateInput & { keyword?: string; status?: string } = {}) {
+  const where: string[] = [];
+  const values: unknown[] = [];
+  appendManagementDate("categories", filters, where, values);
+  if (filters.keyword?.trim()) {
+    values.push(`%${filters.keyword.trim().slice(0, 100)}%`);
+    where.push(`(categories.name ILIKE $${values.length} OR categories.source_code ILIKE $${values.length})`);
+  }
+  if (["active", "inactive"].includes(filters.status || "")) {
+    values.push(filters.status === "active");
+    where.push(`categories.is_active = $${values.length}`);
+  }
   const result = await query<{
     id: string;
     source_code: string;
@@ -361,9 +383,10 @@ export async function listJobCategories() {
       ON posting_categories.job_category_id = categories.id
     LEFT JOIN public.personality_job_category_mappings mappings
       ON mappings.job_category_id = categories.id
+    ${where.length ? `WHERE ${where.join(" AND ")}` : ""}
     GROUP BY categories.id
     ORDER BY categories.sort_order, categories.name
-  `);
+  `, values);
 
   return result.rows.map((row) => ({
     id: row.id,
@@ -376,7 +399,19 @@ export async function listJobCategories() {
   }));
 }
 
-export async function listJobSyncRuns() {
+export async function getNextJobCategorySortOrder() {
+  const result = await query<{ next_order: number }>("SELECT COALESCE(MAX(sort_order), 0) + 1 AS next_order FROM public.job_categories");
+  return Number(result.rows[0]?.next_order || 1);
+}
+
+export async function listJobSyncRuns(filters: ManagementDateInput & { status?: string } = {}) {
+  const where: string[] = [];
+  const values: unknown[] = [];
+  appendManagementDate("sync", filters, where, values);
+  if (["succeeded", "failed", "running", "skipped"].includes(filters.status || "")) {
+    values.push(filters.status);
+    where.push(`runs.status = $${values.length}`);
+  }
   const result = await query<{
     id: string;
     source: string;
@@ -391,10 +426,11 @@ export async function listJobSyncRuns() {
     error_message: string | null;
   }>(`
     SELECT *
-    FROM public.job_posting_sync_runs
+    FROM public.job_posting_sync_runs runs
+    ${where.length ? `WHERE ${where.join(" AND ")}` : ""}
     ORDER BY started_at DESC
     LIMIT 100
-  `);
+  `, values);
 
   return result.rows.map((row) => ({
     id: row.id,

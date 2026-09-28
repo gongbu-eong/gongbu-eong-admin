@@ -1,31 +1,12 @@
 import Image from "next/image";
 import Link from "next/link";
 import { AdminLayout } from "@/features/admin/components/AdminLayout";
+import { ManagementFilterBar } from "@/features/admin/components/management/ManagementFilterBar";
 import {
-  MemberChannelFilter,
   MemberListQuery,
-  MemberStatusFilter,
   getMemberListData,
 } from "@/features/admin/server/members.repository";
 import styles from "./AdminMemberListPage.module.css";
-
-const statusFilters: Array<{ label: string; value: MemberStatusFilter }> = [
-  { label: "전체", value: "all" },
-  { label: "활동중", value: "active" },
-  { label: "가입대기", value: "pending_signup" },
-  { label: "정지", value: "blocked" },
-  { label: "탈퇴", value: "withdrawn" },
-  { label: "강제탈퇴", value: "forced_withdrawn" },
-];
-
-const channelFilters: Array<{ label: string; value: MemberChannelFilter }> = [
-  { label: "유입 채널 전체", value: "all" },
-  { label: "인스타그램", value: "instagram" },
-  { label: "블로그", value: "blog" },
-  { label: "스레드", value: "threads" },
-  { label: "검색", value: "search" },
-  { label: "직접유입", value: "direct" },
-];
 
 type AdminMemberListPageProps = {
   filters?: MemberListQuery;
@@ -57,6 +38,7 @@ function badgeClass(label: string) {
 export async function AdminMemberListPage({ filters }: AdminMemberListPageProps) {
   const data = await getMemberListData(filters);
   const selected = data.selectedMember;
+  const listFilters = { ...data.dateRange, keyword: data.keyword, status: data.status, channel: data.channel };
 
   return (
     <AdminLayout
@@ -64,9 +46,11 @@ export async function AdminMemberListPage({ filters }: AdminMemberListPageProps)
       title="회원 관리"
       description="회원을 클릭하면 회원 정보 상세 페이지로 이동해요."
       stickyHeader
+      headerFilters={<ManagementFilterBar screen="members" filters={listFilters} />}
     >
       <section className={styles.page} aria-label="회원 관리">
-        <section className={styles.metrics} aria-label="회원 주요 지표">
+        <p className={styles.metricsScope}>전체 회원 현황</p>
+        <section className={styles.metrics} aria-label="전체 회원 주요 지표">
           {data.metrics.map((metric) => (
             <article className={styles.metricCard} key={metric.label}>
               <h2>{metric.label}</h2>
@@ -80,45 +64,7 @@ export async function AdminMemberListPage({ filters }: AdminMemberListPageProps)
         </section>
 
         <section className={styles.listCard}>
-          <h2>회원 정보</h2>
-          <form className={styles.filters} action="/members">
-            <label className={styles.searchBox}>
-              <span aria-hidden="true" />
-              <input
-                name="keyword"
-                placeholder="닉네임 · 이메일로 검색"
-                defaultValue={data.keyword}
-              />
-            </label>
-            <input name="page" type="hidden" value="1" />
-            <div className={styles.segmented}>
-              {statusFilters.map((filter) => (
-                <Link
-                  className={filter.value === data.status ? styles.activeSegment : ""}
-                  href={createQuery({
-                    keyword: data.keyword,
-                    status: filter.value,
-                    channel: data.channel,
-                  })}
-                  key={filter.value}
-                >
-                  {filter.label}
-                </Link>
-              ))}
-            </div>
-            <label className={styles.channelSelect}>
-              <select name="channel" defaultValue={data.channel}>
-                {channelFilters.map((filter) => (
-                  <option key={filter.value} value={filter.value}>
-                    {filter.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <button className={styles.submitButton} type="submit">
-              검색
-            </button>
-          </form>
+          <h2>회원 정보 · {data.totalCount.toLocaleString("ko-KR")}명</h2>
 
           <div className={styles.table} role="table">
             <div className={styles.tableHeader} role="row">
@@ -140,6 +86,7 @@ export async function AdminMemberListPage({ filters }: AdminMemberListPageProps)
                     selected?.id === member.id ? styles.selectedRow : ""
                   }`}
                   href={createQuery({
+                    ...listFilters,
                     keyword: data.keyword,
                     status: data.status,
                     channel: data.channel,
@@ -195,6 +142,7 @@ export async function AdminMemberListPage({ filters }: AdminMemberListPageProps)
             <Link
               className={data.page <= 1 ? styles.disabledPage : ""}
               href={createQuery({
+                ...listFilters,
                 keyword: data.keyword,
                 status: data.status,
                 channel: data.channel,
@@ -208,6 +156,7 @@ export async function AdminMemberListPage({ filters }: AdminMemberListPageProps)
                 <Link
                   className={page === data.page ? styles.activePage : ""}
                   href={createQuery({
+                    ...listFilters,
                     keyword: data.keyword,
                     status: data.status,
                     channel: data.channel,
@@ -222,6 +171,7 @@ export async function AdminMemberListPage({ filters }: AdminMemberListPageProps)
             <Link
               className={data.page >= data.totalPages ? styles.disabledPage : ""}
               href={createQuery({
+                ...listFilters,
                 keyword: data.keyword,
                 status: data.status,
                 channel: data.channel,

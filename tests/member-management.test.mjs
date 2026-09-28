@@ -33,6 +33,7 @@ function load(filename, options = {}) {
     if (id === "@/features/admin/server/db" || id === "./db") return db;
     if (id.endsWith(".module.css")) return { __esModule: true, default: new Proxy({}, { get: (_, key) => String(key) }) };
     if (id === "react") return { ...React, useEffect() {}, useState: initial => [options.states ? options.states[stateIndex++] : initial, () => {}] };
+    if (id === "react-dom") return require(id);
     if (id === "react/jsx-runtime") {
       const runtime = require(id);
       const wrap = fn => (type, props, ...rest) => ["actions", "coachingButton", "publicDiagnosisButton"].includes(props?.className) ? null : fn(type, props, ...rest);
@@ -62,6 +63,24 @@ function load(filename, options = {}) {
 
 let members;
 let diagnosis;
+test("member date filters distinguish signup and last login while preserving selection and pagination", async () => {
+  const dates = { period: "custom", startDate: "2027-01-01", endDate: "2027-01-01" };
+  const joined = await members.getMemberListData({ ...dates, dateField: "joined", selectedId: user });
+  assert.equal(joined.totalCount, 1);
+  assert.equal(joined.members[0].id, user);
+  assert.equal(joined.selectedMember.id, user);
+  const login = await members.getMemberListData({ period: "custom", dateField: "login", startDate: "2025-09-22", endDate: "2025-09-22" });
+  assert.equal(login.totalCount, 1);
+  assert.equal(login.members[0].id, user);
+  assert.equal((await members.getMemberListData({ ...dates, dateField: "login" })).totalCount, 0);
+  assert.equal((await members.getMemberListData({ ...dates, status: "blocked" })).totalCount, 0);
+  assert.equal((await members.getMemberListData({ ...dates, period: "all" })).totalCount, 2);
+  const { AdminMemberListPage } = load(resolve(root, "features/admin/components/members/AdminMemberListPage.tsx"));
+  const html = renderToStaticMarkup(await AdminMemberListPage({ filters: { ...dates, selectedId: user } }));
+  assert.match(html, /startDate=2027-01-01/);
+  assert.match(html, /endDate=2027-01-01/);
+  assert.match(html, /dateField=joined/);
+});
 before(async () => {
   await database.exec(`
     CREATE TABLE users(id uuid PRIMARY KEY, nickname text, display_name text, email text, gender text, age_group text,

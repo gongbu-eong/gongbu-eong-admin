@@ -8,6 +8,7 @@ type AdminLayoutProps = {
   activeNav: string;
   activeSubNav?: string;
   headerActions?: React.ReactNode;
+  headerFilters?: React.ReactNode;
   stickyHeader?: boolean;
   children: React.ReactNode;
 };
@@ -18,6 +19,7 @@ export async function AdminLayout({
   activeNav,
   activeSubNav,
   headerActions,
+  headerFilters,
   stickyHeader = false,
   children,
 }: AdminLayoutProps) {
@@ -30,7 +32,7 @@ export async function AdminLayout({
         <header
           className={`${styles.header} ${
             headerActions || stickyHeader ? styles.headerSticky : ""
-          } ${headerActions ? styles.headerWithActions : ""}`}
+          } ${headerActions ? styles.headerWithActions : ""} ${headerFilters ? styles.headerWithFilters : ""}`}
         >
           <div className={styles.headerText}>
             <h1>{title}</h1>
@@ -39,6 +41,7 @@ export async function AdminLayout({
           {headerActions ? (
             <div className={styles.headerActions}>{headerActions}</div>
           ) : null}
+          {headerFilters ? <div className={styles.headerFilters}>{headerFilters}</div> : null}
         </header>
         {children}
       </main>

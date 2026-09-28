@@ -73,6 +73,19 @@ beforeEach(async () => {
 });
 after(async () => { await database.close(); });
 
+test("report date ranges use the selected timestamp and keep Korean midnight boundaries", async () => {
+  await database.query("UPDATE community_reports SET created_at='2026-09-27T15:00:00Z', reviewed_at='2026-09-29T01:00:00Z' WHERE id=$1", [reportId]);
+  const day = { period: "custom", startDate: "2026-09-28", endDate: "2026-09-28", status: "all" };
+  assert.equal((await repository.getManagedReports({ ...day, dateField: "created" })).total, 1);
+  assert.equal((await repository.getManagedReports({ ...day, dateField: "reviewed" })).total, 0);
+  assert.equal((await repository.getManagedReports({ ...day, dateField: "created", keyword: "not present" })).total, 0);
+  await database.query("UPDATE community_reports SET created_at='2026-09-28T14:59:59.999Z' WHERE id=$1", [reportId]);
+  assert.equal((await repository.getManagedReports(day)).total, 1);
+  await database.query("UPDATE community_reports SET created_at='2026-09-28T15:00:00Z' WHERE id=$1", [reportId]);
+  assert.equal((await repository.getManagedReports(day)).total, 0);
+  assert.equal((await repository.getManagedReports({ ...day, period: "all" })).total, 1);
+});
+
 async function record() {
   return (await database.query("SELECT * FROM community_reports WHERE id=$1", [reportId])).rows[0];
 }
