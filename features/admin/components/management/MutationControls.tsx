@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { availableReportDecisions, REPORT_DECISIONS, type ReportDecision } from "@/features/admin/community-reports";
 import styles from "./Management.module.css";
 
 const COMMUNITY_CATEGORIES = ["자유·잡담", "공시 정보", "공부·스터디", "질문·답변", "합격·면접 후기", "유머·짤"];
@@ -35,24 +36,31 @@ export function ModerationButton({ endpoint, body, confirmMessage, children, dan
   );
 }
 
-export function ReportProcessor({ reportId, currentStatus, targetStatus }: { reportId: string; currentStatus: string; targetStatus: string }) {
+export function ReportProcessor({ reportId, currentStatus, targetStatus, updatedAt }: { reportId: string; currentStatus: string; targetStatus: string; updatedAt: string }) {
   const router = useRouter();
+  const decisions = availableReportDecisions(currentStatus, targetStatus);
+  const [decision, setDecision] = useState<ReportDecision>(decisions[0]);
   const [pending, setPending] = useState(false);
   const [message, setMessage] = useState("");
+  const [succeeded, setSucceeded] = useState(false);
   const submit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (pending || succeeded) return;
+    const form = new FormData(event.currentTarget);
+    if (decision === "hide" && !window.confirm("신고 대상을 숨기고 처리를 완료할까요? 원문은 보존되며 회원에게 내용이 노출되지 않습니다.")) return;
+    if (decision === "restore" && !window.confirm("숨겨진 원문을 다시 공개하고 위반 없음으로 종결할까요? 작성자가 삭제한 내용일 수도 있으니 확인해 주세요.")) return;
     setPending(true);
     setMessage("");
-    const form = new FormData(event.currentTarget);
     try {
       const response = await fetch(`/api/admin/community/reports/${reportId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: form.get("status"), action: form.get("action"), reviewNote: form.get("reviewNote") }),
+        body: JSON.stringify({ decision, reviewNote: form.get("reviewNote"), expectedStatus: currentStatus, expectedUpdatedAt: updatedAt, expectedTargetStatus: targetStatus }),
       });
       const result = await response.json().catch(() => ({})) as JsonResult;
       if (!response.ok) throw new Error(result.message || "신고를 처리하지 못했습니다.");
-      setMessage("저장했습니다.");
+      setSucceeded(true);
+      setMessage("처리 결과와 이력을 저장했습니다.");
       router.refresh();
     } catch (cause) {
       setMessage(cause instanceof Error ? cause.message : "신고를 처리하지 못했습니다.");
@@ -62,20 +70,17 @@ export function ReportProcessor({ reportId, currentStatus, targetStatus }: { rep
   };
   return (
     <form className={styles.reportForm} onSubmit={submit}>
-      <select className={styles.select} name="status" defaultValue={currentStatus} aria-label="신고 상태">
-        <option value="pending">처리 대기</option>
-        <option value="reviewing">검토 중</option>
-        <option value="resolved">처리 완료</option>
-        <option value="rejected">위반 없음</option>
-      </select>
-      <select className={styles.select} name="action" defaultValue="none" aria-label="콘텐츠 조치">
-        <option value="none">상태만 변경</option>
-        <option value="hide">대상 숨김</option>
-        {targetStatus === "deleted" ? <option value="restore">대상 복구</option> : null}
-      </select>
-      <textarea className={styles.textarea} name="reviewNote" placeholder="판단 근거와 조치 내용을 남겨 주세요." />
-      <button className={styles.button} type="submit" disabled={pending}>{pending ? "저장 중" : "처리 저장"}</button>
-      {message ? <p className={message === "저장했습니다." ? styles.message : styles.error}>{message}</p> : null}
+      <label className={styles.field}><span>처리 조치</span>
+        <select className={styles.select} name="decision" value={decision} onChange={(event) => setDecision(event.target.value as ReportDecision)} disabled={pending || succeeded}>
+          {decisions.map((key) => <option key={key} value={key}>{REPORT_DECISIONS[key].label}</option>)}
+        </select>
+      </label>
+      <label className={styles.field}><span>처리 사유 {decision === "review" ? "(선택)" : "(필수)"}</span>
+        <textarea className={styles.textarea} name="reviewNote" maxLength={1000} required={decision !== "review"} disabled={pending || succeeded} placeholder="판단 근거와 조치 사유" />
+      </label>
+      <button className={decision === "hide" ? styles.buttonDanger : styles.button} type="submit" disabled={pending || succeeded}>{pending ? "처리 중" : REPORT_DECISIONS[decision].label}</button>
+      {message ? <p role={succeeded ? "status" : "alert"} className={succeeded ? styles.message : styles.error}>{message}</p> : null}
+      {message && !succeeded ? <button type="button" className={styles.buttonSecondary} onClick={() => router.refresh()}>최신 상태 확인</button> : null}
     </form>
   );
 }

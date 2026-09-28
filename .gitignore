@@ -45,3 +45,5 @@ next-env.d.ts
 *.md
 *.cjs
 *.md
+!db/20260928_community_report_moderation.sql
+!docs/community-report-moderation.md

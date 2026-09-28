@@ -1,4 +1,5 @@
 import { db, query } from "@/features/admin/server/db";
+import { availableReportDecisions, REPORT_DECISIONS, REPORT_REASONS, type ReportDecision, type ReportHistoryEntry } from "@/features/admin/community-reports";
 
 export type CommunityPostFilters = {
   page?: number;
@@ -399,27 +400,59 @@ export async function getManagedComments(args: {
 
 export async function getManagedReports(args: {
   page?: number;
+  keyword?: string;
+  searchBy?: string;
+  reason?: string;
   status?: string;
   targetType?: string;
   targetId?: string;
   limit?: number;
 } = {}) {
-  const page = Math.max(1, Number(args.page || 1));
-  const limit = Math.min(100, Math.max(1, args.limit || PAGE_SIZE));
+  const page = Number.isFinite(args.page) ? Math.max(1, Math.floor(args.page!)) : 1;
+  const limit = Number.isFinite(args.limit) ? Math.min(100, Math.max(1, Math.floor(args.limit!))) : PAGE_SIZE;
+  const keyword = String(args.keyword || "").trim().slice(0, 100);
   const values: unknown[] = [];
   const where: string[] = [];
-  if (args.status && args.status !== "all") {
+  if (args.status === "open") {
+    where.push("reports.status IN ('pending', 'reviewing')");
+  } else if (["pending", "reviewing", "resolved", "rejected"].includes(args.status || "")) {
     values.push(args.status);
     where.push(`reports.status = $${values.length}`);
   }
-  if (args.targetType && args.targetType !== "all") {
-    values.push(args.targetType);
+  if (["post", "comment", "reply"].includes(args.targetType || "")) {
+    values.push(args.targetType === "reply" ? "comment" : args.targetType);
     where.push(`reports.target_type = $${values.length}`);
+    if (args.targetType === "reply") where.push("COALESCE(comments.parent_comment_id::text, reports.target_snapshot->>'parent_comment_id') IS NOT NULL");
   }
   if (args.targetId) {
     values.push(args.targetId);
     where.push(`reports.target_id = $${values.length}`);
   }
+  if (REPORT_REASONS.includes(args.reason as typeof REPORT_REASONS[number])) {
+    values.push(args.reason);
+    where.push(`COALESCE(reports.reason_code, reports.reason) = $${values.length}`);
+  }
+  if (keyword) {
+    values.push(`%${keyword.replace(/[\\%_]/g, "\\$&")}%`);
+    const term = `$${values.length}`;
+    const nameMatch = (alias: string) => ["community_nickname", "nickname", "display_name", "email"].map((column) => `${alias}.${column} ILIKE ${term}`).join(" OR ");
+    const searches: Record<string, string> = {
+      content: ["posts.title", "posts.content", "parent_posts.title", "comments.content", "reports.target_snapshot->>'title'", "reports.target_snapshot->>'post_title'", "reports.target_snapshot->>'content'"].map((column) => `${column} ILIKE ${term}`).join(" OR "),
+      reason: ["reports.reason", "reports.reason_code", "reports.reason_detail", "reports.review_note"].map((column) => `${column} ILIKE ${term}`).join(" OR "),
+      author: nameMatch("authors"),
+      reporter: nameMatch("users"),
+    };
+    const search = Object.hasOwn(searches, args.searchBy || "") ? searches[args.searchBy!] : Object.values(searches).join(" OR ");
+    where.push(`(${search})`);
+  }
+  const joins = `
+    FROM public.community_reports reports
+    JOIN public.users users ON users.id = reports.user_id
+    LEFT JOIN public.community_posts posts ON reports.target_type = 'post' AND posts.id = reports.target_id
+    LEFT JOIN public.community_comments comments ON reports.target_type = 'comment' AND comments.id = reports.target_id
+    LEFT JOIN public.community_posts parent_posts ON parent_posts.id::text = COALESCE(comments.post_id::text, CASE WHEN reports.target_type = 'comment' THEN reports.target_snapshot->>'post_id' END)
+    LEFT JOIN public.users authors ON authors.id::text = COALESCE(posts.user_id::text, comments.user_id::text, reports.target_snapshot->>'user_id')
+  `;
   const whereSql = where.length ? `WHERE ${where.join(" AND ")}` : "";
   const countValues = [...values];
   values.push(limit, (page - 1) * limit);
@@ -435,6 +468,17 @@ export async function getManagedReports(args: {
       status: string;
       target_snapshot: Record<string, unknown> | null;
       reporter_name: string;
+      reporter_id: string;
+      reporter_email: string | null;
+      author_id: string | null;
+      author_name: string | null;
+      author_email: string | null;
+      post_id: string | null;
+      parent_comment_id: string | null;
+      parent_status: string | null;
+      related_count: string;
+      moderation_history: ReportHistoryEntry[];
+      updated_at: Date | string;
       target_title: string | null;
       target_content: string | null;
       target_status: string | null;
@@ -453,29 +497,34 @@ export async function getManagedReports(args: {
           reports.status,
           reports.target_snapshot,
           COALESCE(users.community_nickname, users.nickname, users.display_name, '공부엉이') AS reporter_name,
+          users.id AS reporter_id,
+          users.email AS reporter_email,
+          authors.id AS author_id,
+          COALESCE(authors.community_nickname, authors.nickname, authors.display_name, authors.email) AS author_name,
+          authors.email AS author_email,
+          CASE WHEN reports.target_type = 'post' THEN posts.id ELSE parent_posts.id END AS post_id,
+          COALESCE(comments.parent_comment_id::text, reports.target_snapshot->>'parent_comment_id') AS parent_comment_id,
+          parent_posts.status AS parent_status,
+          (SELECT COUNT(*)::text FROM public.community_reports related WHERE related.target_type = reports.target_type AND related.target_id = reports.target_id) AS related_count,
+          reports.moderation_history,
+          reports.updated_at,
           CASE WHEN reports.target_type = 'post' THEN posts.title ELSE parent_posts.title END AS target_title,
           CASE WHEN reports.target_type = 'post' THEN posts.content ELSE comments.content END AS target_content,
           CASE WHEN reports.target_type = 'post' THEN posts.status ELSE comments.status END AS target_status,
           reports.review_note,
           reports.created_at,
           reports.reviewed_at
-        FROM public.community_reports reports
-        JOIN public.users users ON users.id = reports.user_id
-        LEFT JOIN public.community_posts posts
-          ON reports.target_type = 'post' AND posts.id = reports.target_id
-        LEFT JOIN public.community_comments comments
-          ON reports.target_type = 'comment' AND comments.id = reports.target_id
-        LEFT JOIN public.community_posts parent_posts ON parent_posts.id = comments.post_id
+        ${joins}
         ${whereSql}
         ORDER BY
           CASE reports.status WHEN 'pending' THEN 0 WHEN 'reviewing' THEN 1 ELSE 2 END,
-          reports.created_at ASC
+          reports.created_at ASC, reports.id ASC
         LIMIT $${values.length - 1} OFFSET $${values.length}
       `,
       values,
     ),
     query<{ total: string }>(
-      `SELECT COUNT(*)::text AS total FROM public.community_reports reports ${whereSql}`,
+      `SELECT COUNT(*)::text AS total ${joins} ${whereSql}`,
       countValues,
     ),
   ]);
@@ -491,7 +540,18 @@ export async function getManagedReports(args: {
       status: row.status,
       snapshot: row.target_snapshot,
       reporterName: row.reporter_name,
-      targetTitle: row.target_title || "삭제되었거나 찾을 수 없는 대상",
+      reporterId: row.reporter_id,
+      reporterEmail: row.reporter_email || "",
+      authorId: row.author_id,
+      authorName: row.author_name || "탈퇴·삭제된 회원",
+      authorEmail: row.author_email || "",
+      postId: row.post_id,
+      isReply: Boolean(row.parent_comment_id),
+      parentStatus: row.parent_status,
+      relatedCount: Number(row.related_count),
+      history: Array.isArray(row.moderation_history) ? row.moderation_history : [],
+      updatedAt: toIso(row.updated_at)!,
+      targetTitle: row.target_title || snapshotText(row.target_snapshot, row.target_type === "post" ? "title" : "post_title") || "삭제되었거나 찾을 수 없는 대상",
       targetContent: row.target_content || "",
       targetStatus: row.target_status || "missing",
       reviewNote: row.review_note || "",
@@ -545,15 +605,20 @@ export async function updateCommunityCommentModeration(commentId: string, status
 
 export async function processCommunityReport(
   reportId: string,
-  input: { status: string; action: string; reviewNote: string },
+  input: { decision: string; reviewNote: string; expectedStatus: string; expectedUpdatedAt: string; expectedTargetStatus: string },
+  admin: { adminUserId: string; name: string },
 ) {
-  const validStatuses = ["pending", "reviewing", "resolved", "rejected"];
-  if (!validStatuses.includes(input.status)) throw new Error("신고 상태가 올바르지 않습니다.");
+  if (!Object.hasOwn(REPORT_DECISIONS, input.decision)) throw new Error("처리할 조치를 선택해 주세요.");
+  const decision = input.decision as ReportDecision;
+  const outcome = REPORT_DECISIONS[decision];
+  const note = input.reviewNote.trim();
+  if (note.length > 1000 || (decision !== "review" && !note)) throw new Error("처리 사유를 1~1,000자로 입력해 주세요.");
+  if (!admin.adminUserId || !admin.name) throw new Error("관리자 정보가 없습니다.");
   const client = await db.connect();
   try {
     await client.query("BEGIN");
-    const reportResult = await client.query<{ target_type: "post" | "comment"; target_id: string }>(
-      `SELECT target_type, target_id FROM public.community_reports WHERE id = $1 FOR UPDATE`,
+    const reportResult = await client.query<{ target_type: "post" | "comment"; target_id: string; status: string; updated_at: Date | string; review_note: string | null; reviewed_at: Date | string | null; moderation_history: ReportHistoryEntry[] }>(
+      `SELECT target_type, target_id, status, updated_at, review_note, reviewed_at, moderation_history FROM public.community_reports WHERE id = $1 FOR UPDATE`,
       [reportId],
     );
     const report = reportResult.rows[0];
@@ -562,27 +627,35 @@ export async function processCommunityReport(
       return false;
     }
 
-    if (input.action === "hide") {
-      const table = report.target_type === "post" ? "community_posts" : "community_comments";
+    const table = report.target_type === "post" ? "community_posts" : "community_comments";
+    const target = await client.query<{ status: string }>(`SELECT status FROM public.${table} WHERE id = $1 FOR UPDATE`, [report.target_id]);
+    const targetStatus = target.rows[0]?.status || "missing";
+    if (report.status !== input.expectedStatus || toIso(report.updated_at) !== input.expectedUpdatedAt || targetStatus !== input.expectedTargetStatus) {
+      throw Object.assign(new Error("다른 처리로 신고 또는 원문 상태가 변경됐습니다. 새로고침 후 다시 확인해 주세요."), { name: "ReportConflictError" });
+    }
+    if (!availableReportDecisions(report.status, targetStatus).includes(decision)) throw new Error("현재 상태에서는 선택한 조치를 할 수 없습니다.");
+    const nextTargetStatus = outcome.action === "hide" ? "deleted" : outcome.action === "restore" ? "active" : targetStatus;
+    if (outcome.action !== "none") {
       await client.query(
-        `UPDATE public.${table} SET status = 'deleted', deleted_at = COALESCE(deleted_at, NOW()), updated_at = NOW() WHERE id = $1`,
-        [report.target_id],
+        `UPDATE public.${table} SET status = $2, deleted_at = CASE WHEN $2 = 'deleted' THEN COALESCE(deleted_at, NOW()) ELSE NULL END, updated_at = NOW() WHERE id = $1`,
+        [report.target_id, nextTargetStatus],
       );
     }
-    if (input.action === "restore") {
-      const table = report.target_type === "post" ? "community_posts" : "community_comments";
-      await client.query(
-        `UPDATE public.${table} SET status = 'active', deleted_at = NULL, updated_at = NOW() WHERE id = $1`,
-        [report.target_id],
-      );
+    const history: ReportHistoryEntry = { at: new Date().toISOString(), adminUserId: admin.adminUserId, adminName: admin.name,
+      decision, fromStatus: report.status, toStatus: outcome.status, fromTargetStatus: targetStatus, toTargetStatus: nextTargetStatus, note };
+    if (!report.moderation_history.length && (report.review_note || report.reviewed_at)) {
+      history.previousReviewNote = report.review_note || "";
+      history.previousReviewedAt = toIso(report.reviewed_at);
     }
     await client.query(
       `
         UPDATE public.community_reports
-        SET status = $2, review_note = $3, reviewed_at = NOW(), updated_at = NOW()
+        SET status = $2, review_note = $3, reviewed_by = NULL,
+            reviewed_at = CASE WHEN $2 IN ('resolved', 'rejected') THEN NOW() ELSE NULL END,
+            moderation_history = moderation_history || $4::jsonb, updated_at = NOW()
         WHERE id = $1
       `,
-      [reportId, input.status, input.reviewNote.trim() || null],
+      [reportId, outcome.status, note || null, JSON.stringify([history])],
     );
     await client.query("COMMIT");
     return true;
@@ -592,6 +665,10 @@ export async function processCommunityReport(
   } finally {
     client.release();
   }
+}
+
+function snapshotText(snapshot: Record<string, unknown> | null, key: string) {
+  return typeof snapshot?.[key] === "string" ? snapshot[key] as string : "";
 }
 
 function mapPost(row: PostRow): ManagedCommunityPost {
