@@ -67,6 +67,7 @@ export type MemberSummary = {
   diagnosisCount: number;
   resumeCoachingCount: number;
   interviewCoachingCount: number;
+  communityCount: number;
   postCount: number;
   commentCount: number;
 };
@@ -287,26 +288,6 @@ function formatShortDate(value: string | Date | null | undefined) {
     .replace(/\.$/, "");
 }
 
-function formatShortDateTime(value: string | Date | null | undefined) {
-  if (!value) return "-";
-
-  const date = value instanceof Date ? value : new Date(value);
-  if (Number.isNaN(date.getTime())) return "-";
-
-  return new Intl.DateTimeFormat("ko-KR", {
-    timeZone: "Asia/Seoul",
-    month: "numeric",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-    hour12: false,
-  })
-    .format(date)
-    .replace(/\.\s?/g, "/")
-    .replace(/\/$/, "");
-}
-
 function formatDateTime(value: string | Date | null | undefined) {
   if (!value) return "-";
 
@@ -418,8 +399,8 @@ function toMemberSummary(row: MemberRow): MemberSummary {
     source: row.first_source || "직접유입",
     campaign: row.first_campaign || "캠페인 없음",
     joinedAt: formatDate(row.signup_at),
-    joinedAtShort: formatShortDate(row.signup_at),
-    lastLoginAt: formatShortDateTime(row.last_login_at),
+    joinedAtShort: formatDate(row.signup_at),
+    lastLoginAt: formatDateTime(row.last_login_at),
     avatarSrc: `/my/avatars/${avatarKey}-profile.png`,
     backgroundColor: row.profile_background_color || "#c4c6ca",
     provider: formatProvider(row.provider),
@@ -430,6 +411,7 @@ function toMemberSummary(row: MemberRow): MemberSummary {
     diagnosisCount: numberValue(row.diagnosis_count),
     resumeCoachingCount: numberValue(row.resume_coaching_count),
     interviewCoachingCount: numberValue(row.interview_coaching_count),
+    communityCount: numberValue(row.post_count) + numberValue(row.comment_count),
     postCount: numberValue(row.post_count),
     commentCount: numberValue(row.comment_count),
   };
@@ -473,7 +455,11 @@ function createMemberSelectSql(whereClause: string) {
     LEFT JOIN LATERAL (
       SELECT COUNT(*) AS diagnosis_count
       FROM public.diagnosis_results results
-      WHERE results.user_id = users.id
+      JOIN public.diagnosis_runs runs ON runs.id = results.diagnosis_run_id
+      WHERE results.user_id = users.id OR runs.user_id = users.id OR EXISTS (
+        SELECT 1 FROM public.diagnosis_login_conversions conversions
+        WHERE conversions.diagnosis_result_id = results.id AND conversions.user_id = users.id
+      )
     ) diagnosis ON TRUE
     LEFT JOIN LATERAL (
       SELECT COUNT(*) AS resume_coaching_count
@@ -563,7 +549,11 @@ export async function getMemberListData(
             WHERE EXISTS (
               SELECT 1
               FROM public.diagnosis_results diagnosis
-              WHERE diagnosis.user_id = users.id
+              JOIN public.diagnosis_runs runs ON runs.id = diagnosis.diagnosis_run_id
+              WHERE diagnosis.user_id = users.id OR runs.user_id = users.id OR EXISTS (
+                SELECT 1 FROM public.diagnosis_login_conversions conversions
+                WHERE conversions.diagnosis_result_id = diagnosis.id AND conversions.user_id = users.id
+              )
             )
           ) AS diagnosis_members,
           COUNT(*) FILTER (
@@ -721,8 +711,12 @@ export async function getMemberDetailData(
             'rawResult', results.raw_result
           ) AS detail
         FROM public.diagnosis_results results
+        JOIN public.diagnosis_runs runs ON runs.id = results.diagnosis_run_id
         LEFT JOIN public.personality_types types ON types.id = results.personality_type_id
-        WHERE results.user_id = $1::uuid
+        WHERE results.user_id = $1::uuid OR runs.user_id = $1::uuid OR EXISTS (
+          SELECT 1 FROM public.diagnosis_login_conversions conversions
+          WHERE conversions.diagnosis_result_id = results.id AND conversions.user_id = $1::uuid
+        )
         ORDER BY results.created_at DESC
       `,
       [memberRow.id],

@@ -1,0 +1,57 @@
+export type CoachingFramework = "PREP" | "CAR" | "PAP" | "STAR";
+export type CoachingReviewSeverity = "check" | "fix" | "keep";
+export type CoachingQuestionInput = { question: string; characterLimit?: number | null };
+export type CoachingQuestionReview = {
+  question: string;
+  tabTitle?: string;
+  answer: string;
+  characterLimit: number | null;
+  characterCount: number;
+  exceededBy: number;
+  frameworks: CoachingFramework[];
+  editCount: number;
+  methodComment: string;
+  resumeEvidence: string[];
+  ncsEvaluations?: Array<{ name: string; comment: string; score: number }>;
+  coachingPoints?: { strengths: string[]; improvements: string[]; ncsSuggestions: string[] };
+  structureChecks?: Array<{ framework: CoachingFramework; status: "good" | "needs_work"; comment: string }>;
+  comparisonEdits?: Array<{ original: string; improved: string; reason: string }>;
+  majorRevisions?: string[];
+  factualChecks?: string[];
+  highlights: Array<{ original: string; severity: CoachingReviewSeverity; label: string; note: string }>;
+  edits: Array<{ index: number; frameworkPart: string; severity: CoachingReviewSeverity; title: string; issue: string; suggestion: string; replacement?: string }>;
+};
+export type CoachingSubmissionReview = {
+  preSubmitChecks: number;
+  fixSuggestions: number;
+  keepCount: number;
+  strongestQuestion?: { questionIndex: number; title: string; ncsName: string; comment: string };
+  priorityImprovement?: { questionIndex: number; title: string; ncsName: string; comment: string };
+  overallAssessment?: { strengths: string; firstFix: string; principle: string };
+  questions: CoachingQuestionReview[];
+};
+
+export type CoachingFeedback = {
+  score: number;
+  summary: string;
+  evaluationScores: Array<{ label: string; score: number }>;
+  detailEvaluation: string[];
+  originalTextExcerpt?: string;
+  questionFeedback: Array<{ question: string; feedback: string; suggestion: string }>;
+  jobConnection?: CoachingSection;
+  improvementSuggestions: string[];
+  sentenceEdits: Array<{ original: string; improved: string; reason: string; good?: boolean }>;
+  sections: CoachingSection[];
+  rewrittenText: string;
+  submissionReview?: CoachingSubmissionReview;
+};
+export type CoachingSentenceEdit = { original: string; improved: string; reason: string; good?: boolean };
+export type CoachingSection = { title: string; status?: "good" | "needs_work"; feedback: string; suggestion?: string; sentenceEdits?: CoachingSentenceEdit[]; example?: string };
+export type CoachingJob = {
+  id: string;
+  institutionName: string;
+  title: string;
+  applicationEndAt: string | null;
+  isManual?: boolean;
+};
+export type CoachingHistoryItem = { id: string; requestId: string; createdAt: string; inputType: "text" | "file"; sourceFilename: string | null; inputText: string; job: CoachingJob | null; result: CoachingFeedback | null; isAnonymous?: boolean; isLocked?: boolean };

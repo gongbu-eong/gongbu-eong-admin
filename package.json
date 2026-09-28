@@ -7,9 +7,16 @@
     "build": "next build",
     "start": "next start -p 3005",
     "lint": "eslint",
-    "test:analytics": "node --test tests/analytics.test.cjs"
+    "test:analytics": "node --test tests/analytics.test.cjs",
+    "sync:coaching-results": "node scripts/sync-coaching-results.mjs",
+    "check:coaching-results": "node scripts/sync-coaching-results.mjs --check",
+    "test:coaching-results": "node --test tests/member-coaching-results.test.mjs",
+    "sync:diagnosis-results": "node scripts/sync-diagnosis-results.mjs",
+    "check:diagnosis-results": "node scripts/sync-diagnosis-results.mjs --check",
+    "test:member-management": "node --test tests/member-management.test.mjs"
   },
   "dependencies": {
+    "html-to-image": "1.11.13",
     "next": "16.3.3",
     "pg": "^8.23.0",
     "react": "19.2.8",

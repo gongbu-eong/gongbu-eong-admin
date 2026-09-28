@@ -128,6 +128,7 @@ export async function AdminMemberListPage({ filters }: AdminMemberListPageProps)
               <span>진단</span>
               <span>AI 자소서</span>
               <span>AI 면접</span>
+              <span>커뮤니티</span>
               <span>상태</span>
               <span>가입일</span>
               <span />
@@ -175,6 +176,7 @@ export async function AdminMemberListPage({ filters }: AdminMemberListPageProps)
                   <span>{member.diagnosisCount.toLocaleString("ko-KR")}회</span>
                   <span>{member.resumeCoachingCount.toLocaleString("ko-KR")}회</span>
                   <span>{member.interviewCoachingCount.toLocaleString("ko-KR")}회</span>
+                  <span title={`게시글 ${member.postCount}개 · 댓글·대댓글 ${member.commentCount}개`}>{member.communityCount.toLocaleString("ko-KR")}회</span>
                   <span>
                     <i className={badgeClass(member.statusLabel)}>
                       {member.statusLabel}
@@ -277,13 +279,14 @@ export async function AdminMemberListPage({ filters }: AdminMemberListPageProps)
                 ["진단 이력", `${selected.diagnosisCount.toLocaleString("ko-KR")}회`],
                 ["자소서 코칭", `${selected.resumeCoachingCount.toLocaleString("ko-KR")}회`],
                 ["면접 코칭", `${selected.interviewCoachingCount.toLocaleString("ko-KR")}회`],
+                ["커뮤니티", `${selected.communityCount.toLocaleString("ko-KR")}회`],
               ]}
             />
             <PreviewSection
               title="커뮤니티 활동"
               rows={[
                 ["작성한 글", `${selected.postCount.toLocaleString("ko-KR")}개`],
-                ["작성한 댓글", `${selected.commentCount.toLocaleString("ko-KR")}개`],
+                ["댓글·대댓글", `${selected.commentCount.toLocaleString("ko-KR")}개`],
               ]}
             />
             <Link className={styles.detailButton} href={`/members/${selected.id}`}>

@@ -1,0 +1,94 @@
+/* The service uses Tailwind preflight. Keep its defaults inside the result only. */
+@layer service-result-reset {
+  :where(.surface, .surface *, .surface *::before, .surface *::after) {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+    border: 0 solid;
+  }
+
+  :where(.surface h1, .surface h2, .surface h3, .surface h4, .surface h5, .surface h6) {
+    font-size: inherit;
+    font-weight: inherit;
+  }
+
+  :where(.surface button, .surface input, .surface select, .surface textarea) {
+    font: inherit;
+    font-feature-settings: inherit;
+    font-variation-settings: inherit;
+    letter-spacing: inherit;
+    color: inherit;
+    border-radius: 0;
+    background-color: transparent;
+  }
+
+  :where(.surface ol, .surface ul, .surface menu) { list-style: none; }
+  :where(.surface b, .surface strong) { font-weight: bolder; }
+  :where(.surface small) { font-size: 80%; }
+  :where(.surface img, .surface svg) { display: block; vertical-align: middle; }
+  :where(.surface img) { max-width: 100%; height: auto; }
+}
+
+.shell {
+  min-height: 100dvh;
+  background: var(--admin-bg);
+}
+
+:global(html):has(.shell) {
+  font-size: 16px;
+  scrollbar-gutter: stable;
+}
+
+.toolbar {
+  position: fixed;
+  top: 0;
+  left: 50%;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: min(100%, 600px);
+  height: 48px;
+  padding: 0 16px;
+  transform: translateX(-50%);
+  border-bottom: 1px solid var(--admin-border);
+  background: #fff;
+  color: var(--admin-muted);
+  font-size: 12px;
+}
+
+.toolbar a {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  color: var(--admin-text);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.toolbar a span { font-size: 22px; }
+
+.surface {
+  --gb-font-sans: "Pretendard", Arial, Helvetica, sans-serif;
+  width: 100%;
+  max-width: 600px;
+  min-height: 100dvh;
+  margin: 0 auto;
+  background: #fff;
+  color: #1a2233;
+  font-family: var(--gb-font-sans);
+  font-size: 16px;
+  font-weight: 400;
+  line-height: 1.5;
+  letter-spacing: 0;
+  word-break: keep-all;
+  overflow-wrap: break-word;
+  -webkit-text-size-adjust: none;
+  text-size-adjust: none;
+}
+
+.surface :where(p, li, dt, dd, span, strong, small, a, button, h1, h2, h3, h4, h5, h6) {
+  word-break: keep-all;
+}

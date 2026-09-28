@@ -1,4 +1,6 @@
 import { AdminMemberDetailPage } from "@/features/admin/components/members/AdminMemberDetailPage";
+import { redirect } from "next/navigation";
+import { requireAdminSession } from "@/features/admin/server/auth.repository";
 
 export const dynamic = "force-dynamic";
 
@@ -27,11 +29,15 @@ export default async function MemberDetailPage({
   const resolvedParams = await params;
   const resolvedSearchParams = await searchParams;
 
+  if (resolvedSearchParams?.item && ["diagnosis", "resume-coaching", "interview-coaching"].includes(resolvedSearchParams.tab || "")) {
+    await requireAdminSession();
+    redirect(`/members/${encodeURIComponent(resolvedParams.userId)}/${resolvedSearchParams.tab}/${encodeURIComponent(resolvedSearchParams.item)}`);
+  }
+
   return (
     <AdminMemberDetailPage
       userId={resolvedParams.userId}
       activeTab={resolvedSearchParams?.tab}
-      selectedItem={resolvedSearchParams?.item}
       logStartDate={resolvedSearchParams?.logStartDate}
       logEndDate={resolvedSearchParams?.logEndDate}
       logEvent={resolvedSearchParams?.logEvent}
