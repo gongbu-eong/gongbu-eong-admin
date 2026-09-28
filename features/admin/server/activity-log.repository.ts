@@ -175,11 +175,26 @@ function formatEvent(value: string | null) {
     login_failed: "로그인 실패",
     attribution_capture: "유입 기록",
     entry: "최초 진입",
-    coaching_start: "코칭 시작",
-    coaching_complete: "코칭 완료",
-    interview_coaching_start: "면접 코칭 시작",
-    interview_coaching_answer: "면접 답변 제출",
+    coaching_start: "자소서 코칭 시작",
+    coaching_complete: "자소서 코칭 완료",
+    coaching_failed: "자소서 코칭 실패",
+    coaching_result_view: "자소서 코칭 결과 열람",
+    resume_coaching_guide_click: "자소서 코칭 가이드 열람",
+    interview_coaching_start: "면접 코칭 시작 요청",
+    interview_coaching_ready: "면접 질문 생성 완료",
+    interview_coaching_failed: "면접 질문 생성 실패",
+    interview_coaching_answer_submit: "면접 답변 제출",
+    interview_coaching_answer: "면접 답변 코칭 완료",
+    interview_coaching_answer_failed: "면접 답변 코칭 실패",
+    interview_coaching_complete_start: "면접 최종 결과 생성 요청",
     interview_coaching_complete: "면접 코칭 완료",
+    interview_coaching_complete_failed: "면접 최종 결과 생성 실패",
+    interview_coaching_result_view: "면접 코칭 결과 열람",
+    interview_coaching_material_download: "면접 자료 다운로드",
+    job_tool_view: "취업도구 열람",
+    job_tool_use: "취업도구 사용",
+    job_tool_calculate: "취업도구 계산·변환",
+    job_tool_copy: "취업도구 결과 복사",
     job_detail_entry_visitor: "공고 상세 시작 방문자",
     job_detail_apply_visitor: "공고 상세 유입 후 지원",
     job_detail_move_visitor: "공고 상세 유입 후 다른 화면 이동",
@@ -214,6 +229,12 @@ function formatScreen(value: string | null) {
     ai_tools: "AI 도구",
     resume_coaching: "AI NCS 자소서 코칭",
     interview_coaching: "AI NCS 면접 코칭",
+    job_tool_salary: "연봉 계산기",
+    job_tool_text: "글자수세기",
+    job_tool_severance: "퇴직금 계산기",
+    job_tool_vacation: "연차/휴가 계산기",
+    job_tool_unemployment: "실업급여 계산기",
+    job_tool_grade: "학점 계산기",
     diagnosis: "강점·성향 진단",
     community: "커뮤니티",
     calendar: "캘린더",
@@ -797,17 +818,18 @@ export async function getActivityLogData(args?: ActivityLogQuery): Promise<Activ
           events.user_id::text,
           NULLIF(CONCAT_WS('|', SPLIT_PART(NULLIF(events.properties->>'ip_address', ''), '/', 1), NULLIF(events.properties->>'user_agent', '')), '')
         ),
-        COALESCE(events.properties->>'path', events.properties->>'screenKey', events.properties->>'targetPath'),
+        COALESCE(events.properties->>'path', events.properties->>'canonical_path', events.properties->>'targetPath', events.properties->>'screenKey'),
         COALESCE(NULLIF(events.properties->>'traffic_channel', ''), NULLIF(events.properties->>'source', ''), 'direct'),
         COALESCE(
           NULLIF(events.properties->>'banner_name', ''),
+          NULLIF(events.properties->>'tool_name', ''),
           NULLIF(events.properties->>'element_text', ''),
           NULLIF(events.properties->>'api_path', ''),
           NULLIF(events.properties->>'targetPath', ''),
           NULLIF(events.properties->>'title', ''),
           events.event_type
         ),
-        events.properties->>'screenKey',
+        COALESCE(events.properties->>'screen_key', events.properties->>'screenKey'),
         CASE
           WHEN events.event_type = 'banner_click' THEN NULLIF(events.properties->>'banner_key', '')
           WHEN events.event_type IN ('job_detail_bookmark_click', 'job_detail_apply_click') THEN events.event_type
@@ -913,7 +935,17 @@ export async function getActivityLogData(args?: ActivityLogQuery): Promise<Activ
         users.display_name,
         users.email::text AS email,
         COALESCE(raw_events.anonymous_id::text, raw_events.session_id::text) AS identity,
-        ${screenSql("split_part(raw_events.path, '?', 1)") } AS normalized_screen_key,
+        CASE
+          WHEN raw_events.path LIKE '/ai-tools/job-tools%' OR raw_events.event_type LIKE 'job_tool_%' THEN
+            'job_tool_' || CASE
+              WHEN COALESCE(raw_events.metadata->>'tool_key', substring(raw_events.path FROM '[?&]tool=([^&#]*)'))
+                IN ('salary', 'text', 'severance', 'vacation', 'unemployment', 'grade')
+              THEN COALESCE(raw_events.metadata->>'tool_key', substring(raw_events.path FROM '[?&]tool=([^&#]*)'))
+              ELSE 'salary' END
+          WHEN raw_events.event_type LIKE 'coaching_%' OR raw_events.event_type LIKE 'resume_coaching_%' THEN 'resume_coaching'
+          WHEN raw_events.event_type LIKE 'interview_coaching_%' THEN 'interview_coaching'
+          ELSE ${screenSql("split_part(raw_events.path, '?', 1)")}
+        END AS normalized_screen_key,
         ${trafficChannelKeySql(
           "COALESCE(daily_channels.source_value, raw_events.source_value)",
           "raw_events.metadata",
@@ -936,7 +968,9 @@ export async function getActivityLogData(args?: ActivityLogQuery): Promise<Activ
       ($3::text = 'attribution' AND event_type = 'attribution_capture') OR
       ($3::text = 'login' AND event_type LIKE 'login_%') OR
       ($3::text = 'entry' AND event_type = 'entry'))
-    AND ($4::text = 'all' OR normalized_screen_key = $4::text OR ($4::text = 'ai_tools' AND path LIKE '/ai-tools%'))
+    AND ($4::text = 'all' OR normalized_screen_key = $4::text
+      OR ($4::text = 'ai_tools' AND path LIKE '/ai-tools%')
+      OR ($4::text = 'job_tools' AND normalized_screen_key LIKE 'job_tool_%'))
     AND ($5::text = 'all' OR acquisition_channel = $5::text)
     AND ($9::text = '' OR event_type = $9::text)
     AND (
