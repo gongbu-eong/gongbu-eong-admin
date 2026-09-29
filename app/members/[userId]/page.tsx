@@ -15,6 +15,7 @@ type MemberDetailPageProps = {
     logEndDate?: string;
     logEvent?: string;
     logScreen?: string;
+    logChannel?: string;
     logKeyword?: string;
     logIp?: string;
     logIncludeExcluded?: string;
@@ -42,6 +43,7 @@ export default async function MemberDetailPage({
       logEndDate={resolvedSearchParams?.logEndDate}
       logEvent={resolvedSearchParams?.logEvent}
       logScreen={resolvedSearchParams?.logScreen}
+      logChannel={resolvedSearchParams?.logChannel}
       logKeyword={resolvedSearchParams?.logKeyword}
       logIp={resolvedSearchParams?.logIp}
       logIncludeExcluded={resolvedSearchParams?.logIncludeExcluded}

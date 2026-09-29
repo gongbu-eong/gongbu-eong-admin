@@ -6,6 +6,7 @@ import {
 } from "./analytics-facts";
 import { getFunnelLogData } from "./traffic.repository";
 import { query } from "@/features/admin/server/db";
+import { trafficChannelOptions } from "../traffic-channel";
 import {
   ensureAnalyticsExclusionSchema,
   excludedEventCondition,
@@ -15,7 +16,7 @@ export type ActivityLogQuery = {
   startDate?: string;
   endDate?: string;
   userId?: string;
-  allDates?: boolean;
+  allDates?: boolean | string;
   limit?: number;
   event?: string;
   eventType?: string;
@@ -34,6 +35,7 @@ export type ActivityLogQuery = {
 };
 
 export type ActivityLogData = {
+  allDates: boolean;
   startDate: string;
   endDate: string;
   event: string;
@@ -212,11 +214,13 @@ function formatChannel(value: string | null) {
     threads: "스레드",
     search: "검색",
     direct: "직접유입",
+    career: "커리어",
     "인스타그램": "인스타그램",
     "블로그": "블로그",
     "스레드": "스레드",
     "검색": "검색",
     "직접유입": "직접유입",
+    "커리어": "커리어",
   };
   return labels[value || ""] || "직접유입";
 }
@@ -353,6 +357,7 @@ function jobCohortSql() {
       WHEN 'threads' THEN '스레드'
       WHEN 'search' THEN '검색'
       WHEN 'direct' THEN '직접유입'
+      WHEN 'career' THEN '커리어'
       ELSE $3::text END)
     ORDER BY c.event_at DESC, c.id DESC
     LIMIT $4 OFFSET $5`;
@@ -365,6 +370,7 @@ function dashboardChannelLabel(value: string) {
     threads: "스레드",
     search: "검색",
     direct: "직접유입",
+    career: "커리어",
   };
   return labels[value] || value;
 }
@@ -600,7 +606,8 @@ export async function getActivityLogData(args?: ActivityLogQuery): Promise<Activ
     month: "2-digit",
     day: "2-digit",
   }).format(new Date());
-  const { startDate, endDate } = args?.allDates
+  const allDates = args?.allDates === true || args?.allDates === "1";
+  const { startDate, endDate } = allDates
     ? { startDate: "1970-01-01", endDate: today }
     : defaultDates(args);
   const requestedEvent = args?.event || "activity";
@@ -617,7 +624,7 @@ export async function getActivityLogData(args?: ActivityLogQuery): Promise<Activ
   const ip = normalizeIp(args?.ip);
   const keywordIp = isIpSearch(keyword) ? normalizeIp(keyword) : "";
   const keywordIdentity = isUuidSearch(keyword) ? keyword : "";
-  const channel = args?.channel || "all";
+  const channel = trafficChannelOptions.find(([key]) => key === args?.channel)?.[0] || "all";
   const from = args?.from || "";
   const funnelProduct = ["diagnosis", "resume_coaching", "interview_coaching"].includes(args?.funnelProduct || "")
     ? args?.funnelProduct || ""
@@ -643,8 +650,10 @@ export async function getActivityLogData(args?: ActivityLogQuery): Promise<Activ
     funnelProduct,
     funnelStep,
   });
+  // Stored dashboard cohorts do not apply per-member or free-text filters.
   if (
     factDetailSelector &&
+    !userId && !keyword && !ip && !includeExcluded && !eventType && !uniqueOnly && !allDates &&
     await hasCompleteDashboardFactDetails(factDetailSelector, startDate, endDate)
   ) {
     const stored = await getDashboardFactDetailRows({
@@ -655,6 +664,7 @@ export async function getActivityLogData(args?: ActivityLogQuery): Promise<Activ
       pageSize: resultPageSize,
     });
     return {
+      allDates,
       startDate,
       endDate,
       event: funnelProduct ? "activity" : event,
@@ -690,6 +700,7 @@ export async function getActivityLogData(args?: ActivityLogQuery): Promise<Activ
     });
 
     return {
+      allDates,
       startDate,
       endDate,
       event: "activity",
@@ -739,6 +750,7 @@ export async function getActivityLogData(args?: ActivityLogQuery): Promise<Activ
     const totalCount = Number(cohortResult.rows[0]?.total_count || 0);
 
     return {
+      allDates,
       startDate,
       endDate,
       event,
@@ -1024,6 +1036,7 @@ export async function getActivityLogData(args?: ActivityLogQuery): Promise<Activ
   const totalCount = Number(rowsResult.rows[0]?.total_count || 0);
 
   return {
+    allDates,
     startDate,
     endDate,
     event,

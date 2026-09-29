@@ -1,4 +1,5 @@
 import { excludedEventCondition, excludedUserCondition } from "./analytics-exclusion.repository";
+import { careerSourcePattern } from "../traffic-channel";
 
 // Prefer the browser identifier, then fall back to the logged-in account when
 // a page/event was recorded without anonymous_id. IP/session IDs are not people.
@@ -11,8 +12,13 @@ export function nonAutomatedUserAgentCondition(userAgent: string) {
   return `COALESCE(${userAgent}, '') !~* '(bot|crawler|spider|headless|lighthouse|phantomjs|selenium|puppeteer|playwright)'`;
 }
 
+export function careerSourceSql(source: string) {
+  return `BTRIM(${source}) ~* '${careerSourcePattern}'`;
+}
+
 export function channelSql(source: string) {
   return `CASE
+    WHEN ${careerSourceSql(source)} THEN '커리어'
     WHEN ${source} ILIKE '%instagram%' OR lower(${source}) = 'ig' OR ${source} = '인스타그램' THEN '인스타그램'
     WHEN ${source} ILIKE '%blog%' OR ${source} = '블로그' THEN '블로그'
     WHEN ${source} ILIKE '%thread%' OR ${source} = '스레드' THEN '스레드'
@@ -36,6 +42,7 @@ export function normalizedTrafficChannelSql(source: string, metadata: string) {
 
 export function trafficChannelKeySql(source: string, metadata: string) {
   return `CASE ${normalizedTrafficChannelSql(source, metadata)}
+    WHEN '커리어' THEN 'career'
     WHEN '인스타그램' THEN 'instagram'
     WHEN '블로그' THEN 'blog'
     WHEN '스레드' THEN 'threads'

@@ -10,7 +10,7 @@ import {
 } from "@/features/admin/server/members.repository";
 import { AdminMemberActions } from "./AdminMemberActions";
 import { ActivityLogTable } from "@/features/admin/components/activity-logs/ActivityLogTable";
-import { TrimmedSearchInput } from "@/features/admin/components/activity-logs/TrimmedSearchInput";
+import { ActivityLogFilterBar } from "@/features/admin/components/activity-logs/ActivityLogFilterBar";
 import styles from "./AdminMemberDetailPage.module.css";
 import logStyles from "@/features/admin/components/traffic/TrafficLogsPage.module.css";
 
@@ -30,35 +30,12 @@ type AdminMemberDetailPageProps = {
   logEndDate?: string | null;
   logEvent?: string | null;
   logScreen?: string | null;
+  logChannel?: string | null;
   logKeyword?: string | null;
   logIp?: string | null;
   logIncludeExcluded?: string | null;
   logPage?: number;
 };
-
-const logEventOptions = [
-  ["activity", "사용자 활동"],
-  ["all", "원본 전체"],
-  ["visit", "방문"],
-  ["product", "기능·버튼 이벤트"],
-  ["login", "로그인"],
-] as const;
-
-const logScreenOptions = [
-  ["all", "전체 화면"],
-  ["home", "홈"],
-  ["jobs", "공고 목록"],
-  ["job_detail", "공고 상세"],
-  ["ai_tools", "AI 도구"],
-  ["resume_coaching", "AI NCS 자소서 코칭"],
-  ["interview_coaching", "AI NCS 면접 코칭"],
-  ["diagnosis", "강약점"],
-  ["community", "커뮤니티"],
-  ["calendar", "캘린더"],
-  ["my", "마이페이지"],
-  ["login", "로그인"],
-  ["other", "기타"],
-] as const;
 
 function badgeClass(label: string) {
   if (label === "정지") return styles.blockedBadge;
@@ -87,6 +64,7 @@ function memberLogHref(
     logEndDate: data.logEndDate,
     logEvent: data.logEvent,
     logScreen: data.logScreen,
+    logChannel: data.logChannel,
   });
   const keyword = selected.keyword ?? data.logKeyword;
   const ip = selected.ip ?? data.logIp;
@@ -103,8 +81,10 @@ function activityLogHref(userId: string, data: MemberLogData) {
     endDate: data.logEndDate,
     event: data.logEvent,
     screen: data.logScreen,
+    channel: data.logChannel,
     userId,
   });
+  if (!data.logStartDate && !data.logEndDate) params.set("allDates", "1");
   if (data.logKeyword) params.set("keyword", data.logKeyword);
   if (data.logIp) params.set("ip", data.logIp);
   if (data.logIncludeExcluded) params.set("includeExcluded", "1");
@@ -121,6 +101,7 @@ function memberIdentityLogHref(
     logStartDate: data.logStartDate,
     logEndDate: data.logEndDate,
     logEvent: "activity",
+    logChannel: data.logChannel,
   });
   const keyword = selected.keyword || selected.ip;
   if (keyword) params.set("logKeyword", keyword);
@@ -140,6 +121,7 @@ export async function AdminMemberDetailPage({
   logEndDate,
   logEvent,
   logScreen,
+  logChannel,
   logKeyword,
   logIp,
   logIncludeExcluded,
@@ -152,6 +134,7 @@ export async function AdminMemberDetailPage({
     endDate: logEndDate,
     event: logEvent,
     screen: logScreen,
+    channel: logChannel,
     keyword: logKeyword,
     ip: logIp,
     includeExcluded: logIncludeExcluded,
@@ -270,43 +253,25 @@ export async function AdminMemberDetailPage({
 
       {tab === "logs" ? (
         <section className={styles.tableCard}>
-          <form className={styles.logFilters} action={`/members/${member.id}`}>
-            <input type="hidden" name="tab" value="logs" />
-            <input type="hidden" name="logPage" value="1" />
-            <label className={logStyles.headerDateField}>
-              <span>시작일</span>
-              <input type="date" name="logStartDate" defaultValue={data.logStartDate} />
-            </label>
-            <label className={logStyles.headerDateField}>
-              <span>종료일</span>
-              <input type="date" name="logEndDate" defaultValue={data.logEndDate} />
-            </label>
-            <label className={logStyles.headerSelectField}>
-              <span>이벤트</span>
-              <select name="logEvent" defaultValue={data.logEvent}>
-                {logEventOptions.map(([value, label]) => <option value={value} key={value}>{label}</option>)}
-              </select>
-            </label>
-            <label className={logStyles.headerSelectField}>
-              <span>화면</span>
-              <select name="logScreen" defaultValue={data.logScreen}>
-                {logScreenOptions.map(([value, label]) => <option value={value} key={value}>{label}</option>)}
-              </select>
-            </label>
-            <label className={logStyles.headerKeywordField}>
-              <span>검색어</span>
-              <TrimmedSearchInput name="logKeyword" placeholder="경로 · 화면 · 상세 · IP" defaultValue={data.logKeyword} />
-            </label>
-            <label className={logStyles.includeExcluded}>
-              <input name="logIncludeExcluded" type="checkbox" value="1" defaultChecked={data.logIncludeExcluded} />
-              제외 IP 포함
-            </label>
-            <button type="submit">조회</button>
-          </form>
+          <div className={styles.logFilters}>
+            <ActivityLogFilterBar
+              key={JSON.stringify([member.id, data.logStartDate, data.logEndDate, data.logEvent, data.logScreen, data.logChannel, data.logKeyword, data.logIncludeExcluded, data.logIp])}
+              memberId={member.id}
+              startDate={data.logStartDate}
+              endDate={data.logEndDate}
+              allDates={!data.logStartDate && !data.logEndDate}
+              event={data.logEvent}
+              screen={data.logScreen}
+              channel={data.logChannel}
+              keyword={data.logKeyword}
+              includeExcluded={data.logIncludeExcluded}
+              ip={data.logIp}
+            />
+          </div>
           <div className={logStyles.tableTop}>
             <div>
               <h2>{data.logEvent === "visit" ? "방문 이력" : data.logEvent === "activity" ? "사용자 활동 이력" : data.logEvent === "all" ? "원본 전체 방문·이벤트 이력" : "이벤트 이력"}</h2>
-              <p>{data.logStartDate} ~ {data.logEndDate} · 방문·이벤트 로그와 동일한 조건으로 최신순 표시합니다.</p>
+              <p>{data.logStartDate || data.logEndDate ? `${data.logStartDate} ~ ${data.logEndDate}` : "전체 기간"} · 방문·이벤트 로그와 동일한 조건으로 최신순 표시합니다.</p>
               <p>총 <strong>{data.logCount.toLocaleString("ko-KR")}</strong>건 · 이 회원의 로그만 조회 중{data.logIp ? ` · ${data.logIp} IP만 조회 중` : ""}</p>
             </div>
             <span className={logStyles.tableActions}>

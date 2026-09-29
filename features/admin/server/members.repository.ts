@@ -1,4 +1,6 @@
 import { query } from "@/features/admin/server/db";
+import { isCareerSource } from "../traffic-channel";
+import { careerSourceSql } from "./analytics-facts";
 import type { ManagementDateInput, ManagementDateRange } from "@/features/admin/management-date";
 import { appendManagementDate } from "./management-date-filter";
 import { getActivityLogData, type ActivityLogRow } from "@/features/admin/server/activity-log.repository";
@@ -6,6 +8,7 @@ import { getActivityLogData, type ActivityLogRow } from "@/features/admin/server
 export type MemberStatusFilter = "all" | "active" | "pending_signup" | "blocked" | "withdrawn" | "forced_withdrawn";
 export type MemberChannelFilter =
   | "all"
+  | "career"
   | "instagram"
   | "blog"
   | "threads"
@@ -34,6 +37,7 @@ export type MemberLogQuery = {
   endDate?: string | null;
   event?: string | null;
   screen?: string | null;
+  channel?: string | null;
   keyword?: string | null;
   ip?: string | null;
   includeExcluded?: string | null;
@@ -144,6 +148,7 @@ export type MemberDetailData = {
   logEndDate: string;
   logEvent: string;
   logScreen: string;
+  logChannel: string;
   logKeyword: string;
   logIp: string;
   logIncludeExcluded: boolean;
@@ -376,6 +381,7 @@ function normalizeStatus(value?: string | null): MemberStatusFilter {
 
 function normalizeChannel(value?: string | null): MemberChannelFilter {
   if (
+    value === "career" ||
     value === "instagram" ||
     value === "blog" ||
     value === "threads" ||
@@ -399,7 +405,7 @@ function toMemberSummary(row: MemberRow): MemberSummary {
     maskedEmail: maskEmail(email),
     gender: formatGender(row.gender),
     ageGroup: formatAgeGroup(row.age_group),
-    source: row.first_source || "직접유입",
+    source: isCareerSource(row.first_source) ? "커리어" : row.first_source || "직접유입",
     campaign: row.first_campaign || "캠페인 없음",
     joinedAt: formatDate(row.signup_at),
     joinedAtShort: formatDate(row.signup_at),
@@ -507,6 +513,7 @@ const memberFilterSql = `
     AND (
       $3::text = 'all'
       OR CASE
+        WHEN ${careerSourceSql("attribution.first_source")} THEN 'career'
         WHEN LOWER(COALESCE(attribution.first_source, '')) LIKE '%instagram%'
           OR LOWER(COALESCE(attribution.first_source, '')) = 'ig'
           THEN 'instagram'
@@ -670,6 +677,7 @@ export async function getMemberDetailData(
     logEndDate: "",
     logEvent: "activity",
     logScreen: "all",
+    logChannel: "all",
     logKeyword: "",
     logIp: "",
     logIncludeExcluded: false,
@@ -811,10 +819,12 @@ export async function getMemberDetailData(
   const activityLogResult = logQuery?.activeTab === "logs"
     ? await getActivityLogData({
         userId: memberRow.id,
+        allDates: !logQuery.startDate && !logQuery.endDate,
         startDate: logQuery.startDate || undefined,
         endDate: logQuery.endDate || undefined,
         event: logQuery.event || "activity",
         screen: logQuery.screen || "all",
+        channel: logQuery.channel || "all",
         keyword: logQuery.keyword || "",
         ip: logQuery.ip || "",
         includeExcluded: logQuery.includeExcluded || "",
@@ -866,10 +876,11 @@ export async function getMemberDetailData(
     logCount: activityLogResult?.totalCount || 0,
     logPage: activityLogResult?.page || 1,
     logTotalPages: activityLogResult?.totalPages || 1,
-    logStartDate: activityLogResult?.startDate || "",
-    logEndDate: activityLogResult?.endDate || "",
+    logStartDate: activityLogResult?.allDates ? "" : activityLogResult?.startDate || "",
+    logEndDate: activityLogResult?.allDates ? "" : activityLogResult?.endDate || "",
     logEvent: activityLogResult?.event || "activity",
     logScreen: activityLogResult?.screen || "all",
+    logChannel: activityLogResult?.channel || "all",
     logKeyword: activityLogResult?.keyword || "",
     logIp: activityLogResult?.ip || "",
     logIncludeExcluded: activityLogResult?.includeExcluded || false,

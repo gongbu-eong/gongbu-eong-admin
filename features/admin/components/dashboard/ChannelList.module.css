@@ -83,6 +83,14 @@
   background: var(--admin-surface-soft);
 }
 
+.career {
+  background: #fff;
+}
+
+.career img {
+  object-fit: contain;
+}
+
 .threads {
   background: #000000;
 }

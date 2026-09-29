@@ -1,4 +1,6 @@
+import { isCareerSource } from "../traffic-channel";
 import {
+  careerSourceSql,
   conversionCtes,
   nonAutomatedUserAgentCondition,
   trafficFactsCtes,
@@ -442,7 +444,8 @@ function normalizeDate(value?: string | null) {
 function normalizeLogChannel(
   value?: TrafficLogQuery["channel"],
 ): TrafficLogChannelFilter {
-  return value === "instagram" ||
+  return value === "career" ||
+    value === "instagram" ||
     value === "blog" ||
     value === "threads" ||
     value === "search" ||
@@ -549,6 +552,7 @@ function createDelta(current: number, previous: number, suffix: string) {
 }
 
 function mapChannelLabel(source: string | null) {
+  if (isCareerSource(source)) return "커리어";
   const trimmed = (source || "").trim();
   if (trimmed === "식별 불가") return trimmed;
   if (trafficChannelOrder.includes(trimmed)) return trimmed;
@@ -579,6 +583,7 @@ function mapChannelLabel(source: string | null) {
 }
 
 function mapChannelFilterToLabel(channel: TrafficLogChannelFilter) {
+  if (channel === "career") return "커리어";
   if (channel === "instagram") return "인스타그램";
   if (channel === "blog") return "블로그";
   if (channel === "threads") return "스레드";
@@ -676,7 +681,8 @@ async function getDailyChannelTrendRows(params: unknown[]) {
           ('블로그', 2),
           ('스레드', 3),
           ('검색', 4),
-          ('직접유입', 5)
+          ('직접유입', 5),
+          ('커리어', 6)
         ) AS channel(label, sort_order)
       ),
       normalized_logs AS (
@@ -684,6 +690,7 @@ async function getDailyChannelTrendRows(params: unknown[]) {
           days.day_kst,
           logs.visitor_key,
           CASE
+            WHEN ${careerSourceSql("logs.source_value")} THEN '커리어'
             WHEN LOWER(logs.source_value) LIKE '%instagram%'
               OR LOWER(logs.source_value) = 'ig'
               THEN '인스타그램'
@@ -1104,6 +1111,7 @@ export async function getTrafficLogData(
           ELSE 'other'
         END AS screen_key,
         CASE
+          WHEN ${careerSourceSql("source_value")} THEN '커리어'
           WHEN LOWER(source_value) LIKE '%instagram%'
             OR LOWER(source_value) = 'ig'
             THEN '인스타그램'

@@ -28,7 +28,7 @@ function makeHref(
 ) {
   const selectedIp = selected.ip ?? data.ip;
   const selectedKeyword = selected.keyword ?? data.keyword;
-  const params = new URLSearchParams({ startDate: data.startDate, endDate: data.endDate });
+  const params = new URLSearchParams(data.allDates ? { allDates: "1" } : { startDate: data.startDate, endDate: data.endDate });
   if (data.event !== "all") params.set("event", data.event);
   if (data.eventType) params.set("eventType", data.eventType);
   if (data.cohort) params.set("cohort", data.cohort);
@@ -52,10 +52,11 @@ function makeIdentityHref(
   selected: { ip?: string; keyword?: string },
 ) {
   const params = new URLSearchParams({
-    startDate: data.startDate,
-    endDate: data.endDate,
+    ...(data.allDates ? { allDates: "1" } : { startDate: data.startDate, endDate: data.endDate }),
     event: "activity",
   });
+  if (data.channel !== "all") params.set("channel", data.channel);
+  if (data.userId) params.set("userId", data.userId);
   const keyword = selected.keyword || selected.ip;
   if (keyword) params.set("keyword", keyword);
   if (data.includeExcluded) params.set("includeExcluded", "1");
@@ -80,13 +81,17 @@ export async function ActivityLogsPage({ filters }: ActivityLogsPageProps) {
       description="가입자와 비회원의 방문 및 실제 사용자 행동을 시간순으로 확인합니다."
       headerActions={
         <ActivityLogFilterBar
+          key={JSON.stringify([data.startDate, data.endDate, data.allDates, data.event, data.screen, data.channel, data.keyword, data.includeExcluded, data.userId, data.ip])}
           startDate={data.startDate}
           endDate={data.endDate}
           event={data.event}
           screen={data.screen}
+          channel={data.channel}
+          allDates={data.allDates}
           keyword={data.keyword}
           includeExcluded={data.includeExcluded}
           userId={data.userId}
+          ip={data.ip}
         />
       }
     >

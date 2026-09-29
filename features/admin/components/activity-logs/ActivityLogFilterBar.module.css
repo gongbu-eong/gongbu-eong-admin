@@ -1,5 +1,6 @@
 .bar {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: flex-end;
   gap: 8px;
@@ -72,6 +73,18 @@
   color: #fff;
   font-size: 12px;
   font-weight: 900;
+}
+
+.resetPeriod {
+  flex: 0 0 auto;
+  height: 34px;
+  padding: 0 10px;
+  border: 1px solid var(--admin-border);
+  border-radius: 8px;
+  background: var(--admin-surface);
+  color: var(--admin-muted);
+  font-size: 12px;
+  font-weight: 700;
 }
 
 @media (max-width: 1500px) {
