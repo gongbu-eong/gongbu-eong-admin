@@ -23,7 +23,7 @@ export function ActivityLogTable({ rows, emptyMessage, renderIp, renderIdentity 
           {rows.length ? rows.map((row) => (
             <tr key={row.id}>
               <td data-label="접속일시">{row.eventAt}</td>
-              <td data-label="주체"><span className={styles.userCell}><strong>{row.userName}</strong><em>{row.userEmail || "비회원"}</em></span></td>
+              <td data-label="주체"><span className={styles.userCell}><strong>{row.userName}</strong><em>{row.userEmail || (row.userId ? "이메일 없음" : "비회원")}</em></span></td>
               <td data-label="식별 정보" className={styles.pathCell} title={row.identity}>{renderIdentity ? renderIdentity(row) : row.identity}</td>
               <td data-label="IP">{renderIp ? renderIp(row) : row.ipAddress}</td>
               <td data-label="기기"><span className={`${styles.deviceBadge} ${row.device === "모바일" ? styles.deviceMobile : row.device === "웹" ? styles.deviceWeb : styles.deviceUnknown}`}>{row.device}</span></td>

@@ -1,4 +1,6 @@
 import { db, query } from "./db";
+import { randomUUID } from "node:crypto";
+import { setTimeout as delay } from "node:timers/promises";
 import type { PoolClient } from "pg";
 import {
   dashboardProductFactDetailsForDaySql,
@@ -25,6 +27,7 @@ type QueueItem = {
   day: string;
   revision: number;
   attempts: number;
+  locked_by: string;
 };
 
 const productScopes = new Set<AnalyticsFactScope>([
@@ -110,7 +113,7 @@ async function claimNext(workerId: string): Promise<QueueItem | null> {
       FROM candidate
       WHERE queue.scope = candidate.scope
         AND queue.day = candidate.day
-      RETURNING queue.scope, queue.day::text, queue.revision, queue.attempts
+      RETURNING queue.scope, queue.day::text, queue.revision, queue.attempts, queue.locked_by
     `,
     [workerId],
   );
@@ -223,7 +226,8 @@ async function saveFacts(
     );
   }
 
-    // Do not consume work that arrived while this day's SQL was running.
+  // The write transaction holds the current claim's row lock. Keep any
+  // revision queued by events that arrived after the read snapshot started.
   const deleted = await client.query(
       `
         DELETE FROM public.analytics_fact_refresh_queue
@@ -236,7 +240,7 @@ async function saveFacts(
     await client.query(
         `
           UPDATE public.analytics_fact_refresh_queue
-          SET locked_at = NULL, locked_by = NULL, updated_at = NOW()
+          SET locked_at = NULL, locked_by = NULL, last_error = NULL, updated_at = NOW()
           WHERE scope = $1 AND day = $2::date
         `,
         [item.scope, item.day],
@@ -265,11 +269,13 @@ async function saveFacts(
   }
 }
 
-async function refreshItem(item: QueueItem) {
+async function refreshItemAttempt(item: QueueItem) {
   const client = await db.connect();
 
   try {
-    await client.query("BEGIN ISOLATION LEVEL REPEATABLE READ");
+    // Summary and drilldown rows must be calculated from the same snapshot.
+    // Queue triggers can keep updating the revision while these reads run.
+    await client.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");
     const factResult = await client.query<AnalyticsFact>(factsSql(item.scope), [item.day]);
     const relation = await client.query<{ ready: boolean }>(
       `SELECT to_regclass('public.analytics_dashboard_fact_details') IS NOT NULL
@@ -281,6 +287,21 @@ async function refreshItem(item: QueueItem) {
       ? await client.query<AnalyticsFactDetail>(detailSql, [item.day])
       : { rows: [] as AnalyticsFactDetail[] };
     const rows = factsForScope(item.scope, factResult.rows);
+    await client.query("COMMIT");
+
+    // A fresh snapshot avoids 40001 when an event updated the queue during
+    // aggregation. Fence expired claims before replacing any stored facts.
+    await client.query("BEGIN ISOLATION LEVEL READ COMMITTED");
+    const owned = await client.query(
+      `SELECT 1 FROM public.analytics_fact_refresh_queue
+       WHERE scope = $1 AND day = $2::date AND locked_by = $3
+       FOR UPDATE`,
+      [item.scope, item.day, item.locked_by],
+    );
+    if (!owned.rows.length) {
+      await client.query("ROLLBACK");
+      return null;
+    }
 
     await saveFacts(client, item, rows, detailResult.rows, detailsSchemaReady);
     await client.query("COMMIT");
@@ -290,6 +311,18 @@ async function refreshItem(item: QueueItem) {
     throw error;
   } finally {
     client.release();
+  }
+}
+
+async function refreshItem(item: QueueItem) {
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      return await refreshItemAttempt(item);
+    } catch (error) {
+      const code = error && typeof error === "object" && "code" in error ? error.code : null;
+      if (attempt >= 2 || (code !== "40001" && code !== "40P01")) throw error;
+      await delay(50 * 2 ** attempt + Math.floor(Math.random() * 50));
+    }
   }
 }
 
@@ -305,9 +338,9 @@ async function releaseFailedItem(item: QueueItem, error: unknown) {
           available_at = NOW() + ($4::text || ' seconds')::interval,
           last_error = $3,
           updated_at = NOW()
-      WHERE scope = $1 AND day = $2::date
+      WHERE scope = $1 AND day = $2::date AND locked_by = $5
     `,
-    [item.scope, item.day, message, String(retrySeconds)],
+    [item.scope, item.day, message, String(retrySeconds), item.locked_by],
   );
 }
 
@@ -322,12 +355,12 @@ export async function processAnalyticsFactQueue({
   const cappedLimit = Math.max(1, Math.min(20, Math.floor(limit)));
 
   for (let index = 0; index < cappedLimit; index += 1) {
-    const item = await claimNext(workerId);
+    const item = await claimNext(`${workerId}:${randomUUID()}`);
     if (!item) break;
 
     try {
       const rowCount = await refreshItem(item);
-      processed.push({ scope: item.scope, day: item.day, rowCount });
+      if (rowCount !== null) processed.push({ scope: item.scope, day: item.day, rowCount });
     } catch (error) {
       await releaseFailedItem(item, error);
       throw error;

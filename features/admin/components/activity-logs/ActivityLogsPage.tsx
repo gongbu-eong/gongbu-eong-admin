@@ -114,7 +114,7 @@ export async function ActivityLogsPage({ filters }: ActivityLogsPageProps) {
             rows={data.rows}
             emptyMessage="조회 조건에 해당하는 로그가 없습니다."
             renderIp={(row) => row.ipAddress !== "-" ? <Link href={makeIdentityHref(data, { ip: row.ipAddress })}>{row.ipAddress}</Link> : row.ipAddress}
-            renderIdentity={(row) => row.identity !== "회원 식별됨"
+            renderIdentity={(row) => !["회원 식별됨", "식별 정보 없음", "-"].includes(row.identity)
               ? <Link href={makeIdentityHref(data, { keyword: row.identity })}>{row.identity}</Link>
               : row.identity}
           />

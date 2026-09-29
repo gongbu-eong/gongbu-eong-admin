@@ -83,7 +83,7 @@ test("member date filters distinguish signup and last login while preserving sel
 });
 before(async () => {
   await database.exec(`
-    CREATE TABLE users(id uuid PRIMARY KEY, nickname text, display_name text, email text, gender text, age_group text,
+    CREATE TABLE users(id uuid PRIMARY KEY, nickname text, display_name text, email text, phone text, gender text, age_group text,
       profile_avatar_key text, profile_background_color text, status text DEFAULT 'active', blocked_until timestamptz,
       rejoin_blocked_until timestamptz, signup_completed_at timestamptz, created_at timestamptz DEFAULT NOW(), last_login_at timestamptz,
       selected_diagnosis_result_id uuid);

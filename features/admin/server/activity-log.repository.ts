@@ -61,6 +61,7 @@ export type ActivityLogData = {
 
 export type ActivityLogRow = {
   id: string;
+  userId: string;
   eventAt: string;
   event: string;
   userName: string;
@@ -76,6 +77,7 @@ export type ActivityLogRow = {
 
 type ActivityLogDbRow = {
   id: string;
+  user_id: string | null;
   event_at: string;
   event_type: string | null;
   user_name: string | null;
@@ -268,11 +270,12 @@ function screenKeyFromPath(path: string) {
 function mapActivityRows(rows: ActivityLogDbRow[]): ActivityLogRow[] {
   return rows.map((row) => ({
     id: row.id,
+    userId: row.user_id || "",
     eventAt: formatDateTime(row.event_at),
     event: formatEvent(row.event_type),
-    userName: row.user_name || "비회원",
-    userEmail: row.user_email || "",
-    identity: row.anonymous_id || row.session_id || "회원 식별됨",
+    userName: row.user_name?.trim() || row.user_email?.trim() || (row.user_id ? "회원" : "비회원"),
+    userEmail: row.user_email?.trim() || "",
+    identity: row.anonymous_id || row.session_id || row.user_id || "식별 정보 없음",
     ipAddress: row.ip_address || "-",
     path: row.path || "-",
     detail: row.detail || "-",
@@ -336,9 +339,11 @@ function jobCohortSql() {
     )
     SELECT
       c.id,
+      c.user_id,
       c.event_at,
       c.event_type,
-      COALESCE(u.nickname, u.display_name) AS user_name,
+      COALESCE(NULLIF(BTRIM(u.community_nickname), ''), NULLIF(BTRIM(u.nickname), ''),
+        NULLIF(BTRIM(u.display_name), '')) AS user_name,
       u.email::text AS user_email,
       c.anonymous_id,
       c.session_id,
@@ -563,9 +568,11 @@ async function getDashboardFactDetailRows({
     `
       SELECT
         details.scope || ':' || details.day::text || ':' || details.metric || ':' || details.entity_key AS id,
+        details.user_id,
         details.event_at,
         details.metric AS event_type,
-        COALESCE(users.nickname, users.display_name) AS user_name,
+        COALESCE(NULLIF(BTRIM(users.community_nickname), ''), NULLIF(BTRIM(users.nickname), ''),
+          NULLIF(BTRIM(users.display_name), '')) AS user_name,
         users.email::text AS user_email,
         details.anonymous_id,
         NULL::uuid AS session_id,
@@ -723,6 +730,7 @@ export async function getActivityLogData(args?: ActivityLogQuery): Promise<Activ
       userId: userId || "",
       rows: funnel.rows.map((row) => ({
         id: row.id,
+        userId: row.userId,
         eventAt: row.eventAt,
         event: funnel.stepLabel,
         userName: row.userName,
@@ -807,7 +815,7 @@ export async function getActivityLogData(args?: ActivityLogQuery): Promise<Activ
       WHERE access.created_at >= ($1::date AT TIME ZONE 'Asia/Seoul')
         AND access.created_at < (($2::date + 1) AT TIME ZONE 'Asia/Seoul')
         AND ($11::uuid IS NULL OR access.user_id = $11::uuid)
-        AND ($12::uuid IS NULL OR access.anonymous_id = $12::uuid OR access.session_id = $12::uuid)
+        AND ($12::uuid IS NULL OR access.anonymous_id = $12::uuid OR access.session_id = $12::uuid OR access.user_id = $12::uuid)
         AND ($10::text = '' OR SPLIT_PART(access.ip_address::text, '/', 1) = $10::text)
         AND (${includeExcluded ? "TRUE" : excludedEventCondition("access.user_id", "access.ip_address")})
         AND ${nonAutomatedUserAgentCondition("access.user_agent")}
@@ -851,7 +859,7 @@ export async function getActivityLogData(args?: ActivityLogQuery): Promise<Activ
       WHERE events.created_at >= ($1::date AT TIME ZONE 'Asia/Seoul')
         AND events.created_at < (($2::date + 1) AT TIME ZONE 'Asia/Seoul')
         AND ($11::uuid IS NULL OR events.user_id = $11::uuid)
-        AND ($12::uuid IS NULL OR events.anonymous_id = $12::uuid)
+        AND ($12::uuid IS NULL OR events.anonymous_id = $12::uuid OR events.user_id = $12::uuid)
         AND ($10::text = '' OR SPLIT_PART(events.properties->>'ip_address', '/', 1) = $10::text)
         AND (${includeExcluded ? "TRUE" : excludedEventCondition("events.user_id", "NULLIF(events.properties->>'ip_address', '')")})
         AND ${nonAutomatedUserAgentCondition("NULLIF(events.properties->>'user_agent', '')")}
@@ -877,7 +885,7 @@ export async function getActivityLogData(args?: ActivityLogQuery): Promise<Activ
       WHERE events.created_at >= ($1::date AT TIME ZONE 'Asia/Seoul')
         AND events.created_at < (($2::date + 1) AT TIME ZONE 'Asia/Seoul')
         AND ($11::uuid IS NULL OR events.user_id = $11::uuid)
-        AND ($12::uuid IS NULL OR events.anonymous_id = $12::uuid)
+        AND ($12::uuid IS NULL OR events.anonymous_id = $12::uuid OR events.user_id = $12::uuid)
         AND ($10::text = '' OR SPLIT_PART(events.ip_address::text, '/', 1) = $10::text)
         AND (${includeExcluded ? "TRUE" : excludedEventCondition("events.user_id", "events.ip_address")})
       UNION ALL
@@ -902,7 +910,7 @@ export async function getActivityLogData(args?: ActivityLogQuery): Promise<Activ
       WHERE events.created_at >= ($1::date AT TIME ZONE 'Asia/Seoul')
         AND events.created_at < (($2::date + 1) AT TIME ZONE 'Asia/Seoul')
         AND ($11::uuid IS NULL OR events.user_id = $11::uuid)
-        AND $12::uuid IS NULL
+        AND ($12::uuid IS NULL OR events.user_id = $12::uuid)
         AND ($10::text = '' OR SPLIT_PART(events.ip_address::text, '/', 1) = $10::text)
         AND (${includeExcluded ? "TRUE" : excludedEventCondition("events.user_id", "events.ip_address")})
       UNION ALL
@@ -927,7 +935,7 @@ export async function getActivityLogData(args?: ActivityLogQuery): Promise<Activ
       WHERE events.created_at >= ($1::date AT TIME ZONE 'Asia/Seoul')
         AND events.created_at < (($2::date + 1) AT TIME ZONE 'Asia/Seoul')
         AND ($11::uuid IS NULL OR events.user_id = $11::uuid)
-        AND ($12::uuid IS NULL OR events.anonymous_id = $12::uuid)
+        AND ($12::uuid IS NULL OR events.anonymous_id = $12::uuid OR events.user_id = $12::uuid)
         AND ($10::text = '' OR SPLIT_PART(events.ip_address::text, '/', 1) = $10::text)
         AND (${includeExcluded ? "TRUE" : excludedEventCondition("events.user_id", "events.ip_address")})
     ), daily_channels AS (
@@ -945,8 +953,9 @@ export async function getActivityLogData(args?: ActivityLogQuery): Promise<Activ
         raw_events.*,
         users.nickname,
         users.display_name,
+        users.community_nickname,
         users.email::text AS email,
-        COALESCE(raw_events.anonymous_id::text, raw_events.session_id::text) AS identity,
+        COALESCE(raw_events.anonymous_id::text, raw_events.session_id::text, raw_events.user_id::text) AS identity,
         CASE
           WHEN raw_events.path LIKE '/ai-tools/job-tools%' OR raw_events.event_type LIKE 'job_tool_%' THEN
             'job_tool_' || CASE
@@ -990,7 +999,8 @@ export async function getActivityLogData(args?: ActivityLogQuery): Promise<Activ
       ($10::text = '' AND (
         $6::text = '' OR path ILIKE $6::text OR detail ILIKE $6::text OR
         ip_address ILIKE $6::text OR identity ILIKE $6::text OR
-        nickname ILIKE $6::text OR display_name ILIKE $6::text OR email ILIKE $6::text
+        nickname ILIKE $6::text OR display_name ILIKE $6::text OR
+        community_nickname ILIKE $6::text OR email ILIKE $6::text
       ))
     )
     AND ($7::text = '' OR ip_address = $7::text)
@@ -1026,7 +1036,9 @@ export async function getActivityLogData(args?: ActivityLogQuery): Promise<Activ
     ? "filtered WHERE visitor_rank = 1"
     : `normalized ${whereSql}`;
   const rowsResult = await query<ActivityLogDbRow>(`${sourceSql}
-    SELECT id, event_at, event_type, COALESCE(nickname, display_name) AS user_name,
+    SELECT id, user_id, event_at, event_type,
+      COALESCE(NULLIF(BTRIM(community_nickname), ''), NULLIF(BTRIM(nickname), ''),
+        NULLIF(BTRIM(display_name), '')) AS user_name,
       email AS user_email, anonymous_id, session_id, ip_address, user_agent, path, detail,
       acquisition_channel, normalized_screen_key AS screen_key,
       COUNT(*) OVER()::text AS total_count

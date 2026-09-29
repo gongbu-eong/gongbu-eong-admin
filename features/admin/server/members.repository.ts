@@ -56,6 +56,7 @@ export type MemberSummary = {
   name: string;
   email: string;
   maskedEmail: string;
+  phone: string;
   gender: string;
   ageGroup: string;
   source: string;
@@ -159,6 +160,7 @@ type MemberRow = {
   nickname: string | null;
   display_name: string | null;
   email: string | null;
+  phone: string | null;
   gender: string | null;
   age_group: string | null;
   profile_avatar_key: string | null;
@@ -315,22 +317,34 @@ function formatDateTime(value: string | Date | null | undefined) {
 }
 
 function formatGender(value: string | null) {
-  if (value === "female") return "여";
-  if (value === "male") return "남";
-  return "-";
+  const normalized = value?.trim().toLowerCase();
+  if (normalized === "female" || normalized === "f") return "여성";
+  if (normalized === "male" || normalized === "m") return "남성";
+  return "없음";
 }
 
 function formatAgeGroup(value: string | null) {
+  const normalized = value?.trim().toLowerCase() || "";
   const labels: Record<string, string> = {
     teens: "10대",
-    early_20s: "20~24세",
-    late_20s: "25~29세",
-    early_30s: "30~34세",
-    late_30s: "35~39세",
-    over_40: "40세 이상",
+    early_20s: "20대",
+    late_20s: "20대",
+    early_30s: "30대",
+    late_30s: "30대",
+    over_40: "40대 이상",
   };
 
-  return value ? labels[value] || value : "-";
+  if (Object.hasOwn(labels, normalized)) return labels[normalized];
+  if (/^90\s*[+~-]$/.test(normalized)) return "90대 이상";
+
+  const range = /^(\d{1,2})\s*[-~]\s*(\d{1,2})$/.exec(normalized);
+  if (!range) return "없음";
+  const lower = Number(range[1]);
+  const upper = Number(range[2]);
+  const decade = Math.floor(lower / 10) * 10;
+  if (upper < lower || Math.floor(upper / 10) * 10 !== decade) return "없음";
+  if (decade === 0) return "10대 미만";
+  return decade === 90 ? "90대 이상" : `${decade}대`;
 }
 
 function formatProvider(value: string | null) {
@@ -403,6 +417,7 @@ function toMemberSummary(row: MemberRow): MemberSummary {
     name,
     email,
     maskedEmail: maskEmail(email),
+    phone: row.phone?.trim() || "없음",
     gender: formatGender(row.gender),
     ageGroup: formatAgeGroup(row.age_group),
     source: isCareerSource(row.first_source) ? "커리어" : row.first_source || "직접유입",
@@ -433,6 +448,7 @@ function createMemberSelectSql(whereClause: string) {
       users.nickname,
       users.display_name,
       users.email::TEXT AS email,
+      users.phone,
       users.gender,
       users.age_group,
       users.profile_avatar_key,

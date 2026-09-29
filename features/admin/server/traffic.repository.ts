@@ -92,6 +92,7 @@ type BannerClickLogRow = {
 
 type FunnelLogRow = {
   id: string;
+  user_id: string | null;
   event_at: string;
   user_name: string | null;
   user_email: string | null;
@@ -1282,13 +1283,14 @@ export async function getFunnelLogData(
     enriched_events AS (
       SELECT
         deduped_events.id,
+        deduped_events.user_id,
         deduped_events.event_at,
         COALESCE(
-          NULLIF(users.community_nickname, ''),
-          NULLIF(users.nickname, ''),
-          NULLIF(users.display_name, ''),
-          NULLIF(users.email::text, ''),
-          '익명'
+          NULLIF(BTRIM(users.community_nickname), ''),
+          NULLIF(BTRIM(users.nickname), ''),
+          NULLIF(BTRIM(users.display_name), ''),
+          NULLIF(BTRIM(users.email::text), ''),
+          CASE WHEN deduped_events.user_id IS NOT NULL THEN '회원' ELSE '비회원' END
         ) AS user_name,
         COALESCE(users.email::text, oauth.provider_email::text, '-') AS user_email,
         oauth.provider::text AS provider,
@@ -1355,6 +1357,7 @@ export async function getFunnelLogData(
     rows: rowsResult.rows.map((row) => ({
       id: row.id,
       eventAt: formatLogDateTime(row.event_at),
+      userId: row.user_id || "",
       userName: row.user_name || "익명",
       userEmail: row.user_email || "-",
       provider: mapProvider(row.provider),

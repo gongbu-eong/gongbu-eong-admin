@@ -195,8 +195,9 @@ export async function AdminMemberDetailPage({
             <InfoRow label="연령대" value={member.ageGroup} />
             <InfoRow label="이메일" value={member.maskedEmail} />
             <InfoRow label="유입 경로" value={`${member.source} · ${member.campaign}`} />
-            <InfoRow label="성별" value={member.gender} />
+            <InfoRow label="휴대폰번호" value={member.phone} />
             <InfoRow label="상태" value={member.statusLabel} />
+            <InfoRow label="성별" value={member.gender} />
             {member.blockedUntil !== "-" ? <InfoRow label="정지 만료일" value={member.blockedUntil} /> : null}
             {member.rejoinBlockedUntil !== "-" ? <InfoRow label="재가입 제한일" value={member.rejoinBlockedUntil} /> : null}
           </div>
@@ -283,7 +284,7 @@ export async function AdminMemberDetailPage({
             rows={data.logs}
             emptyMessage="조회 조건에 해당하는 로그가 없습니다."
             renderIp={(row) => row.ipAddress !== "-" ? <Link href={memberIdentityLogHref(member.id, data, { ip: row.ipAddress })}>{row.ipAddress}</Link> : row.ipAddress}
-            renderIdentity={(row) => row.identity !== "회원 식별됨"
+              renderIdentity={(row) => !["회원 식별됨", "식별 정보 없음", "-"].includes(row.identity)
               ? <Link href={memberIdentityLogHref(member.id, data, { keyword: row.identity })}>{row.identity}</Link>
               : row.identity}
           />

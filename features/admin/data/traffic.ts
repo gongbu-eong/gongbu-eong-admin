@@ -177,6 +177,7 @@ export type FunnelLogQuery = {
 
 export type FunnelLogItem = {
   id: string;
+  userId: string;
   eventAt: string;
   userName: string;
   userEmail: string;

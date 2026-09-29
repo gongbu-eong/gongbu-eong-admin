@@ -211,6 +211,7 @@ export async function AdminMemberListPage({ filters }: AdminMemberListPageProps)
               rows={[
                 ["닉네임", selected.name],
                 ["이메일", selected.maskedEmail],
+                ["휴대폰번호", selected.phone],
                 ["성별", selected.gender],
                 ["연령대", selected.ageGroup],
               ]}
