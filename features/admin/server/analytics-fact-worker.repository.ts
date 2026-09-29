@@ -345,16 +345,23 @@ async function releaseFailedItem(item: QueueItem, error: unknown) {
 }
 
 export async function processAnalyticsFactQueue({
-  limit = 3,
+  limit = 1,
   workerId = `admin-${process.pid}`,
+  maxRunMs = 20_000,
 }: {
   limit?: number;
   workerId?: string;
+  maxRunMs?: number;
 } = {}) {
   const processed: Array<{ scope: AnalyticsFactScope; day: string; rowCount: number }> = [];
-  const cappedLimit = Math.max(1, Math.min(20, Math.floor(limit)));
+  const cappedLimit = Number.isFinite(limit) ? Math.max(1, Math.min(20, Math.floor(limit))) : 1;
+  const budgetMs = Number.isFinite(maxRunMs) ? Math.max(1, maxRunMs) : 20_000;
+  const startedAt = Date.now();
 
   for (let index = 0; index < cappedLimit; index += 1) {
+    // Finish the current atomic refresh, but do not keep starting work in a
+    // long HTTP batch. This is not a timeout for an individual SQL statement.
+    if (index > 0 && Date.now() - startedAt >= budgetMs) break;
     const item = await claimNext(`${workerId}:${randomUUID()}`);
     if (!item) break;
 
