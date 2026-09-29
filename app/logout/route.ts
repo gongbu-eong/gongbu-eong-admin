@@ -1,4 +1,3 @@
-import { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import {
   clearAdminSession,
@@ -6,26 +5,20 @@ import {
   getAdminSessionCookieOptions,
 } from "@/features/admin/server/auth.repository";
 
-export async function POST(request: NextRequest) {
+export async function POST() {
   await clearAdminSession();
 
-  const response = NextResponse.redirect(getPublicUrl(request, "/login"));
+  // A relative redirect preserves the public host/port behind reverse proxies.
+  // 303 changes the logout POST into a GET of the login page.
+  const response = new NextResponse(null, {
+    status: 303,
+    headers: { Location: "/login", "Cache-Control": "no-store" },
+  });
   response.cookies.set(getAdminSessionCookieName(), "", {
     ...getAdminSessionCookieOptions(0),
     maxAge: 0,
+    expires: new Date(0),
   });
 
   return response;
-}
-
-function getPublicUrl(request: NextRequest, pathname: string) {
-  const host =
-    request.headers.get("x-forwarded-host") ||
-    request.headers.get("host") ||
-    request.nextUrl.host;
-  const proto =
-    request.headers.get("x-forwarded-proto") ||
-    (host.includes("localhost") ? "http" : "https");
-
-  return new URL(pathname, `${proto}://${host}`);
 }

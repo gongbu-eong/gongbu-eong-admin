@@ -1,5 +1,6 @@
 import {
   nonAutomatedUserAgentCondition,
+  pageTrafficChannelsCtes,
   screenSql,
   trafficChannelKeySql,
   trafficFactsCtes,
@@ -938,7 +939,12 @@ export async function getActivityLogData(args?: ActivityLogQuery): Promise<Activ
         AND ($12::uuid IS NULL OR events.anonymous_id = $12::uuid OR events.user_id = $12::uuid)
         AND ($10::text = '' OR SPLIT_PART(events.ip_address::text, '/', 1) = $10::text)
         AND (${includeExcluded ? "TRUE" : excludedEventCondition("events.user_id", "events.ip_address")})
-    ), daily_channels AS (
+    ), activity_pages AS (
+      SELECT id, (event_at AT TIME ZONE 'Asia/Seoul')::date AS day,
+        visitor_key, event_at, source_value AS raw_source, metadata
+      FROM raw_events WHERE event_source = 'access' AND event_type = 'page_view'
+    ), ${pageTrafficChannelsCtes("activity_pages", "activity_page_channels")},
+    daily_channels AS (
       SELECT DISTINCT ON ((event_at AT TIME ZONE 'Asia/Seoul')::date, visitor_key)
         (event_at AT TIME ZONE 'Asia/Seoul')::date AS day,
         visitor_key,
@@ -968,11 +974,15 @@ export async function getActivityLogData(args?: ActivityLogQuery): Promise<Activ
           ELSE ${screenSql("split_part(raw_events.path, '?', 1)")}
         END AS normalized_screen_key,
         ${trafficChannelKeySql(
-          "COALESCE(daily_channels.source_value, raw_events.source_value)",
+          `CASE WHEN raw_events.event_source = 'access'
+            THEN COALESCE(activity_page_channels.channel, raw_events.source_value)
+            ELSE COALESCE(daily_channels.source_value, raw_events.source_value) END`,
           "raw_events.metadata",
         )} AS acquisition_channel
       FROM raw_events
       LEFT JOIN public.users users ON users.id = raw_events.user_id
+      LEFT JOIN activity_page_channels
+        ON raw_events.event_source = 'access' AND activity_page_channels.id = raw_events.id
       LEFT JOIN daily_channels
         ON daily_channels.day = (raw_events.event_at AT TIME ZONE 'Asia/Seoul')::date
         AND daily_channels.visitor_key = raw_events.visitor_key

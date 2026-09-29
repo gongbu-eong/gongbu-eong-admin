@@ -20,7 +20,7 @@ export function ChannelList({
       <header className={styles.header}>
         <div>
           <h2>유입 채널 순 방문자</h2>
-          <DashboardNote>조회 기간 동안 채널별로 들어온 사람은 총 {total}명입니다.</DashboardNote>
+          <DashboardNote>전체 {total}명 · 채널별 중복 제거, 여러 채널 이용자는 각 채널에 포함됩니다.</DashboardNote>
         </div>
       </header>
       <div className={styles.list}>

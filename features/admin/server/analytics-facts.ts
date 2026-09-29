@@ -26,8 +26,7 @@ export function channelSql(source: string) {
     ELSE '직접유입' END`;
 }
 
-// Every channel-filtered surface uses the first page-view source of the KST
-// day. Internal moves retain the captured external attribution when present.
+// Internal moves retain the captured external attribution when present.
 export function normalizedTrafficChannelSql(source: string, metadata: string) {
   return channelSql(`CASE
     WHEN ${source} ~* '(page_move|page move|internal|페이지 이동)'
@@ -49,6 +48,33 @@ export function trafficChannelKeySql(source: string, metadata: string) {
     WHEN '검색' THEN 'search'
     ELSE 'direct'
   END`;
+}
+
+// Inputs are internal CTE names. Carry the preceding source only for internal
+// moves without attribution; never overwrite an explicitly recorded channel.
+export function pageTrafficChannelsCtes(input: string, output: string) {
+  return `
+    ${output}_sources AS (
+      SELECT id, day, COALESCE(visitor_key, id::text) AS browser_key, event_at,
+        CASE WHEN raw_source ~* '(page_move|page move|internal|페이지 이동)'
+          THEN COALESCE(NULLIF(metadata #>> '{attribution,current,source}', ''),
+            NULLIF(metadata #>> '{attribution,first,source}', ''))
+          ELSE raw_source END AS source
+      FROM ${input}
+    ),
+    ${output}_groups AS (
+      SELECT *, COUNT(source) OVER (
+        PARTITION BY day, browser_key ORDER BY event_at, id
+        ROWS UNBOUNDED PRECEDING
+      ) AS source_group
+      FROM ${output}_sources
+    ),
+    ${output} AS (
+      SELECT id, ${channelSql(`COALESCE(FIRST_VALUE(source) OVER (
+        PARTITION BY day, browser_key, source_group ORDER BY event_at, id
+      ), 'direct')`)} AS channel
+      FROM ${output}_groups
+    )`;
 }
 
 export function screenSql(path: string) {
@@ -174,10 +200,12 @@ export function trafficFactsCtes(
         AND ${nonAutomatedUserAgentCondition("p.user_agent")}
         ${pageCandidateCondition}
     ),
+    ${pageTrafficChannelsCtes("analytics_pages_raw", "analytics_page_channels")},
     analytics_pages AS MATERIALIZED (
       SELECT p.*, ${screenSql("p.path")} AS screen,
-        ${normalizedTrafficChannelSql("raw_source", "metadata")} AS channel
+        channels.channel
       FROM analytics_pages_raw p
+      JOIN analytics_page_channels channels USING (id)
     ),
     analytics_products AS MATERIALIZED (
       SELECT e.id::text AS id, ${cookieKey("e")} AS visitor_key,
@@ -405,8 +433,11 @@ const dashboardTrafficFactsSqlBody = `
       SELECT day, 'visitor' AS metric, channel, '' AS dimension, COUNT(*)::bigint AS value
       FROM analytics_daily_users GROUP BY day, channel
       UNION ALL
-      SELECT p.day, 'screen', COALESCE(u.channel, p.channel), p.screen, COUNT(*)
-      FROM analytics_pages p LEFT JOIN analytics_daily_users u USING (day, visitor_key) GROUP BY 1, 3, 4
+      SELECT day, 'channel_visitor', channel, '', COUNT(DISTINCT visitor_key)
+      FROM analytics_pages WHERE visitor_key IS NOT NULL GROUP BY day, channel
+      UNION ALL
+      SELECT p.day, 'screen', p.channel, p.screen, COUNT(*)
+      FROM analytics_pages p GROUP BY 1, 3, 4
       UNION ALL
       SELECT p.day, 'banner', COALESCE(u.channel, '식별 불가'), p.banner_key, COUNT(*)
       FROM analytics_products p LEFT JOIN analytics_daily_users u USING (day, visitor_key)
@@ -487,6 +518,12 @@ export function dashboardTrafficFactDetailsForDaySql() {
       WHERE p.visitor_key IS NOT NULL
       ORDER BY p.day, p.visitor_key, p.event_at, p.id
     ),
+    analytics_daily_channel_people AS MATERIALIZED (
+      SELECT DISTINCT ON (p.day, p.visitor_key, p.channel) p.*
+      FROM analytics_pages p
+      WHERE p.visitor_key IS NOT NULL
+      ORDER BY p.day, p.visitor_key, p.channel, p.event_at, p.id
+    ),
     details AS (
       SELECT p.day, 'visitor'::text AS metric, p.channel, ''::text AS dimension,
         p.visitor_key AS entity_key, p.event_at, p.user_id, p.anonymous_id,
@@ -494,12 +531,17 @@ export function dashboardTrafficFactDetailsForDaySql() {
         '일별 첫 방문'::text AS detail
       FROM analytics_daily_people p
       UNION ALL
-      SELECT p.day, 'screen', COALESCE(u.channel, p.channel), p.screen,
+      SELECT p.day, 'channel_visitor', p.channel, '',
+        p.visitor_key || ':' || p.channel, p.event_at, p.user_id, p.anonymous_id,
+        p.ip_address, p.user_agent, p.original_path,
+        '채널별 일별 첫 방문'
+      FROM analytics_daily_channel_people p
+      UNION ALL
+      SELECT p.day, 'screen', p.channel, p.screen,
         'p:' || p.id, p.event_at, p.user_id, p.anonymous_id,
         p.ip_address, p.user_agent, p.original_path,
         '페이지 방문'::text
       FROM analytics_pages p
-      LEFT JOIN analytics_daily_users u USING (day, visitor_key)
       UNION ALL
       SELECT p.day, 'banner', COALESCE(u.channel, '식별 불가'), p.banner_key,
         'e:' || p.id, p.event_at, p.user_id, p.anonymous_id,
@@ -678,8 +720,11 @@ export function dashboardFactsSql(product: string) {
       SELECT day, 'visitor' AS metric, channel, '' AS dimension, COUNT(*)::bigint AS value
       FROM analytics_daily_users GROUP BY day, channel
       UNION ALL
-      SELECT p.day, 'screen', COALESCE(u.channel, p.channel), p.screen, COUNT(*)
-      FROM analytics_pages p LEFT JOIN analytics_daily_users u USING (day, visitor_key) GROUP BY 1, 3, 4
+      SELECT day, 'channel_visitor', channel, '', COUNT(DISTINCT visitor_key)
+      FROM analytics_pages WHERE visitor_key IS NOT NULL GROUP BY day, channel
+      UNION ALL
+      SELECT p.day, 'screen', p.channel, p.screen, COUNT(*)
+      FROM analytics_pages p GROUP BY 1, 3, 4
       UNION ALL
       SELECT p.day, 'banner', COALESCE(u.channel, '식별 불가'), p.banner_key, COUNT(*)
       FROM analytics_products p LEFT JOIN analytics_daily_users u USING (day, visitor_key)

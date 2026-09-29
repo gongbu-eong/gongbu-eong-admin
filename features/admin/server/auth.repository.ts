@@ -169,14 +169,14 @@ export async function requireAdminSession() {
 }
 
 export async function getAdminSession() {
-  await ensureAdminAuthSchema();
-
   const cookieStore = await cookies();
   const sessionToken = cookieStore.get(ADMIN_SESSION_COOKIE)?.value;
 
   if (!sessionToken) {
     return null;
   }
+
+  await ensureAdminAuthSchema();
 
   const result = await query<AdminSessionRow>(
     `
@@ -212,19 +212,17 @@ export async function getAdminSession() {
 }
 
 export async function clearAdminSession() {
-  await ensureAdminAuthSchema();
-
   const cookieStore = await cookies();
   const sessionToken = cookieStore.get(ADMIN_SESSION_COOKIE)?.value;
 
   if (sessionToken) {
+    await ensureAdminAuthSchema();
     await query(
       "DELETE FROM public.admin_sessions WHERE session_token_hash = $1",
       [hashValue(sessionToken)],
     );
   }
 
-  cookieStore.delete(ADMIN_SESSION_COOKIE);
 }
 
 export async function getRequestMetadata(): Promise<LoginMetadata> {

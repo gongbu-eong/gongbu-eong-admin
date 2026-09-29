@@ -574,8 +574,9 @@ export async function getDashboardData({
       if (f.metric === "screen") {
         if (selectedChannelKey === "all" || f.channel === selectedChannelLabel) add(f.day, "screen:" + f.dimension, value);
       } else if (f.metric === "visitor") {
-        add(f.day, "channel:" + f.channel, value);
         add(f.day, "visitor", value);
+      } else if (f.metric === "channel_visitor") {
+        add(f.day, "channel:" + f.channel, value);
       } else if (f.metric === "banner") {
         add(f.day, "banner:" + f.dimension, value);
         add(f.day, "banner:total", value);
@@ -629,10 +630,10 @@ export async function getDashboardData({
     return "/activity-logs?" + params.toString();
   };
   const sortedChannels = dashboardChannelOptions.slice(1).map(item =>
-    [item.label, sum(selectedFacts.filter(f => f.channel === item.label), "visitor")] as const,
+    [item.label, sum(selectedFacts.filter(f => f.channel === item.label), "channel_visitor")] as const,
   ).sort((a, b) => b[1] - a[1]);
   const maxChannelCount = Math.max(...sortedChannels.map(([, n]) => n), 1);
-  const totalChannelCount = sortedChannels.reduce((n, [, count]) => n + count, 0);
+  const totalChannelCount = todayVisitors;
   const bannerClickResult = { rows: Object.keys(bannerLabels).map(key => ({
     banner_key: key, banner_name: bannerLabels[key],
     click_count: sum(selectedFacts, "banner", key), unique_count: sum(selectedFacts, "banner_uv", key),

@@ -379,7 +379,7 @@ export async function AdminDashboardPage({
             {
               label: "조회 기간 순 방문자 합계",
               value: `${numberFrom(channelTotal).toLocaleString("ko-KR")}명`,
-              description: "채널별 일별 순 방문자 합계",
+              description: "채널 간 중복을 제거한 일별 순 방문자 합계",
             },
             {
               label: "가장 큰 유입 채널",
@@ -389,14 +389,14 @@ export async function AdminDashboardPage({
             {
               label: "상위 채널 비중",
               value: topChannel?.value || "0%",
-              description: "전체 채널 순 방문자 중 가장 큰 채널의 비중",
+              description: "전체 순 방문자 중 해당 채널을 이용한 비율",
             },
           ]}
         />
         <div className={styles.sectionGrid}>
           <TrendViewCard
             title="유입 채널 순 방문자 추이"
-            subtitle="최근 7일 · 일별 순 방문자, 당일 최초 유입 채널"
+            subtitle="최근 7일 · 실제 유입 채널별 일별 순 방문자"
             listSubtitle={`목록 · ${dashboardPeriodText}`}
             yLabels={trafficChannelScale.yLabels}
             series={trafficChannelTrend}
