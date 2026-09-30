@@ -15,6 +15,8 @@ export type NotificationRecipient = {
   name: string;
   email: string;
   phone: string;
+  status: string;
+  statusLabel: string;
   ageGroup: string;
   templateGroup: string;
   kakaoEnabled: boolean;
@@ -40,6 +42,8 @@ type RecipientRow = {
   name: string | null;
   email: string | null;
   phone: string | null;
+  status: string;
+  signup_at: Date | string;
   age_group: string | null;
   template_group: string | null;
   kakao_enabled: boolean;
@@ -70,6 +74,8 @@ export async function getNotificationRecipientData(args: {
           COALESCE(users.nickname, users.display_name, users.community_nickname, '이름 없음') AS name,
           users.email::text AS email,
           users.phone,
+          users.status::text AS status,
+          COALESCE(users.signup_completed_at, users.created_at) AS signup_at,
           users.age_group,
           CASE
             WHEN users.age_group IN ('10-19', 'teens') THEN '10s'
@@ -92,12 +98,13 @@ export async function getNotificationRecipientData(args: {
           ORDER BY consents.updated_at DESC, consents.created_at DESC, consents.id DESC
           LIMIT 1
         ) marketing_consent ON TRUE
-        WHERE users.status = 'active'
+        WHERE NULLIF(BTRIM(users.phone), '') IS NOT NULL
       ), recipients AS (
         SELECT
           recipient_base.*,
           (
             NULLIF(BTRIM(recipient_base.phone), '') IS NOT NULL
+            AND recipient_base.status = 'active'
             AND recipient_base.template_group IS NOT NULL
             AND recipient_base.kakao_enabled
             AND recipient_base.marketing_agreed
@@ -111,6 +118,10 @@ export async function getNotificationRecipientData(args: {
           OR name ILIKE $1
           OR COALESCE(email, '') ILIKE $1
           OR COALESCE(phone, '') ILIKE $1
+          OR (
+            $4::text <> ''
+            AND REGEXP_REPLACE(COALESCE(phone, ''), '[^0-9]', '', 'g') LIKE $4
+          )
         )
           AND ($2::text = 'all' OR template_group = $2)
           AND (
@@ -124,10 +135,17 @@ export async function getNotificationRecipientData(args: {
         COUNT(*) OVER() AS total_filtered,
         COUNT(*) FILTER (WHERE eligible) OVER() AS eligible_filtered
       FROM filtered
-      ORDER BY name, id
-      LIMIT $4 OFFSET $5
+      ORDER BY signup_at DESC, id DESC
+      LIMIT $5 OFFSET $6
     `,
-    [keyword ? `%${keyword}%` : "", age, eligibility, PAGE_SIZE, offset],
+    [
+      keyword ? `%${keyword}%` : "",
+      age,
+      eligibility,
+      phoneSearchPattern(keyword),
+      PAGE_SIZE,
+      offset,
+    ],
   );
 
   const total = Number(result.rows[0]?.total_filtered || 0);
@@ -151,7 +169,8 @@ function toRecipient(row: RecipientRow): NotificationRecipient {
   const phone = row.phone?.trim() || "";
   const templateGroup = row.template_group || "";
   let unavailableReason = "";
-  if (!phone) unavailableReason = "휴대폰번호 없음";
+  if (row.status !== "active") unavailableReason = `${formatStatus(row.status)} 회원`;
+  else if (!phone) unavailableReason = "휴대폰번호 없음";
   else if (!templateGroup) unavailableReason = "지원 연령대 없음";
   else if (!row.kakao_enabled) unavailableReason = "카카오 알림 미연결";
   else if (!row.marketing_agreed) unavailableReason = "마케팅 수신 미동의";
@@ -161,6 +180,8 @@ function toRecipient(row: RecipientRow): NotificationRecipient {
     name: row.name || "이름 없음",
     email: row.email || "없음",
     phone: phone || "없음",
+    status: row.status,
+    statusLabel: formatStatus(row.status),
     ageGroup: formatAgeGroup(row.age_group),
     templateGroup: formatTemplateGroup(templateGroup),
     kakaoEnabled: Boolean(row.kakao_enabled),
@@ -168,6 +189,22 @@ function toRecipient(row: RecipientRow): NotificationRecipient {
     eligible: Boolean(row.eligible),
     unavailableReason,
   };
+}
+
+function phoneSearchPattern(keyword: string) {
+  const digits = keyword.replace(/\D/g, "");
+  return digits.length >= 3 ? `%${digits}%` : "";
+}
+
+function formatStatus(value: string) {
+  const labels: Record<string, string> = {
+    active: "정상",
+    pending_signup: "가입 대기",
+    blocked: "이용 제한",
+    withdrawn: "탈퇴",
+    forced_withdrawn: "강제 탈퇴",
+  };
+  return labels[value] || value;
 }
 
 function normalizeAgeFilter(value?: string): NotificationAgeFilter {

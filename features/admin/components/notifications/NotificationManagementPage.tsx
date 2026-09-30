@@ -65,7 +65,7 @@ export function NotificationManagementPage({ data }: { data: NotificationRecipie
   return (
     <main className={styles.page}>
       <section className={styles.metrics} aria-label="알림 발송 대상 현황">
-        <Metric label="조회 회원" value={data.total} />
+        <Metric label="휴대폰 보유 회원" value={data.total} />
         <Metric label="발송 가능" value={data.eligible} tone="success" />
         <Metric label="발송 제외" value={data.unavailable} tone="muted" />
         <Metric label="현재 선택" value={selectedIds.length} tone="primary" />
@@ -115,7 +115,7 @@ export function NotificationManagementPage({ data }: { data: NotificationRecipie
                   <td className={styles.checkboxCell}>
                     <input type="checkbox" disabled={!recipient.eligible} checked={selectedIds.includes(recipient.id)} onChange={() => toggleOne(recipient.id)} aria-label={`${recipient.name} 선택`} />
                   </td>
-                  <td><strong>{recipient.name}</strong><small>{recipient.email}</small></td>
+                  <td><strong>{recipient.name}</strong><small>{recipient.email} · {recipient.statusLabel}</small></td>
                   <td><span>{recipient.ageGroup}</span><small>{recipient.templateGroup}</small></td>
                   <td>{recipient.phone}</td>
                   <td><span>카카오 {recipient.kakaoEnabled ? "동의" : "미동의"}</span><small>마케팅 {recipient.marketingAgreed ? "동의" : "미동의"}</small></td>
