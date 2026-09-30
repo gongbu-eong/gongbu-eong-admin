@@ -135,6 +135,18 @@ export const navItems: NavItem[] = [
     icon: "/admin-assets/nav-user.png",
   },
   {
+    label: "알림 발송 관리",
+    key: "notifications",
+    href: "/notifications",
+    icon: "/admin-assets/nav-notice.png",
+  },
+  {
+    label: "배너 관리",
+    key: "banners",
+    href: "/banners",
+    icon: "/admin-assets/nav-content.png",
+  },
+  {
     label: "공고 관리",
     key: "jobs",
     href: "/jobs",
