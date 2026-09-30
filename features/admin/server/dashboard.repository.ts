@@ -93,8 +93,6 @@ const dashboardProductOptions = [
 
 const bannerLabels: Record<string, string> = {
   job_detail_resume_a: "자소서 배너 A",
-  job_detail_resume_b: "자소서 배너 B",
-  job_detail_strength_a: "강약점 배너 A",
   job_detail_strength_b: "강약점 배너 B",
   job_detail_bookmark_click: "공고 찜하고 준비하기",
   job_detail_apply_click: "지원하기/이메일 지원하기",
@@ -578,6 +576,7 @@ export async function getDashboardData({
       } else if (f.metric === "channel_visitor") {
         add(f.day, "channel:" + f.channel, value);
       } else if (f.metric === "banner") {
+        if (!(f.dimension in bannerLabels)) continue;
         add(f.day, "banner:" + f.dimension, value);
         add(f.day, "banner:total", value);
       } else if (f.metric === "signup" || f.metric === "new_signup" || f.metric === "calendar" || metricAliases[f.metric]) {
