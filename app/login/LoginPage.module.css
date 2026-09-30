@@ -135,4 +135,10 @@
   font-size: 14px;
   font-weight: 700;
   line-height: 20px;
+  word-break: keep-all;
+}
+
+.form button:disabled {
+  cursor: wait;
+  opacity: 0.72;
 }

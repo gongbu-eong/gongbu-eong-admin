@@ -1,24 +1,16 @@
 import Image from "next/image";
 import { redirect } from "next/navigation";
 import { getAdminSession } from "@/features/admin/server/auth.repository";
-import { loginAdmin } from "./actions";
+import { AdminLoginForm } from "./AdminLoginForm";
 import styles from "./LoginPage.module.css";
-
-type LoginPageProps = {
-  searchParams: Promise<{
-    error?: string;
-  }>;
-};
 
 export const dynamic = "force-dynamic";
 
-export default async function LoginPage({ searchParams }: LoginPageProps) {
+export default async function LoginPage() {
   const session = await getAdminSession();
   if (session) {
     redirect("/");
   }
-
-  const params = await searchParams;
 
   return (
     <main className={styles.page}>
@@ -34,36 +26,7 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
           />
           <span>관리자</span>
         </div>
-        <form className={styles.form} action={loginAdmin}>
-          {params.error === "invalid" || params.error === "locked" ? (
-            <p className={styles.error} role="alert">
-              {params.error === "locked"
-                ? "로그인 시도 횟수를 초과했습니다. 30분 후 다시 시도해 주세요."
-                : "아이디 또는 비밀번호를 확인해 주세요."}
-            </p>
-          ) : null}
-          <label>
-            <span>아이디</span>
-            <input
-              name="loginId"
-              type="text"
-              autoComplete="username"
-              placeholder="아이디"
-              required
-            />
-          </label>
-          <label>
-            <span>비밀번호</span>
-            <input
-              name="password"
-              type="password"
-              autoComplete="current-password"
-              placeholder="비밀번호"
-              required
-            />
-          </label>
-          <button type="submit">로그인</button>
-        </form>
+        <AdminLoginForm />
       </section>
     </main>
   );

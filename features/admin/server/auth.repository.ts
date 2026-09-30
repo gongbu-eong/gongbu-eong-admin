@@ -7,7 +7,6 @@ import { db, query } from "@/features/admin/server/db";
 const ADMIN_SESSION_COOKIE = "gongbu_eong_admin_session";
 const SESSION_MAX_AGE_SECONDS = 60 * 60 * 8;
 const MAX_FAILED_LOGIN_ATTEMPTS = 5;
-const LOGIN_LOCKOUT_MINUTES = 30;
 
 type AdminUserRow = {
   id: string;
@@ -137,8 +136,7 @@ export async function authenticateAdmin(
       return { ok: false as const, reason: "invalid" as const };
     }
 
-    const lockedUntil = user.locked_until ? new Date(user.locked_until) : null;
-    if (lockedUntil && lockedUntil.getTime() > Date.now()) {
+    if (user.locked_until) {
       await recordAdminLoginEvent(client, {
         userId: user.id,
         loginId: user.login_id,
@@ -164,13 +162,13 @@ export async function authenticateAdmin(
             failed_login_attempts = $2,
             last_failed_login_at = NOW(),
             locked_until = CASE
-              WHEN $3::boolean THEN NOW() + ($4::integer * INTERVAL '1 minute')
+              WHEN $3::boolean THEN NOW()
               ELSE NULL
             END,
             updated_at = NOW()
           WHERE id = $1
         `,
-        [user.id, failedAttempts, shouldLock, LOGIN_LOCKOUT_MINUTES],
+        [user.id, failedAttempts, shouldLock],
       );
 
       await recordAdminLoginEvent(client, {

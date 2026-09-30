@@ -9,7 +9,22 @@ import {
 } from "@/features/admin/server/auth.repository";
 import { cookies } from "next/headers";
 
-export async function loginAdmin(formData: FormData) {
+export type LoginAdminState = {
+  error: "invalid" | "locked" | null;
+  loginId: string;
+  attempt: number;
+};
+
+export const initialLoginAdminState: LoginAdminState = {
+  error: null,
+  loginId: "",
+  attempt: 0,
+};
+
+export async function loginAdmin(
+  previousState: LoginAdminState,
+  formData: FormData,
+): Promise<LoginAdminState> {
   const loginId = String(formData.get("loginId") || "");
   const password = String(formData.get("password") || "");
   const metadata = await getRequestMetadata();
@@ -17,7 +32,11 @@ export async function loginAdmin(formData: FormData) {
   const result = await authenticateAdmin(loginId, password, metadata);
 
   if (!result.ok) {
-    redirect(`/login?error=${result.reason}`);
+    return {
+      error: result.reason,
+      loginId,
+      attempt: previousState.attempt + 1,
+    };
   }
 
   const cookieStore = await cookies();
