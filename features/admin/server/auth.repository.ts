@@ -1,10 +1,13 @@
 import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { createHash, randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
-import { query } from "@/features/admin/server/db";
+import type { PoolClient } from "pg";
+import { db, query } from "@/features/admin/server/db";
 
 const ADMIN_SESSION_COOKIE = "gongbu_eong_admin_session";
 const SESSION_MAX_AGE_SECONDS = 60 * 60 * 8;
+const MAX_FAILED_LOGIN_ATTEMPTS = 5;
+const LOGIN_LOCKOUT_MINUTES = 30;
 
 type AdminUserRow = {
   id: string;
@@ -12,6 +15,8 @@ type AdminUserRow = {
   password_hash: string;
   name: string;
   status: string;
+  failed_login_attempts: number;
+  locked_until: Date | string | null;
 };
 
 type AdminSessionRow = {
@@ -44,10 +49,20 @@ export async function ensureAdminAuthSchema() {
       name VARCHAR(80) NOT NULL DEFAULT '관리자',
       role VARCHAR(40) NOT NULL DEFAULT 'super_admin',
       status VARCHAR(20) NOT NULL DEFAULT 'active',
+      failed_login_attempts INTEGER NOT NULL DEFAULT 0,
+      last_failed_login_at TIMESTAMPTZ,
+      locked_until TIMESTAMPTZ,
       last_login_at TIMESTAMPTZ,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
+  `);
+
+  await query(`
+    ALTER TABLE public.admin_users
+      ADD COLUMN IF NOT EXISTS failed_login_attempts INTEGER NOT NULL DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS last_failed_login_at TIMESTAMPTZ,
+      ADD COLUMN IF NOT EXISTS locked_until TIMESTAMPTZ
   `);
 
   await query(`
@@ -86,76 +101,153 @@ export async function authenticateAdmin(
   await ensureAdminAuthSchema();
 
   const normalizedLoginId = loginId.trim();
-  const userResult = await query<AdminUserRow>(
-    `
-      SELECT id, login_id, password_hash, name, status
-      FROM public.admin_users
-      WHERE login_id = $1
-      LIMIT 1
-    `,
-    [normalizedLoginId],
-  );
-  const user = userResult.rows[0];
+  const client = await db.connect();
 
-  if (!user || user.status !== "active" || !verifyPassword(password, user.password_hash)) {
-    await recordAdminLoginEvent({
-      userId: user?.id ?? null,
-      loginId: normalizedLoginId,
-      success: false,
-      failureReason: user?.status !== "active" ? "inactive_admin" : "invalid_credentials",
+  try {
+    await client.query("BEGIN");
+
+    const userResult = await client.query<AdminUserRow>(
+      `
+        SELECT
+          id,
+          login_id,
+          password_hash,
+          name,
+          status,
+          failed_login_attempts,
+          locked_until
+        FROM public.admin_users
+        WHERE login_id = $1
+        LIMIT 1
+        FOR UPDATE
+      `,
+      [normalizedLoginId],
+    );
+    const user = userResult.rows[0];
+
+    if (!user || user.status !== "active") {
+      await recordAdminLoginEvent(client, {
+        userId: user?.id ?? null,
+        loginId: normalizedLoginId,
+        success: false,
+        failureReason: user ? "inactive_admin" : "invalid_credentials",
+        metadata,
+      });
+      await client.query("COMMIT");
+      return { ok: false as const, reason: "invalid" as const };
+    }
+
+    const lockedUntil = user.locked_until ? new Date(user.locked_until) : null;
+    if (lockedUntil && lockedUntil.getTime() > Date.now()) {
+      await recordAdminLoginEvent(client, {
+        userId: user.id,
+        loginId: user.login_id,
+        success: false,
+        failureReason: "login_locked",
+        metadata,
+      });
+      await client.query("COMMIT");
+      return { ok: false as const, reason: "locked" as const };
+    }
+
+    if (!verifyPassword(password, user.password_hash)) {
+      const failedAttempts = Math.min(
+        Number(user.failed_login_attempts || 0) + 1,
+        MAX_FAILED_LOGIN_ATTEMPTS,
+      );
+      const shouldLock = failedAttempts >= MAX_FAILED_LOGIN_ATTEMPTS;
+
+      await client.query(
+        `
+          UPDATE public.admin_users
+          SET
+            failed_login_attempts = $2,
+            last_failed_login_at = NOW(),
+            locked_until = CASE
+              WHEN $3::boolean THEN NOW() + ($4::integer * INTERVAL '1 minute')
+              ELSE NULL
+            END,
+            updated_at = NOW()
+          WHERE id = $1
+        `,
+        [user.id, failedAttempts, shouldLock, LOGIN_LOCKOUT_MINUTES],
+      );
+
+      await recordAdminLoginEvent(client, {
+        userId: user.id,
+        loginId: user.login_id,
+        success: false,
+        failureReason: shouldLock ? "account_locked" : "invalid_credentials",
+        metadata,
+      });
+      await client.query("COMMIT");
+      return {
+        ok: false as const,
+        reason: shouldLock ? ("locked" as const) : ("invalid" as const),
+      };
+    }
+
+    const sessionToken = randomBytes(32).toString("hex");
+    const sessionTokenHash = hashValue(sessionToken);
+
+    await client.query(
+      `
+        INSERT INTO public.admin_sessions (
+          admin_user_id,
+          session_token_hash,
+          ip_address,
+          user_agent,
+          expires_at
+        )
+        VALUES ($1, $2, $3, $4, NOW() + INTERVAL '8 hours')
+      `,
+      [
+        user.id,
+        sessionTokenHash,
+        metadata.ipAddress || null,
+        metadata.userAgent || null,
+      ],
+    );
+
+    await client.query(
+      `
+        UPDATE public.admin_users
+        SET
+          failed_login_attempts = 0,
+          last_failed_login_at = NULL,
+          locked_until = NULL,
+          last_login_at = NOW(),
+          updated_at = NOW()
+        WHERE id = $1
+      `,
+      [user.id],
+    );
+
+    await recordAdminLoginEvent(client, {
+      userId: user.id,
+      loginId: user.login_id,
+      success: true,
+      failureReason: null,
       metadata,
     });
-    return null;
+    await client.query("COMMIT");
+
+    return {
+      ok: true as const,
+      sessionToken,
+      maxAge: SESSION_MAX_AGE_SECONDS,
+      user: {
+        id: user.id,
+        loginId: user.login_id,
+        name: user.name,
+      },
+    };
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
   }
-
-  const sessionToken = randomBytes(32).toString("hex");
-  const sessionTokenHash = hashValue(sessionToken);
-
-  await query(
-    `
-      INSERT INTO public.admin_sessions (
-        admin_user_id,
-        session_token_hash,
-        ip_address,
-        user_agent,
-        expires_at
-      )
-      VALUES ($1, $2, $3, $4, NOW() + INTERVAL '8 hours')
-    `,
-    [
-      user.id,
-      sessionTokenHash,
-      metadata.ipAddress || null,
-      metadata.userAgent || null,
-    ],
-  );
-
-  await query(
-    `
-      UPDATE public.admin_users
-      SET last_login_at = NOW(), updated_at = NOW()
-      WHERE id = $1
-    `,
-    [user.id],
-  );
-
-  await recordAdminLoginEvent({
-    userId: user.id,
-    loginId: user.login_id,
-    success: true,
-    failureReason: null,
-    metadata,
-  });
-
-  return {
-    sessionToken,
-    maxAge: SESSION_MAX_AGE_SECONDS,
-    user: {
-      id: user.id,
-      loginId: user.login_id,
-      name: user.name,
-    },
-  };
 }
 
 export async function requireAdminSession() {
@@ -249,14 +341,14 @@ export function getAdminSessionCookieName() {
   return ADMIN_SESSION_COOKIE;
 }
 
-async function recordAdminLoginEvent(args: {
+async function recordAdminLoginEvent(client: PoolClient, args: {
   userId: string | null;
   loginId: string;
   success: boolean;
   failureReason: string | null;
   metadata: LoginMetadata;
 }) {
-  await query(
+  await client.query(
     `
       INSERT INTO public.admin_login_events (
         admin_user_id,

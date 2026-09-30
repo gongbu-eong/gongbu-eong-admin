@@ -35,9 +35,11 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
           <span>관리자</span>
         </div>
         <form className={styles.form} action={loginAdmin}>
-          {params.error === "invalid" ? (
+          {params.error === "invalid" || params.error === "locked" ? (
             <p className={styles.error} role="alert">
-              아이디 또는 비밀번호를 확인해 주세요.
+              {params.error === "locked"
+                ? "로그인 시도 횟수를 초과했습니다. 30분 후 다시 시도해 주세요."
+                : "아이디 또는 비밀번호를 확인해 주세요."}
             </p>
           ) : null}
           <label>

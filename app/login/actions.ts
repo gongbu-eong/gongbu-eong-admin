@@ -16,8 +16,8 @@ export async function loginAdmin(formData: FormData) {
 
   const result = await authenticateAdmin(loginId, password, metadata);
 
-  if (!result) {
-    redirect("/login?error=invalid");
+  if (!result.ok) {
+    redirect(`/login?error=${result.reason}`);
   }
 
   const cookieStore = await cookies();
