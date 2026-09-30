@@ -1,11 +1,14 @@
 "use client";
 
 import { useActionState, useState } from "react";
-import {
-  initialLoginAdminState,
-  loginAdmin,
-} from "./actions";
+import { loginAdmin, type LoginAdminState } from "./actions";
 import styles from "./LoginPage.module.css";
+
+const initialLoginAdminState: LoginAdminState = {
+  error: null,
+  loginId: "",
+  attempt: 0,
+};
 
 export function AdminLoginForm() {
   const [state, formAction, pending] = useActionState(

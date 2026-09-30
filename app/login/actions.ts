@@ -15,12 +15,6 @@ export type LoginAdminState = {
   attempt: number;
 };
 
-export const initialLoginAdminState: LoginAdminState = {
-  error: null,
-  loginId: "",
-  attempt: 0,
-};
-
 export async function loginAdmin(
   previousState: LoginAdminState,
   formData: FormData,
