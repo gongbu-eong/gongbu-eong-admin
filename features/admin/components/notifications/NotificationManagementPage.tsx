@@ -105,7 +105,7 @@ export function NotificationManagementPage({ data }: { data: NotificationRecipie
                 <th>회원</th>
                 <th>연령·템플릿</th>
                 <th>휴대폰번호</th>
-                <th>수신 동의</th>
+                <th>광고성 정보 수신</th>
                 <th>발송 상태</th>
               </tr>
             </thead>
@@ -118,7 +118,7 @@ export function NotificationManagementPage({ data }: { data: NotificationRecipie
                   <td><strong>{recipient.name}</strong><small>{recipient.email} · {recipient.statusLabel}</small></td>
                   <td><span>{recipient.ageGroup}</span><small>{recipient.templateGroup}</small></td>
                   <td>{recipient.phone}</td>
-                  <td><span>카카오 {recipient.kakaoEnabled ? "동의" : "미동의"}</span><small>마케팅 {recipient.marketingAgreed ? "동의" : "미동의"}</small></td>
+                  <td><span>{recipient.marketingAgreed ? "동의" : "미동의"}</span></td>
                   <td>{recipient.eligible ? <i className={styles.readyBadge}>발송 가능</i> : <i className={styles.disabledBadge}>{recipient.unavailableReason}</i>}</td>
                 </tr>
               ))}

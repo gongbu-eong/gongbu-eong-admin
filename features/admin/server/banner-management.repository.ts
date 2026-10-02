@@ -40,10 +40,11 @@ export type ManagedBanner = {
   id: string;
   placement: BannerPlacement;
   name: string;
-  contentMarkup: string;
   targetUrl: string;
   status: BannerStatus;
   sortOrder: number;
+  startsAt: string | null;
+  endsAt: string | null;
   imageFilename: string;
   imageMimeType: string;
   imageSizeBytes: number;
@@ -55,10 +56,11 @@ export type ManagedBanner = {
 export type BannerInput = {
   placement: string;
   name: string;
-  contentMarkup: string;
   targetUrl: string;
   status: string;
   sortOrder: number;
+  startsAt: string;
+  endsAt: string;
   image?: { data: Buffer; filename: string; mimeType: string } | null;
   removeImage?: boolean;
 };
@@ -67,10 +69,11 @@ type BannerRow = {
   id: string;
   placement: BannerPlacement;
   name: string;
-  content_markup: string | null;
   target_url: string | null;
   status: BannerStatus;
   sort_order: number;
+  starts_at: Date | string | null;
+  ends_at: Date | string | null;
   image_filename: string | null;
   image_mime_type: string | null;
   image_size_bytes: number | string | null;
@@ -89,7 +92,6 @@ export async function ensureBannerManagementSchema() {
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       placement VARCHAR(40) NOT NULL,
       name VARCHAR(120) NOT NULL,
-      content_markup TEXT NOT NULL DEFAULT '',
       target_url TEXT,
       image_data BYTEA,
       image_filename VARCHAR(255),
@@ -97,6 +99,8 @@ export async function ensureBannerManagementSchema() {
       image_size_bytes INTEGER,
       status VARCHAR(20) NOT NULL DEFAULT 'draft',
       sort_order INTEGER NOT NULL DEFAULT 0,
+      starts_at TIMESTAMPTZ,
+      ends_at TIMESTAMPTZ,
       created_by UUID REFERENCES public.admin_users(id) ON DELETE SET NULL,
       updated_by UUID REFERENCES public.admin_users(id) ON DELETE SET NULL,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -106,14 +110,19 @@ export async function ensureBannerManagementSchema() {
       ),
       CONSTRAINT site_banners_status_check CHECK (status IN ('draft', 'active', 'inactive')),
       CONSTRAINT site_banners_sort_order_check CHECK (sort_order BETWEEN 0 AND 999),
+      CONSTRAINT site_banners_period_check CHECK (
+        starts_at IS NULL OR ends_at IS NULL OR ends_at > starts_at
+      ),
       CONSTRAINT site_banners_image_size_check CHECK (
         image_size_bytes IS NULL OR image_size_bytes BETWEEN 1 AND 5242880
       )
     )
   `);
+  await query("ALTER TABLE public.site_banners ADD COLUMN IF NOT EXISTS starts_at TIMESTAMPTZ");
+  await query("ALTER TABLE public.site_banners ADD COLUMN IF NOT EXISTS ends_at TIMESTAMPTZ");
   await query(`
-    CREATE INDEX IF NOT EXISTS idx_site_banners_placement_status_sort
-      ON public.site_banners(placement, status, sort_order, updated_at DESC)
+    CREATE INDEX IF NOT EXISTS idx_site_banners_active_period
+      ON public.site_banners(placement, status, starts_at, ends_at, sort_order, updated_at DESC)
   `);
   bannerSchemaReady = true;
 }
@@ -125,10 +134,11 @@ export async function listManagedBanners() {
       banners.id,
       banners.placement,
       banners.name,
-      banners.content_markup,
       banners.target_url,
       banners.status,
       banners.sort_order,
+      banners.starts_at,
+      banners.ends_at,
       banners.image_filename,
       banners.image_mime_type,
       banners.image_size_bytes,
@@ -145,20 +155,22 @@ export async function listManagedBanners() {
 export async function createManagedBanner(input: BannerInput, adminUserId: string) {
   await ensureBannerManagementSchema();
   const value = validateBannerInput(input);
+  if (value.status === "active" && !value.image) {
+    throw new Error("활성 배너에는 이미지가 필요합니다.");
+  }
   const result = await query<{ id: string }>(
     `
       INSERT INTO public.site_banners (
-        placement, name, content_markup, target_url,
+        placement, name, target_url,
         image_data, image_filename, image_mime_type, image_size_bytes,
-        status, sort_order, created_by, updated_by
+        status, sort_order, starts_at, ends_at, created_by, updated_by
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $11)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $12)
       RETURNING id
     `,
     [
       value.placement,
       value.name,
-      value.contentMarkup,
       value.targetUrl || null,
       value.image?.data || null,
       value.image?.filename || null,
@@ -166,6 +178,8 @@ export async function createManagedBanner(input: BannerInput, adminUserId: strin
       value.image?.data.length || null,
       value.status,
       value.sortOrder,
+      value.startsAt,
+      value.endsAt,
       adminUserId,
     ],
   );
@@ -179,8 +193,17 @@ export async function updateManagedBanner(
 ) {
   await ensureBannerManagementSchema();
   const value = validateBannerInput(input);
+  const current = await query<{ has_image: boolean }>(
+    "SELECT image_data IS NOT NULL AS has_image FROM public.site_banners WHERE id = $1 LIMIT 1",
+    [bannerId],
+  );
+  if (!current.rows[0]) return null;
+  const willHaveImage = Boolean(value.image) || (current.rows[0].has_image && !value.removeImage);
+  if (value.status === "active" && !willHaveImage) {
+    throw new Error("활성 배너에는 이미지가 필요합니다.");
+  }
   const imageSql = value.image
-    ? `image_data = $9, image_filename = $10, image_mime_type = $11, image_size_bytes = $12,`
+    ? `image_data = $10, image_filename = $11, image_mime_type = $12, image_size_bytes = $13,`
     : value.removeImage
       ? `image_data = NULL, image_filename = NULL, image_mime_type = NULL, image_size_bytes = NULL,`
       : "";
@@ -188,10 +211,11 @@ export async function updateManagedBanner(
     bannerId,
     value.placement,
     value.name,
-    value.contentMarkup,
     value.targetUrl || null,
     value.status,
     value.sortOrder,
+    value.startsAt,
+    value.endsAt,
     adminUserId,
   ];
   if (value.image) {
@@ -202,11 +226,12 @@ export async function updateManagedBanner(
       UPDATE public.site_banners
       SET placement = $2,
           name = $3,
-          content_markup = $4,
-          target_url = $5,
-          status = $6,
-          sort_order = $7,
-          updated_by = $8,
+          target_url = $4,
+          status = $5,
+          sort_order = $6,
+          starts_at = $7,
+          ends_at = $8,
+          updated_by = $9,
           ${imageSql}
           updated_at = NOW()
       WHERE id = $1
@@ -246,8 +271,6 @@ function validateBannerInput(input: BannerInput) {
   }
   const name = String(input.name || "").trim();
   if (!name || name.length > 120) throw new Error("관리용 배너명은 1~120자로 입력해 주세요.");
-  const contentMarkup = String(input.contentMarkup || "").trim();
-  if (contentMarkup.length > 50_000) throw new Error("배너 내용은 50,000자 이하로 입력해 주세요.");
   const targetUrl = String(input.targetUrl || "").trim();
   if (targetUrl.length > 2_000 || (targetUrl && !isSafeTargetUrl(targetUrl))) {
     throw new Error("이동 URL은 /로 시작하는 내부 경로 또는 http(s) URL로 입력해 주세요.");
@@ -260,8 +283,21 @@ function validateBannerInput(input: BannerInput) {
   if (!Number.isFinite(sortOrder) || sortOrder < 0 || sortOrder > 999) {
     throw new Error("노출 순서는 0~999 사이로 입력해 주세요.");
   }
+  const startsAt = parseBannerDate(input.startsAt, "노출 시작일시");
+  const endsAt = parseBannerDate(input.endsAt, "노출 종료일시");
+  if (startsAt && endsAt && new Date(endsAt).getTime() <= new Date(startsAt).getTime()) {
+    throw new Error("노출 종료일시는 시작일시보다 이후여야 합니다.");
+  }
   if (input.image) validateImage(input.image);
-  return { ...input, placement, name, contentMarkup, targetUrl, status, sortOrder };
+  return { ...input, placement, name, targetUrl, status, sortOrder, startsAt, endsAt };
+}
+
+function parseBannerDate(value: string, label: string) {
+  const raw = String(value || "").trim();
+  if (!raw) return null;
+  const parsed = new Date(raw);
+  if (Number.isNaN(parsed.getTime())) throw new Error(`${label}가 올바르지 않습니다.`);
+  return parsed.toISOString();
 }
 
 function validateImage(image: NonNullable<BannerInput["image"]>) {
@@ -288,10 +324,11 @@ function mapBanner(row: BannerRow): ManagedBanner {
     id: row.id,
     placement: row.placement,
     name: row.name,
-    contentMarkup: row.content_markup || "",
     targetUrl: row.target_url || "",
     status: row.status,
     sortOrder: Number(row.sort_order || 0),
+    startsAt: row.starts_at ? new Date(row.starts_at).toISOString() : null,
+    endsAt: row.ends_at ? new Date(row.ends_at).toISOString() : null,
     imageFilename: row.image_filename || "",
     imageMimeType: row.image_mime_type || "",
     imageSizeBytes: Number(row.image_size_bytes || 0),

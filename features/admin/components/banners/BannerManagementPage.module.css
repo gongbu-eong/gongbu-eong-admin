@@ -19,7 +19,7 @@
 .placementGuide span { color: var(--admin-muted); font-size: 12px; line-height: 1.45; }
 .placementGuide small { color: var(--admin-primary); font-size: 11px; }
 .tableWrap { margin-top: 16px; overflow-x: auto; border: 1px solid var(--admin-border); border-radius: 7px; }
-.table { width: 100%; min-width: 960px; border-collapse: collapse; font-size: 13px; }
+.table { width: 100%; min-width: 1120px; border-collapse: collapse; font-size: 13px; }
 .table th { height: 44px; padding: 0 12px; background: #f6f8fb; color: var(--admin-muted); text-align: left; font-weight: 800; }
 .table td { min-height: 76px; padding: 10px 12px; border-top: 1px solid var(--admin-border); vertical-align: middle; }
 .table td strong { display: block; }
@@ -49,6 +49,7 @@
 .formGrid input, .formGrid select { height: 42px; padding: 0 12px; }
 .formGrid textarea { padding: 12px; resize: vertical; font-family: Consolas, "Courier New", monospace; font-size: 12px; line-height: 1.55; }
 .formGrid small { color: var(--admin-light); font-size: 11px; line-height: 1.45; }
+.formGrid small code { padding: 1px 4px; border-radius: 3px; background: #eef3fa; color: var(--admin-primary); font-family: Consolas, "Courier New", monospace; }
 .fullField { grid-column: 1 / -1; }
 .uploadField > input { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
 .uploadPreview { display: flex; align-items: center; justify-content: center; min-height: 150px; overflow: hidden; border: 1px dashed #bdc8d8; border-radius: 6px; background: #f6f8fb; }

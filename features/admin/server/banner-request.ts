@@ -16,10 +16,11 @@ export async function parseBannerFormData(request: Request): Promise<BannerInput
   return {
     placement: String(form.get("placement") || ""),
     name: String(form.get("name") || ""),
-    contentMarkup: String(form.get("contentMarkup") || ""),
     targetUrl: String(form.get("targetUrl") || ""),
     status: String(form.get("status") || "draft"),
     sortOrder: Number(form.get("sortOrder") || 0),
+    startsAt: String(form.get("startsAt") || ""),
+    endsAt: String(form.get("endsAt") || ""),
     image,
     removeImage: form.get("removeImage") === "true",
   };

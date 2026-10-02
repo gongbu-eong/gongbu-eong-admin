@@ -19,7 +19,6 @@ export type NotificationRecipient = {
   statusLabel: string;
   ageGroup: string;
   templateGroup: string;
-  kakaoEnabled: boolean;
   marketingAgreed: boolean;
   eligible: boolean;
   unavailableReason: string;
@@ -46,7 +45,6 @@ type RecipientRow = {
   signup_at: Date | string;
   age_group: string | null;
   template_group: string | null;
-  kakao_enabled: boolean;
   marketing_agreed: boolean;
   eligible: boolean;
   total_filtered: string | number;
@@ -85,7 +83,6 @@ export async function getNotificationRecipientData(args: {
             WHEN users.age_group IN ('50-59', '60-69', '70-79', '80-89', '90+') THEN '50plus'
             ELSE NULL
           END AS template_group,
-          COALESCE(preferences.kakao_enabled, false) AS kakao_enabled,
           COALESCE(marketing_consent.agreed, preferences.marketing_enabled, false) AS marketing_agreed
         FROM public.users users
         LEFT JOIN public.notification_preferences preferences
@@ -106,7 +103,6 @@ export async function getNotificationRecipientData(args: {
             NULLIF(BTRIM(recipient_base.phone), '') IS NOT NULL
             AND recipient_base.status = 'active'
             AND recipient_base.template_group IS NOT NULL
-            AND recipient_base.kakao_enabled
             AND recipient_base.marketing_agreed
           ) AS eligible
         FROM recipient_base
@@ -172,8 +168,7 @@ function toRecipient(row: RecipientRow): NotificationRecipient {
   if (row.status !== "active") unavailableReason = `${formatStatus(row.status)} 회원`;
   else if (!phone) unavailableReason = "휴대폰번호 없음";
   else if (!templateGroup) unavailableReason = "지원 연령대 없음";
-  else if (!row.kakao_enabled) unavailableReason = "카카오 알림 미연결";
-  else if (!row.marketing_agreed) unavailableReason = "마케팅 수신 미동의";
+  else if (!row.marketing_agreed) unavailableReason = "광고성 정보 수신 미동의";
 
   return {
     id: row.id,
@@ -184,7 +179,6 @@ function toRecipient(row: RecipientRow): NotificationRecipient {
     statusLabel: formatStatus(row.status),
     ageGroup: formatAgeGroup(row.age_group),
     templateGroup: formatTemplateGroup(templateGroup),
-    kakaoEnabled: Boolean(row.kakao_enabled),
     marketingAgreed: Boolean(row.marketing_agreed),
     eligible: Boolean(row.eligible),
     unavailableReason,

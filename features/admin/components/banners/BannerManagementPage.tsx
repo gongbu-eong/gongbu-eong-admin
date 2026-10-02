@@ -16,10 +16,11 @@ type EditorState = {
   id: string;
   placement: BannerPlacement;
   name: string;
-  contentMarkup: string;
   targetUrl: string;
   status: BannerStatus;
   sortOrder: number;
+  startsAt: string;
+  endsAt: string;
   hasImage: boolean;
   imageFilename: string;
 };
@@ -28,10 +29,11 @@ const EMPTY_EDITOR: EditorState = {
   id: "",
   placement: "home_main",
   name: "",
-  contentMarkup: "",
   targetUrl: "",
   status: "draft",
   sortOrder: 0,
+  startsAt: "",
+  endsAt: "",
   hasImage: false,
   imageFilename: "",
 };
@@ -85,10 +87,11 @@ export function BannerManagementPage({
       id: banner.id,
       placement: banner.placement,
       name: banner.name,
-      contentMarkup: banner.contentMarkup,
       targetUrl: banner.targetUrl,
       status: banner.status,
       sortOrder: banner.sortOrder,
+      startsAt: toDateTimeLocal(banner.startsAt),
+      endsAt: toDateTimeLocal(banner.endsAt),
       hasImage: banner.hasImage,
       imageFilename: banner.imageFilename,
     });
@@ -103,16 +106,25 @@ export function BannerManagementPage({
       setFeedback({ tone: "error", text: "관리용 배너명을 입력해 주세요." });
       return;
     }
+    if (editor.startsAt && editor.endsAt && new Date(editor.endsAt) <= new Date(editor.startsAt)) {
+      setFeedback({ tone: "error", text: "노출 종료일시는 시작일시보다 이후여야 합니다." });
+      return;
+    }
+    if (editor.status === "active" && !imageFile && (!editor.hasImage || removeImage)) {
+      setFeedback({ tone: "error", text: "활성 배너에는 이미지가 필요합니다." });
+      return;
+    }
     setSaving(true);
     setFeedback(null);
     try {
       const form = new FormData();
       form.set("placement", editor.placement);
       form.set("name", editor.name);
-      form.set("contentMarkup", editor.contentMarkup);
       form.set("targetUrl", editor.targetUrl);
       form.set("status", editor.status);
       form.set("sortOrder", String(editor.sortOrder));
+      form.set("startsAt", toIsoString(editor.startsAt));
+      form.set("endsAt", toIsoString(editor.endsAt));
       form.set("removeImage", String(removeImage));
       if (imageFile) form.set("image", imageFile);
       const response = await fetch(
@@ -149,7 +161,7 @@ export function BannerManagementPage({
         <div><span>고정 노출 위치</span><strong>{placements.length}곳</strong></div>
         <div><span>등록 배너</span><strong>{initialBanners.length}개</strong></div>
         <div><span>활성 배너</span><strong>{activeCount}개</strong></div>
-        <p>현재 사용자 사이트 배너에는 아직 연결되지 않습니다. 등록 자료는 추후 연동을 위한 관리 데이터로만 저장됩니다.</p>
+        <p>활성 상태이며 현재 시각이 노출 기간에 포함되는 이미지 배너만 사용자 화면에 노출됩니다.</p>
       </section>
 
       <section className={styles.workspace}>
@@ -177,16 +189,17 @@ export function BannerManagementPage({
 
         <div className={styles.tableWrap}>
           <table className={styles.table}>
-            <thead><tr><th>이미지</th><th>배너 정보</th><th>노출 위치</th><th>상태·순서</th><th>최근 수정</th><th aria-label="관리" /></tr></thead>
+            <thead><tr><th>이미지</th><th>배너 정보</th><th>노출 위치</th><th>상태·순서</th><th>노출 기간</th><th>최근 수정</th><th aria-label="관리" /></tr></thead>
             <tbody>
               {visibleBanners.map((banner) => (
                 <tr key={banner.id}>
                   <td className={styles.imageCell}>
                     {banner.hasImage ? <Image unoptimized width={112} height={56} src={`/api/admin/banners/${banner.id}/image?v=${encodeURIComponent(banner.updatedAt)}`} alt="" /> : <span>이미지 없음</span>}
                   </td>
-                  <td><strong>{banner.name}</strong><small>{banner.targetUrl || "이동 URL 없음"}</small><code>{banner.contentMarkup ? `${banner.contentMarkup.slice(0, 70)}${banner.contentMarkup.length > 70 ? "..." : ""}` : "내용 코드 없음"}</code></td>
+                  <td><strong>{banner.name}</strong><small>{banner.targetUrl || "이동 URL 없음"}</small></td>
                   <td>{placementLabel(placements, banner.placement)}</td>
                   <td><i className={`${styles.status} ${styles[`status_${banner.status}`]}`}>{statusLabel(banner.status)}</i><small>순서 {banner.sortOrder}</small></td>
+                  <td>{formatPeriod(banner.startsAt, banner.endsAt)}<small>{periodStatus(banner)}</small></td>
                   <td>{formatDate(banner.updatedAt)}<small>{banner.updatedByName}</small></td>
                   <td className={styles.actions}><button type="button" onClick={() => openEdit(banner)}>수정</button><button className={styles.deleteButton} type="button" onClick={() => remove(banner)}>삭제</button></td>
                 </tr>
@@ -200,14 +213,15 @@ export function BannerManagementPage({
       {editor ? (
         <div className={styles.modalBackdrop} role="presentation" onMouseDown={(event) => { if (event.currentTarget === event.target && !saving) setEditor(null); }}>
           <section className={styles.editor} role="dialog" aria-modal="true" aria-labelledby="banner-editor-title">
-            <header><div><h2 id="banner-editor-title">{editor.id ? "배너 수정" : "배너 등록"}</h2><p>고정 영역에 사용할 이미지와 코드, 이동 URL을 저장합니다.</p></div><button type="button" aria-label="닫기" onClick={() => setEditor(null)} disabled={saving}>×</button></header>
+            <header><div><h2 id="banner-editor-title">{editor.id ? "배너 수정" : "배너 등록"}</h2><p>고정 영역에 사용할 이미지, 이동 URL과 노출 기간을 설정합니다.</p></div><button type="button" aria-label="닫기" onClick={() => setEditor(null)} disabled={saving}>×</button></header>
             <div className={styles.formGrid}>
               <label><span>노출 위치</span><select value={editor.placement} onChange={(event) => setEditor({ ...editor, placement: event.target.value as BannerPlacement })}>{placements.map((placement) => <option key={placement.key} value={placement.key}>{placement.label}</option>)}</select><small>{placements.find((item) => item.key === editor.placement)?.sizeGuide}</small></label>
               <label><span>관리용 배너명</span><input maxLength={120} value={editor.name} onChange={(event) => setEditor({ ...editor, name: event.target.value })} placeholder="예: 자소서 코칭 가이드 배너" /></label>
               <label><span>상태</span><select value={editor.status} onChange={(event) => setEditor({ ...editor, status: event.target.value as BannerStatus })}><option value="draft">임시 저장</option><option value="active">활성</option><option value="inactive">비활성</option></select></label>
               <label><span>노출 순서</span><input min={0} max={999} type="number" value={editor.sortOrder} onChange={(event) => setEditor({ ...editor, sortOrder: Number(event.target.value) })} /></label>
-              <label className={styles.fullField}><span>이동 URL</span><input maxLength={2000} value={editor.targetUrl} onChange={(event) => setEditor({ ...editor, targetUrl: event.target.value })} placeholder="/ai-tools/coaching 또는 https://..." /></label>
-              <label className={styles.fullField}><span>배너 내용 코드</span><textarea maxLength={50000} rows={10} value={editor.contentMarkup} onChange={(event) => setEditor({ ...editor, contentMarkup: event.target.value })} placeholder={'HTML 태그와 CSS를 입력하세요.\n예: <strong class="title">...</strong>\n<style>...</style>'} /><small>관리자 화면에서는 보안을 위해 코드를 실행하지 않습니다.</small></label>
+              <label><span>노출 시작일시</span><input type="datetime-local" step="1" value={editor.startsAt} onChange={(event) => setEditor({ ...editor, startsAt: event.target.value })} /><small>미입력 시 활성화 즉시 노출</small></label>
+              <label><span>노출 종료일시</span><input type="datetime-local" step="1" value={editor.endsAt} onChange={(event) => setEditor({ ...editor, endsAt: event.target.value })} /><small>미입력 시 종료 제한 없음</small></label>
+              <label className={styles.fullField}><span>이동 URL</span><input maxLength={2000} value={editor.targetUrl} onChange={(event) => setEditor({ ...editor, targetUrl: event.target.value })} placeholder="/ai-tools/coaching?jobPostingId={jobId}" /><small>공고 상세 배너에서는 <code>{"{jobId}"}</code>를 현재 보고 있는 공고 ID로 치환합니다. 자소서·면접 코칭에 공고를 바로 연결하려면 예시처럼 입력하세요.</small></label>
               <div className={`${styles.fullField} ${styles.uploadField}`}><span>배너 이미지</span><input ref={fileRef} type="file" accept="image/png,image/jpeg,image/webp,image/gif" onChange={(event) => { const file = event.target.files?.[0] || null; if (file && file.size > 5 * 1024 * 1024) { event.target.value = ""; setFeedback({ tone: "error", text: "배너 이미지는 5MB 이하로 선택해 주세요." }); return; } setImageFile(file); if (file) { setRemoveImage(false); setFeedback(null); } }} /><div className={styles.uploadPreview}>{imagePreviewUrl ? <Image unoptimized width={520} height={180} src={imagePreviewUrl} alt="선택한 배너 이미지 미리보기" /> : editor.hasImage && !removeImage ? <Image unoptimized width={520} height={180} src={`/api/admin/banners/${editor.id}/image`} alt="현재 배너 이미지 미리보기" /> : <p>등록된 이미지가 없습니다.</p>}</div><div className={styles.uploadRow}><button type="button" onClick={() => fileRef.current?.click()}>이미지 선택</button><p>{imageFile?.name || (editor.hasImage && !removeImage ? editor.imageFilename : "선택된 이미지 없음")}</p>{editor.hasImage && !imageFile && !removeImage ? <button className={styles.removeImageButton} type="button" onClick={() => setRemoveImage(true)}>기존 이미지 제거</button> : null}</div><small>JPG, PNG, WEBP, GIF · 최대 5MB</small></div>
             </div>
             {feedback?.tone === "error" ? <p className={`${styles.feedback} ${styles.feedbackError}`}>{feedback.text}</p> : null}
@@ -229,4 +243,41 @@ function statusLabel(status: BannerStatus) {
 
 function formatDate(value: string) {
   return new Intl.DateTimeFormat("ko-KR", { year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date(value));
+}
+
+function toDateTimeLocal(value: string | null) {
+  if (!value) return "";
+  const date = new Date(value);
+  const local = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
+  return local.toISOString().slice(0, 19);
+}
+
+function toIsoString(value: string) {
+  return value ? new Date(value).toISOString() : "";
+}
+
+function formatPeriod(startsAt: string | null, endsAt: string | null) {
+  const start = startsAt ? formatDateTime(startsAt) : "즉시";
+  const end = endsAt ? formatDateTime(endsAt) : "제한 없음";
+  return `${start} ~ ${end}`;
+}
+
+function formatDateTime(value: string) {
+  return new Intl.DateTimeFormat("ko-KR", {
+    year: "2-digit",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  }).format(new Date(value));
+}
+
+function periodStatus(banner: ManagedBanner) {
+  if (banner.status !== "active") return "노출 안 함";
+  const now = Date.now();
+  if (banner.startsAt && new Date(banner.startsAt).getTime() > now) return "노출 예정";
+  if (banner.endsAt && new Date(banner.endsAt).getTime() <= now) return "노출 종료";
+  return "현재 노출 중";
 }
