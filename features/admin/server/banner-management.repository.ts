@@ -1,5 +1,7 @@
 import { query } from "@/features/admin/server/db";
 
+const MAX_BANNER_IMAGE_BYTES = 500 * 1024;
+
 export const BANNER_PLACEMENTS = [
   {
     key: "home_main",
@@ -49,6 +51,10 @@ export type ManagedBanner = {
   imageMimeType: string;
   imageSizeBytes: number;
   hasImage: boolean;
+  mobileImageFilename: string;
+  mobileImageMimeType: string;
+  mobileImageSizeBytes: number;
+  hasMobileImage: boolean;
   updatedAt: string;
   updatedByName: string;
 };
@@ -63,6 +69,8 @@ export type BannerInput = {
   endsAt: string;
   image?: { data: Buffer; filename: string; mimeType: string } | null;
   removeImage?: boolean;
+  mobileImage?: { data: Buffer; filename: string; mimeType: string } | null;
+  removeMobileImage?: boolean;
 };
 
 type BannerRow = {
@@ -78,6 +86,10 @@ type BannerRow = {
   image_mime_type: string | null;
   image_size_bytes: number | string | null;
   has_image: boolean;
+  mobile_image_filename: string | null;
+  mobile_image_mime_type: string | null;
+  mobile_image_size_bytes: number | string | null;
+  has_mobile_image: boolean;
   updated_at: Date | string;
   updated_by_name: string | null;
 };
@@ -97,6 +109,10 @@ export async function ensureBannerManagementSchema() {
       image_filename VARCHAR(255),
       image_mime_type VARCHAR(80),
       image_size_bytes INTEGER,
+      mobile_image_data BYTEA,
+      mobile_image_filename VARCHAR(255),
+      mobile_image_mime_type VARCHAR(80),
+      mobile_image_size_bytes INTEGER,
       status VARCHAR(20) NOT NULL DEFAULT 'draft',
       sort_order INTEGER NOT NULL DEFAULT 0,
       starts_at TIMESTAMPTZ,
@@ -115,11 +131,18 @@ export async function ensureBannerManagementSchema() {
       ),
       CONSTRAINT site_banners_image_size_check CHECK (
         image_size_bytes IS NULL OR image_size_bytes BETWEEN 1 AND 5242880
+      ),
+      CONSTRAINT site_banners_mobile_image_size_check CHECK (
+        mobile_image_size_bytes IS NULL OR mobile_image_size_bytes BETWEEN 1 AND 5242880
       )
     )
   `);
   await query("ALTER TABLE public.site_banners ADD COLUMN IF NOT EXISTS starts_at TIMESTAMPTZ");
   await query("ALTER TABLE public.site_banners ADD COLUMN IF NOT EXISTS ends_at TIMESTAMPTZ");
+  await query("ALTER TABLE public.site_banners ADD COLUMN IF NOT EXISTS mobile_image_data BYTEA");
+  await query("ALTER TABLE public.site_banners ADD COLUMN IF NOT EXISTS mobile_image_filename VARCHAR(255)");
+  await query("ALTER TABLE public.site_banners ADD COLUMN IF NOT EXISTS mobile_image_mime_type VARCHAR(80)");
+  await query("ALTER TABLE public.site_banners ADD COLUMN IF NOT EXISTS mobile_image_size_bytes INTEGER");
   await query(`
     CREATE INDEX IF NOT EXISTS idx_site_banners_active_period
       ON public.site_banners(placement, status, starts_at, ends_at, sort_order, updated_at DESC)
@@ -143,6 +166,10 @@ export async function listManagedBanners() {
       banners.image_mime_type,
       banners.image_size_bytes,
       (banners.image_data IS NOT NULL) AS has_image,
+      banners.mobile_image_filename,
+      banners.mobile_image_mime_type,
+      banners.mobile_image_size_bytes,
+      (banners.mobile_image_data IS NOT NULL) AS has_mobile_image,
       banners.updated_at,
       admins.name AS updated_by_name
     FROM public.site_banners banners
@@ -163,9 +190,10 @@ export async function createManagedBanner(input: BannerInput, adminUserId: strin
       INSERT INTO public.site_banners (
         placement, name, target_url,
         image_data, image_filename, image_mime_type, image_size_bytes,
+        mobile_image_data, mobile_image_filename, mobile_image_mime_type, mobile_image_size_bytes,
         status, sort_order, starts_at, ends_at, created_by, updated_by
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $12)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $16)
       RETURNING id
     `,
     [
@@ -176,6 +204,10 @@ export async function createManagedBanner(input: BannerInput, adminUserId: strin
       value.image?.filename || null,
       value.image?.mimeType || null,
       value.image?.data.length || null,
+      value.mobileImage?.data || null,
+      value.mobileImage?.filename || null,
+      value.mobileImage?.mimeType || null,
+      value.mobileImage?.data.length || null,
       value.status,
       value.sortOrder,
       value.startsAt,
@@ -194,7 +226,9 @@ export async function updateManagedBanner(
   await ensureBannerManagementSchema();
   const value = validateBannerInput(input);
   const current = await query<{ has_image: boolean }>(
-    "SELECT image_data IS NOT NULL AS has_image FROM public.site_banners WHERE id = $1 LIMIT 1",
+    `SELECT
+       image_data IS NOT NULL AS has_image
+     FROM public.site_banners WHERE id = $1 LIMIT 1`,
     [bannerId],
   );
   if (!current.rows[0]) return null;
@@ -202,11 +236,6 @@ export async function updateManagedBanner(
   if (value.status === "active" && !willHaveImage) {
     throw new Error("활성 배너에는 이미지가 필요합니다.");
   }
-  const imageSql = value.image
-    ? `image_data = $10, image_filename = $11, image_mime_type = $12, image_size_bytes = $13,`
-    : value.removeImage
-      ? `image_data = NULL, image_filename = NULL, image_mime_type = NULL, image_size_bytes = NULL,`
-      : "";
   const params: unknown[] = [
     bannerId,
     value.placement,
@@ -217,10 +246,19 @@ export async function updateManagedBanner(
     value.startsAt,
     value.endsAt,
     adminUserId,
+    Boolean(value.image),
+    Boolean(value.removeImage),
+    value.image?.data || null,
+    value.image?.filename || null,
+    value.image?.mimeType || null,
+    value.image?.data.length || null,
+    Boolean(value.mobileImage),
+    Boolean(value.removeMobileImage),
+    value.mobileImage?.data || null,
+    value.mobileImage?.filename || null,
+    value.mobileImage?.mimeType || null,
+    value.mobileImage?.data.length || null,
   ];
-  if (value.image) {
-    params.push(value.image.data, value.image.filename, value.image.mimeType, value.image.data.length);
-  }
   const result = await query<{ id: string }>(
     `
       UPDATE public.site_banners
@@ -232,7 +270,14 @@ export async function updateManagedBanner(
           starts_at = $7,
           ends_at = $8,
           updated_by = $9,
-          ${imageSql}
+          image_data = CASE WHEN $10::boolean THEN $12 WHEN $11::boolean THEN NULL ELSE image_data END,
+          image_filename = CASE WHEN $10::boolean THEN $13 WHEN $11::boolean THEN NULL ELSE image_filename END,
+          image_mime_type = CASE WHEN $10::boolean THEN $14 WHEN $11::boolean THEN NULL ELSE image_mime_type END,
+          image_size_bytes = CASE WHEN $10::boolean THEN $15 WHEN $11::boolean THEN NULL ELSE image_size_bytes END,
+          mobile_image_data = CASE WHEN $16::boolean THEN $18 WHEN $17::boolean THEN NULL ELSE mobile_image_data END,
+          mobile_image_filename = CASE WHEN $16::boolean THEN $19 WHEN $17::boolean THEN NULL ELSE mobile_image_filename END,
+          mobile_image_mime_type = CASE WHEN $16::boolean THEN $20 WHEN $17::boolean THEN NULL ELSE mobile_image_mime_type END,
+          mobile_image_size_bytes = CASE WHEN $16::boolean THEN $21 WHEN $17::boolean THEN NULL ELSE mobile_image_size_bytes END,
           updated_at = NOW()
       WHERE id = $1
       RETURNING id
@@ -251,14 +296,20 @@ export async function deleteManagedBanner(bannerId: string) {
   return Boolean(result.rows[0]);
 }
 
-export async function getManagedBannerImage(bannerId: string) {
+export async function getManagedBannerImage(bannerId: string, variant: "desktop" | "mobile") {
   await ensureBannerManagementSchema();
   const result = await query<{
     image_data: Buffer | null;
     image_mime_type: string | null;
     image_filename: string | null;
   }>(
-    `SELECT image_data, image_mime_type, image_filename FROM public.site_banners WHERE id = $1 LIMIT 1`,
+    variant === "mobile"
+      ? `SELECT
+           COALESCE(mobile_image_data, image_data) AS image_data,
+           COALESCE(mobile_image_mime_type, image_mime_type) AS image_mime_type,
+           COALESCE(mobile_image_filename, image_filename) AS image_filename
+         FROM public.site_banners WHERE id = $1 LIMIT 1`
+      : `SELECT image_data, image_mime_type, image_filename FROM public.site_banners WHERE id = $1 LIMIT 1`,
     [bannerId],
   );
   return result.rows[0] || null;
@@ -289,6 +340,7 @@ function validateBannerInput(input: BannerInput) {
     throw new Error("노출 종료일시는 시작일시보다 이후여야 합니다.");
   }
   if (input.image) validateImage(input.image);
+  if (input.mobileImage) validateImage(input.mobileImage);
   return { ...input, placement, name, targetUrl, status, sortOrder, startsAt, endsAt };
 }
 
@@ -303,8 +355,8 @@ function parseBannerDate(value: string, label: string) {
 function validateImage(image: NonNullable<BannerInput["image"]>) {
   const allowedTypes = ["image/jpeg", "image/png", "image/webp", "image/gif"];
   if (!allowedTypes.includes(image.mimeType)) throw new Error("JPG, PNG, WEBP, GIF 이미지만 등록할 수 있습니다.");
-  if (!image.data.length || image.data.length > 5 * 1024 * 1024) {
-    throw new Error("배너 이미지는 5MB 이하로 등록해 주세요.");
+  if (!image.data.length || image.data.length > MAX_BANNER_IMAGE_BYTES) {
+    throw new Error("배너 이미지는 파일당 500KB 이하로 등록해 주세요.");
   }
   if (!image.filename || image.filename.length > 255) throw new Error("이미지 파일명이 올바르지 않습니다.");
 }
@@ -333,6 +385,10 @@ function mapBanner(row: BannerRow): ManagedBanner {
     imageMimeType: row.image_mime_type || "",
     imageSizeBytes: Number(row.image_size_bytes || 0),
     hasImage: Boolean(row.has_image),
+    mobileImageFilename: row.mobile_image_filename || "",
+    mobileImageMimeType: row.mobile_image_mime_type || "",
+    mobileImageSizeBytes: Number(row.mobile_image_size_bytes || 0),
+    hasMobileImage: Boolean(row.has_mobile_image),
     updatedAt: new Date(row.updated_at).toISOString(),
     updatedByName: row.updated_by_name || "관리자",
   };
