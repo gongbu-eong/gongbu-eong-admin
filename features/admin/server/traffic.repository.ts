@@ -1,8 +1,8 @@
-import { isCareerSource } from "../traffic-channel";
 import {
-  careerSourceSql,
   conversionCtes,
+  includedTrafficSourceCondition,
   nonAutomatedUserAgentCondition,
+  pageTrafficChannelsCtes,
   trafficFactsCtes,
 } from "./analytics-facts";
 import {
@@ -169,7 +169,12 @@ const periodBoundsSql = `
 const visitorKeySql =
   "COALESCE(user_id::TEXT, anonymous_id::TEXT, session_id::TEXT, NULLIF(CONCAT_WS('|', ip_address::TEXT, NULLIF(user_agent, '')), ''))";
 
-const trafficEventsSql = `
+function trafficEventsSql(
+  start = "(SELECT current_start FROM ranges)",
+  end = "(SELECT current_end FROM ranges)",
+) {
+  return `
+  WITH traffic_pages_raw AS (
   SELECT
     user_id,
     anonymous_id,
@@ -190,7 +195,7 @@ const trafficEventsSql = `
         ELSE NULLIF(referrer, '')
       END,
       'direct'
-    ) AS source_value,
+    ) AS raw_source,
     COALESCE(NULLIF(substring(path from '[?&]utm_medium=([^&]+)'), ''), '-') AS medium,
     COALESCE(NULLIF(substring(path from '[?&]utm_campaign=([^&]+)'), ''), '캠페인 없음') AS campaign,
     COALESCE(NULLIF(substring(path from '[?&]utm_content=([^&]+)'), ''), path, '-') AS link,
@@ -202,13 +207,24 @@ const trafficEventsSql = `
     referrer,
     created_at AS event_at,
     created_at
-  FROM public.access_logs
+  FROM public.access_logs p
   WHERE event_name = 'page_view'
-    AND ${excludedEventCondition("user_id", "ip_address")}
-    AND ${nonAutomatedUserAgentCondition("user_agent")}
+    AND p.created_at >= (${start}) AND p.created_at < (${end})
+    AND ${excludedEventCondition("p.user_id", "p.ip_address")}
+    AND ${nonAutomatedUserAgentCondition("p.user_agent")}
+  ), traffic_page_inputs AS (
+    SELECT id, (event_at AT TIME ZONE 'Asia/Seoul')::date AS day,
+      COALESCE(anonymous_id::text, user_id::text) AS visitor_key,
+      event_at, raw_source, metadata FROM traffic_pages_raw
+  ), ${pageTrafficChannelsCtes("traffic_page_inputs", "traffic_page_channels")}
+  SELECT p.*, channels.channel AS source_value
+  FROM traffic_pages_raw p JOIN traffic_page_channels channels USING (id)
+  WHERE ${includedTrafficSourceCondition("channels.channel")}
 `;
+}
 
 const campaignTrafficEventsSql = `
+  SELECT * FROM (
   SELECT
     user_id,
     anonymous_id,
@@ -262,6 +278,7 @@ const campaignTrafficEventsSql = `
     captured_at AS event_at,
     created_at
   FROM public.attribution_events
+  ) campaign_events WHERE ${includedTrafficSourceCondition("source_value")}
 `;
 
 const bannerLabels: Record<string, string> = {
@@ -445,8 +462,7 @@ function normalizeDate(value?: string | null) {
 function normalizeLogChannel(
   value?: TrafficLogQuery["channel"],
 ): TrafficLogChannelFilter {
-  return value === "career" ||
-    value === "instagram" ||
+  return value === "instagram" ||
     value === "blog" ||
     value === "threads" ||
     value === "search" ||
@@ -553,7 +569,6 @@ function createDelta(current: number, previous: number, suffix: string) {
 }
 
 function mapChannelLabel(source: string | null) {
-  if (isCareerSource(source)) return "커리어";
   const trimmed = (source || "").trim();
   if (trimmed === "식별 불가") return trimmed;
   if (trafficChannelOrder.includes(trimmed)) return trimmed;
@@ -584,7 +599,6 @@ function mapChannelLabel(source: string | null) {
 }
 
 function mapChannelFilterToLabel(channel: TrafficLogChannelFilter) {
-  if (channel === "career") return "커리어";
   if (channel === "instagram") return "인스타그램";
   if (channel === "blog") return "블로그";
   if (channel === "threads") return "스레드";
@@ -682,8 +696,7 @@ async function getDailyChannelTrendRows(params: unknown[]) {
           ('블로그', 2),
           ('스레드', 3),
           ('검색', 4),
-          ('직접유입', 5),
-          ('커리어', 6)
+          ('직접유입', 5)
         ) AS channel(label, sort_order)
       ),
       normalized_logs AS (
@@ -691,7 +704,7 @@ async function getDailyChannelTrendRows(params: unknown[]) {
           days.day_kst,
           logs.visitor_key,
           CASE
-            WHEN ${careerSourceSql("logs.source_value")} THEN '커리어'
+            WHEN logs.source_value IN ('인스타그램', '블로그', '스레드', '검색', '직접유입') THEN logs.source_value
             WHEN LOWER(logs.source_value) LIKE '%instagram%'
               OR LOWER(logs.source_value) = 'ig'
               THEN '인스타그램'
@@ -733,7 +746,7 @@ async function getDailyChannelTrendRows(params: unknown[]) {
             visitor_key,
             event_at,
             id
-          FROM (${trafficEventsSql}) traffic_events
+          FROM (${trafficEventsSql()}) traffic_events
           WHERE visitor_key IS NOT NULL
           ORDER BY
             date_trunc('day', event_at AT TIME ZONE 'Asia/Seoul')::date,
@@ -805,7 +818,7 @@ export async function getTrafficData(args?: TrafficQuery): Promise<TrafficData> 
                 )
               ELSE source_value
             END AS source_value
-          FROM (${trafficEventsSql}) traffic_events, ranges
+          FROM (${trafficEventsSql()}) traffic_events, ranges
           WHERE visitor_key IS NOT NULL
             AND event_at >= current_start
             AND event_at < current_end
@@ -835,7 +848,7 @@ export async function getTrafficData(args?: TrafficQuery): Promise<TrafficData> 
                 )
               ELSE source_value
             END AS source_value
-          FROM (${trafficEventsSql}) traffic_events, ranges
+          FROM (${trafficEventsSql("(SELECT previous_start FROM ranges)", "(SELECT previous_end FROM ranges)")}) traffic_events, ranges
           WHERE visitor_key IS NOT NULL
             AND event_at >= previous_start
             AND event_at < previous_end
@@ -854,7 +867,7 @@ export async function getTrafficData(args?: TrafficQuery): Promise<TrafficData> 
         SELECT DISTINCT ON (visitor_key)
           visitor_key,
           event_at
-        FROM (${trafficEventsSql}) logs, ranges
+        FROM (${trafficEventsSql()}) logs, ranges
         WHERE logs.visitor_key IS NOT NULL
           AND logs.event_at >= ranges.current_start
           AND logs.event_at < ranges.current_end
@@ -867,7 +880,7 @@ export async function getTrafficData(args?: TrafficQuery): Promise<TrafficData> 
       later_page_views AS (
         SELECT DISTINCT visits.visitor_key
         FROM job_detail_visits visits
-        JOIN (${trafficEventsSql}) logs
+        JOIN (${trafficEventsSql("(SELECT current_start FROM ranges)", "(SELECT current_end + interval '30 minutes' FROM ranges)")}) logs
           ON logs.visitor_key = visits.visitor_key
          AND logs.event_at > visits.event_at
          AND logs.event_at <= visits.event_at + INTERVAL '30 minutes'
@@ -1112,7 +1125,7 @@ export async function getTrafficLogData(
           ELSE 'other'
         END AS screen_key,
         CASE
-          WHEN ${careerSourceSql("source_value")} THEN '커리어'
+          WHEN source_value IN ('인스타그램', '블로그', '스레드', '검색', '직접유입') THEN source_value
           WHEN LOWER(source_value) LIKE '%instagram%'
             OR LOWER(source_value) = 'ig'
             THEN '인스타그램'
@@ -1141,7 +1154,7 @@ export async function getTrafficLogData(
         ) AS user_name,
         COALESCE(users.email::text, oauth.provider_email::text, '-') AS user_email,
         oauth.provider::text AS provider
-      FROM (${trafficEventsSql}) logs
+      FROM (${trafficEventsSql()}) logs
       LEFT JOIN public.users users ON users.id = logs.user_id
       LEFT JOIN LATERAL (
         SELECT
@@ -1418,6 +1431,7 @@ export async function getBannerClickLogData(
         requested_banner_key
       FROM input
     ),
+    ${trafficFactsCtes("(SELECT current_start FROM ranges)", "(SELECT current_end FROM ranges)")},
     normalized_clicks AS (
       SELECT
         events.id::text AS id,
@@ -1454,6 +1468,7 @@ export async function getBannerClickLogData(
         COALESCE(NULLIF(events.properties->>'ip_address', ''), '-') AS ip_address,
         NULLIF(events.properties->>'user_agent', '') AS user_agent
       FROM public.product_events events
+      JOIN analytics_products included_events ON included_events.id = events.id::text
       LEFT JOIN public.users users ON users.id = events.user_id
       LEFT JOIN LATERAL (
         SELECT

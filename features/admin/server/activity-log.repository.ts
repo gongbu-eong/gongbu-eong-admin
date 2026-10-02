@@ -1,6 +1,10 @@
 import {
+  accessLogSourceSql,
+  eventTrafficChannelsCtes,
+  includedTrafficSourceCondition,
   nonAutomatedUserAgentCondition,
   pageTrafficChannelsCtes,
+  productTrafficSourceSql,
   screenSql,
   trafficChannelKeySql,
   trafficFactsCtes,
@@ -217,13 +221,11 @@ function formatChannel(value: string | null) {
     threads: "스레드",
     search: "검색",
     direct: "직접유입",
-    career: "커리어",
     "인스타그램": "인스타그램",
     "블로그": "블로그",
     "스레드": "스레드",
     "검색": "검색",
     "직접유입": "직접유입",
-    "커리어": "커리어",
   };
   return labels[value || ""] || "직접유입";
 }
@@ -363,7 +365,6 @@ function jobCohortSql() {
       WHEN 'threads' THEN '스레드'
       WHEN 'search' THEN '검색'
       WHEN 'direct' THEN '직접유입'
-      WHEN 'career' THEN '커리어'
       ELSE $3::text END)
     ORDER BY c.event_at DESC, c.id DESC
     LIMIT $4 OFFSET $5`;
@@ -376,7 +377,6 @@ function dashboardChannelLabel(value: string) {
     threads: "스레드",
     search: "검색",
     direct: "직접유입",
-    career: "커리어",
   };
   return labels[value] || value;
 }
@@ -536,6 +536,7 @@ async function getDashboardFactDetailRows({
     details.scope = $1
     AND details.day BETWEEN $2::date AND $3::date
     AND details.metric = $4
+    AND ${includedTrafficSourceCondition("details.channel")}
     AND ($5::text = '' OR details.channel = $5)
     AND ($6::text = '' OR details.dimension = $6)
   `;
@@ -551,6 +552,7 @@ async function getDashboardFactDetailRows({
             AND facts.day BETWEEN $2::date AND $3::date
             AND $4::text = 'product_start_drop'
             AND facts.metric IN ('product_start', 'product_complete')
+            AND ${includedTrafficSourceCondition("facts.channel")}
             AND ($5::text = '' OR facts.channel = $5)
             AND ($6::text = '' OR facts.dimension = $6)`,
         values,
@@ -561,6 +563,7 @@ async function getDashboardFactDetailRows({
           WHERE facts.scope = $1
             AND facts.day BETWEEN $2::date AND $3::date
             AND facts.metric = $4
+            AND ${includedTrafficSourceCondition("facts.channel")}
             AND ($5::text = '' OR facts.channel = $5)
             AND ($6::text = '' OR facts.dimension = $6)`,
         values,
@@ -840,7 +843,7 @@ export async function getActivityLogData(args?: ActivityLogQuery): Promise<Activ
           NULLIF(CONCAT_WS('|', SPLIT_PART(NULLIF(events.properties->>'ip_address', ''), '/', 1), NULLIF(events.properties->>'user_agent', '')), '')
         ),
         COALESCE(events.properties->>'path', events.properties->>'canonical_path', events.properties->>'targetPath', events.properties->>'screenKey'),
-        COALESCE(NULLIF(events.properties->>'traffic_channel', ''), NULLIF(events.properties->>'source', ''), 'direct'),
+        ${productTrafficSourceSql("events.properties")},
         COALESCE(
           NULLIF(events.properties->>'banner_name', ''),
           NULLIF(events.properties->>'tool_name', ''),
@@ -940,21 +943,21 @@ export async function getActivityLogData(args?: ActivityLogQuery): Promise<Activ
         AND ($10::text = '' OR SPLIT_PART(events.ip_address::text, '/', 1) = $10::text)
         AND (${includeExcluded ? "TRUE" : excludedEventCondition("events.user_id", "events.ip_address")})
     ), activity_pages AS (
-      SELECT id, (event_at AT TIME ZONE 'Asia/Seoul')::date AS day,
-        visitor_key, event_at, source_value AS raw_source, metadata
-      FROM raw_events WHERE event_source = 'access' AND event_type = 'page_view'
+      SELECT p.id::text AS id, (p.created_at AT TIME ZONE 'Asia/Seoul')::date AS day,
+        COALESCE(p.anonymous_id::text, p.user_id::text) AS visitor_key,
+        p.created_at AS event_at, ${accessLogSourceSql("p")} AS raw_source, p.metadata
+      FROM public.access_logs p
+      WHERE p.event_name = 'page_view'
+        AND p.created_at >= ($1::date AT TIME ZONE 'Asia/Seoul')
+        AND p.created_at < (($2::date + 1) AT TIME ZONE 'Asia/Seoul')
+        AND (${includeExcluded ? "TRUE" : excludedEventCondition("p.user_id", "p.ip_address")})
+        AND ${nonAutomatedUserAgentCondition("p.user_agent")}
     ), ${pageTrafficChannelsCtes("activity_pages", "activity_page_channels")},
-    daily_channels AS (
-      SELECT DISTINCT ON ((event_at AT TIME ZONE 'Asia/Seoul')::date, visitor_key)
-        (event_at AT TIME ZONE 'Asia/Seoul')::date AS day,
-        visitor_key,
-        source_value
-      FROM raw_events
-      WHERE event_source = 'access'
-        AND event_type = 'page_view'
-        AND visitor_key IS NOT NULL
-      ORDER BY (event_at AT TIME ZONE 'Asia/Seoul')::date, visitor_key, event_at, id
-    ), normalized AS (
+    attributed_pages AS (
+      SELECT p.*, channels.channel FROM activity_pages p
+      JOIN activity_page_channels channels USING (id)
+    ), ${eventTrafficChannelsCtes("attributed_pages", "raw_events", "activity_event_channels")},
+    normalized AS (
       SELECT
         raw_events.*,
         users.nickname,
@@ -976,16 +979,16 @@ export async function getActivityLogData(args?: ActivityLogQuery): Promise<Activ
         ${trafficChannelKeySql(
           `CASE WHEN raw_events.event_source = 'access'
             THEN COALESCE(activity_page_channels.channel, raw_events.source_value)
-            ELSE COALESCE(daily_channels.source_value, raw_events.source_value) END`,
+            ELSE COALESCE(raw_events.source_value,
+              activity_event_channels.channel, 'direct') END`,
           "raw_events.metadata",
+          "activity_event_channels.channel",
         )} AS acquisition_channel
       FROM raw_events
       LEFT JOIN public.users users ON users.id = raw_events.user_id
       LEFT JOIN activity_page_channels
         ON raw_events.event_source = 'access' AND activity_page_channels.id = raw_events.id
-      LEFT JOIN daily_channels
-        ON daily_channels.day = (raw_events.event_at AT TIME ZONE 'Asia/Seoul')::date
-        AND daily_channels.visitor_key = raw_events.visitor_key
+      LEFT JOIN activity_event_channels ON activity_event_channels.id = raw_events.id
     )
   `;
   const whereSql = `
@@ -1003,6 +1006,7 @@ export async function getActivityLogData(args?: ActivityLogQuery): Promise<Activ
       OR ($4::text = 'ai_tools' AND path LIKE '/ai-tools%')
       OR ($4::text = 'job_tools' AND normalized_screen_key LIKE 'job_tool_%'))
     AND ($5::text = 'all' OR acquisition_channel = $5::text)
+    AND ${includedTrafficSourceCondition("acquisition_channel")}
     AND ($9::text = '' OR event_type = $9::text)
     AND (
       ($10::text <> '' AND ip_address = $10::text) OR

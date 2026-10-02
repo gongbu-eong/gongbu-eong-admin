@@ -15,5 +15,4 @@ export const trafficChannelOptions = [
   ["threads", "스레드"],
   ["search", "검색"],
   ["direct", "직접유입"],
-  ["career", "커리어"],
 ] as const;

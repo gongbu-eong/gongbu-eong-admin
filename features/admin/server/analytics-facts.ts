@@ -16,6 +16,23 @@ export function careerSourceSql(source: string) {
   return `BTRIM(${source}) ~* '${careerSourcePattern}'`;
 }
 
+export function includedTrafficSourceCondition(source: string) {
+  return `NOT COALESCE(${careerSourceSql(source)}, false)`;
+}
+
+export function accessLogSourceSql(alias: string) {
+  return `COALESCE(NULLIF(${alias}.traffic_channel, ''), NULLIF(${alias}.metadata->>'trafficChannel', ''),
+    NULLIF(substring(${alias}.path from '[?&]utm_source=([^&]+)'), ''),
+    CASE WHEN ${alias}.referrer !~* '(gongbueong.career.co.kr|localhost)'
+      THEN NULLIF(${alias}.referrer, '') END, 'direct')`;
+}
+
+export function productTrafficSourceSql(properties: string) {
+  return `COALESCE(NULLIF(${properties}->>'traffic_channel', ''),
+    NULLIF(${properties}->>'trafficChannel', ''), NULLIF(${properties}->>'source', ''),
+    NULLIF(${properties} #>> '{attribution,current,source}', ''))`;
+}
+
 export function channelSql(source: string) {
   return `CASE
     WHEN ${careerSourceSql(source)} THEN '커리어'
@@ -27,20 +44,30 @@ export function channelSql(source: string) {
 }
 
 // Internal moves retain the captured external attribution when present.
-export function normalizedTrafficChannelSql(source: string, metadata: string) {
-  return channelSql(`CASE
+function normalizedTrafficSourceSql(source: string, metadata: string, fallback = "'direct'") {
+  return `CASE
     WHEN ${source} ~* '(page_move|page move|internal|페이지 이동)'
       THEN COALESCE(
         NULLIF(${metadata} #>> '{attribution,current,source}', ''),
         NULLIF(${metadata} #>> '{attribution,first,source}', ''),
-        'direct'
+        ${fallback}
       )
     ELSE ${source}
-  END`);
+  END`;
 }
 
-export function trafficChannelKeySql(source: string, metadata: string) {
-  return `CASE ${normalizedTrafficChannelSql(source, metadata)}
+export function includedEventTrafficCondition(source: string, metadata: string, precedingChannel: string) {
+  return includedTrafficSourceCondition(normalizedTrafficSourceSql(
+    `COALESCE(${source}, ${precedingChannel}, 'direct')`, metadata, precedingChannel,
+  ));
+}
+
+export function normalizedTrafficChannelSql(source: string, metadata: string, fallback = "'direct'") {
+  return channelSql(normalizedTrafficSourceSql(source, metadata, fallback));
+}
+
+export function trafficChannelKeySql(source: string, metadata: string, fallback = "'direct'") {
+  return `CASE ${normalizedTrafficChannelSql(source, metadata, fallback)}
     WHEN '커리어' THEN 'career'
     WHEN '인스타그램' THEN 'instagram'
     WHEN '블로그' THEN 'blog'
@@ -75,6 +102,31 @@ export function pageTrafficChannelsCtes(input: string, output: string) {
       ), 'direct')`)} AS channel
       FROM ${output}_groups
     )`;
+}
+
+// Resolve the preceding page once per timeline, including excluded channels.
+// Filtering before this step would turn Career's internal moves into direct visits.
+export function eventTrafficChannelsCtes(pages: string, events: string, output: string) {
+  return `${output}_timeline AS (
+    SELECT id::text AS id, visitor_key, event_at, channel, false AS is_event
+    FROM ${pages} WHERE visitor_key IS NOT NULL
+    UNION ALL
+    SELECT id::text, visitor_key, event_at, NULL::text, true
+    FROM ${events} WHERE visitor_key IS NOT NULL
+  ), ${output}_groups AS (
+    SELECT *, COUNT(channel) OVER (
+      PARTITION BY (event_at AT TIME ZONE 'Asia/Seoul')::date, visitor_key
+      ORDER BY event_at, is_event, id ROWS UNBOUNDED PRECEDING
+    ) AS channel_group
+    FROM ${output}_timeline
+  ), ${output}_resolved AS (
+    SELECT id, is_event, FIRST_VALUE(channel) OVER (
+      PARTITION BY (event_at AT TIME ZONE 'Asia/Seoul')::date, visitor_key, channel_group
+      ORDER BY event_at, is_event, id
+    ) AS channel FROM ${output}_groups
+  ), ${output} AS (
+    SELECT id, channel FROM ${output}_resolved WHERE is_event
+  )`;
 }
 
 export function screenSql(path: string) {
@@ -187,10 +239,7 @@ export function trafficFactsCtes(
         p.created_at AS event_at, (p.created_at AT TIME ZONE 'Asia/Seoul')::date AS day,
         split_part(p.path, '?', 1) AS path, p.path AS original_path,
         p.referrer, p.ip_address::text AS ip_address, p.user_agent,
-        COALESCE(NULLIF(p.traffic_channel, ''), NULLIF(p.metadata->>'trafficChannel', ''),
-          NULLIF(substring(p.path from '[?&]utm_source=([^&]+)'), ''),
-          CASE WHEN p.referrer !~* '(gongbueong.career.co.kr|localhost)' THEN NULLIF(p.referrer, '') END,
-          'direct') AS raw_source,
+        ${accessLogSourceSql("p")} AS raw_source,
         p.metadata
       FROM public.access_logs p
       WHERE p.event_name = 'page_view'
@@ -201,17 +250,21 @@ export function trafficFactsCtes(
         ${pageCandidateCondition}
     ),
     ${pageTrafficChannelsCtes("analytics_pages_raw", "analytics_page_channels")},
-    analytics_pages AS MATERIALIZED (
+    analytics_pages_all AS MATERIALIZED (
       SELECT p.*, ${screenSql("p.path")} AS screen,
         channels.channel
       FROM analytics_pages_raw p
       JOIN analytics_page_channels channels USING (id)
     ),
-    analytics_products AS MATERIALIZED (
+    analytics_pages AS MATERIALIZED (
+      SELECT * FROM analytics_pages_all
+      WHERE ${includedTrafficSourceCondition("channel")}
+    ),
+    analytics_products_raw AS MATERIALIZED (
       SELECT e.id::text AS id, ${cookieKey("e")} AS visitor_key,
         e.user_id, e.anonymous_id,
         e.created_at AS event_at, (e.created_at AT TIME ZONE 'Asia/Seoul')::date AS day,
-        e.event_type, split_part(e.properties->>'path', '?', 1) AS path,
+        e.event_type, e.properties, split_part(e.properties->>'path', '?', 1) AS path,
         NULLIF(e.properties->>'ip_address', '') AS ip_address,
         NULLIF(e.properties->>'user_agent', '') AS user_agent,
         CASE WHEN e.event_type = 'banner_click' THEN e.properties->>'banner_key'
@@ -228,6 +281,12 @@ export function trafficFactsCtes(
         AND ${analyticsExcludedCondition("e.user_id", "NULLIF(e.properties->>'ip_address', '')")}
         AND ${nonAutomatedUserAgentCondition("NULLIF(e.properties->>'user_agent', '')")}
         ${productCandidateCondition}
+    ),
+    ${eventTrafficChannelsCtes("analytics_pages_all", "analytics_products_raw", "analytics_product_channels")},
+    analytics_products AS MATERIALIZED (
+      SELECT e.* FROM analytics_products_raw e
+      LEFT JOIN analytics_product_channels channels USING (id)
+      WHERE ${includedEventTrafficCondition(productTrafficSourceSql("e.properties"), "e.properties", "channels.channel")}
     ),
     analytics_daily_users AS MATERIALIZED (
       SELECT DISTINCT ON (day, visitor_key) day, visitor_key, channel
@@ -326,7 +385,7 @@ export function trafficFactsCtes(
 export function conversionCtes(
   product: string,
   start = "'-infinity'::timestamptz",
-  pagesCte = "analytics_pages",
+  pagesCte = "analytics_pages_all",
 ) {
   const common = (alias: string, ip: string) => excludedEventCondition(`${alias}.user_id`, ip);
   let starts: string;
@@ -334,6 +393,7 @@ export function conversionCtes(
   if (product === "resume_coaching") {
     starts = `SELECT r.id AS id, ${cookieKey("r")} AS visitor_key, r.user_id, r.anonymous_id,
       r.created_at AS event_at, r.ip_address::text AS ip_address, r.user_agent,
+      NULL::text AS source, '{}'::jsonb AS metadata,
       '/ai-tools/coaching'::text AS path FROM public.resume_coaching_requests r
       WHERE r.created_at >= (${start}) AND r.created_at <= NOW()
         AND ${common("r", "r.ip_address")}`;
@@ -346,6 +406,7 @@ export function conversionCtes(
   } else if (product === "interview_coaching") {
     starts = `SELECT r.id AS id, ${cookieKey("r")} AS visitor_key, r.user_id, r.anonymous_id,
       r.started_at AS event_at, r.ip_address::text AS ip_address, r.user_agent,
+      NULL::text AS source, '{}'::jsonb AS metadata,
       '/ai-tools/interview-coaching'::text AS path FROM public.interview_coaching_sessions r
       WHERE r.started_at >= (${start}) AND r.started_at <= NOW()
         AND ${common("r", "r.ip_address")}`;
@@ -356,6 +417,7 @@ export function conversionCtes(
   } else {
     starts = `SELECT e.id AS id, ${cookieKey("e")} AS visitor_key, e.user_id, e.anonymous_id,
       e.created_at AS event_at, e.properties->>'ip_address' AS ip_address, e.properties->>'user_agent' AS user_agent,
+      ${productTrafficSourceSql("e.properties")} AS source, e.properties AS metadata,
       '/events/diagnosis'::text AS path FROM public.product_events e
       WHERE e.event_type = 'diagnosis_start' AND e.properties->>'action' IN ('question_1_view', 'start_button_click')
       AND e.created_at >= (${start}) AND e.created_at <= NOW()
@@ -375,8 +437,14 @@ export function conversionCtes(
       GROUP BY s.id`;
   }
   const path = product === "resume_coaching" ? "/ai-tools/coaching" : product === "interview_coaching" ? "/ai-tools/interview-coaching" : "/events/diagnosis";
-  return `conversion_starts_raw AS MATERIALIZED (
+  return `conversion_candidates AS MATERIALIZED (
       SELECT * FROM (${starts}) raw WHERE event_at >= (${start}) AND event_at <= NOW()
+    ),
+    ${eventTrafficChannelsCtes(pagesCte, "conversion_candidates", "conversion_start_channels")},
+    conversion_starts_raw AS MATERIALIZED (
+      SELECT s.* FROM conversion_candidates s
+      LEFT JOIN conversion_start_channels channels ON channels.id = s.id::text
+      WHERE ${includedEventTrafficCondition("s.source", "s.metadata", "channels.channel")}
     ),
     conversion_completions AS MATERIALIZED (${completions}),
     conversion_starts AS MATERIALIZED (
@@ -388,6 +456,7 @@ export function conversionCtes(
       SELECT DISTINCT ON (day, visitor_key) id, visitor_key, user_id, anonymous_id, event_at, day,
         original_path AS path, referrer, channel, ip_address, user_agent
       FROM ${pagesCte} WHERE path = '${path}' AND visitor_key IS NOT NULL
+        AND ${includedTrafficSourceCondition("channel")}
       ORDER BY day, visitor_key, event_at, id
     ),
     conversion_people AS MATERIALIZED (
@@ -474,20 +543,24 @@ const dashboardTrafficFactsSqlBody = `
         FROM analytics_pages WHERE visitor_key IS NULL GROUP BY day
       ) u USING (day)`;
 
-function dashboardConversionPageCte(path: string) {
+function dashboardConversionPageCte() {
   return `
-    conversion_pages AS MATERIALIZED (
+    conversion_pages_raw AS MATERIALIZED (
       SELECT p.id AS id, p.user_id, p.anonymous_id, ${cookieKey("p")} AS visitor_key,
         p.created_at AS event_at, (p.created_at AT TIME ZONE 'Asia/Seoul')::date AS day,
         split_part(p.path, '?', 1) AS path, p.path AS original_path,
-        p.referrer, NULL::text AS channel, p.ip_address::text AS ip_address, p.user_agent
+        p.referrer, p.ip_address::text AS ip_address, p.user_agent,
+        ${accessLogSourceSql("p")} AS raw_source, p.metadata
       FROM public.access_logs p, bounds
       WHERE p.event_name = 'page_view'
         AND p.created_at >= (bounds.first_day::timestamp AT TIME ZONE 'Asia/Seoul')
         AND p.created_at < ((bounds.last_day + 1)::timestamp AT TIME ZONE 'Asia/Seoul')
-        AND split_part(p.path, '?', 1) = '${path}'
         AND ${excludedEventCondition("p.user_id", "p.ip_address")}
         AND ${nonAutomatedUserAgentCondition("p.user_agent")}
+    ), ${pageTrafficChannelsCtes("conversion_pages_raw", "conversion_page_channels")},
+    conversion_pages AS MATERIALIZED (
+      SELECT p.*, channels.channel
+      FROM conversion_pages_raw p JOIN conversion_page_channels channels USING (id)
     )`;
 }
 
@@ -585,14 +658,8 @@ export function dashboardTrafficFactDetailsForDaySql() {
 }
 
 function dashboardProductFactsSqlWithBounds(product: string, boundsSql: string) {
-  const path = product === "resume_coaching"
-    ? "/ai-tools/coaching"
-    : product === "interview_coaching"
-      ? "/ai-tools/interview-coaching"
-      : "/events/diagnosis";
-
   return `WITH ${boundsSql},
-    ${dashboardConversionPageCte(path)},
+    ${dashboardConversionPageCte()},
     ${conversionCtes(product, "(SELECT first_day::timestamp AT TIME ZONE 'Asia/Seoul' FROM bounds)", "conversion_pages")},
     days AS (SELECT d::date AS day FROM bounds, generate_series(first_day::timestamp, last_day::timestamp, interval '1 day') d),
     eligible_users AS MATERIALIZED (
@@ -654,14 +721,8 @@ export function dashboardProductFactsForDaySql(product: string) {
 }
 
 export function dashboardProductFactDetailsForDaySql(product: string) {
-  const path = product === "resume_coaching"
-    ? "/ai-tools/coaching"
-    : product === "interview_coaching"
-      ? "/ai-tools/interview-coaching"
-      : "/events/diagnosis";
-
   return `WITH ${dashboardFactDayBoundsSql},
-    ${dashboardConversionPageCte(path)},
+    ${dashboardConversionPageCte()},
     ${conversionCtes(product, "(SELECT first_day::timestamp AT TIME ZONE 'Asia/Seoul' FROM bounds)", "conversion_pages")},
     details AS (
       SELECT v.day, 'product_visit'::text AS metric, ''::text AS channel,

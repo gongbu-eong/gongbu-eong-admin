@@ -10,9 +10,9 @@ import {
   ScreenInflowItem,
 } from "@/features/admin/data/dashboard";
 import { query } from "@/features/admin/server/db";
-import { isCareerSource } from "../traffic-channel";
 import {
   dashboardFactsSql,
+  includedTrafficSourceCondition,
   type AnalyticsFact,
 } from "./analytics-facts";
 
@@ -66,7 +66,6 @@ type DashboardData = {
 };
 
 const channelAssets: Record<string, Pick<ChannelItem, "icon" | "iconClass">> = {
-  "커리어": { icon: "/admin-assets/channel-career.png", iconClass: "career" },
   "인스타그램": { icon: "/admin-assets/channel-instagram.svg" },
   "블로그": { icon: "/admin-assets/channel-blog.png", iconClass: "blog" },
   "스레드": { icon: "/admin-assets/channel-threads.png", iconClass: "threads" },
@@ -82,7 +81,6 @@ const dashboardChannelOptions = [
   { key: "threads", label: "스레드" },
   { key: "search", label: "검색" },
   { key: "direct", label: "직접유입" },
-  { key: "career", label: "커리어" },
 ];
 
 const dashboardProductOptions = [
@@ -295,7 +293,6 @@ function createFunnel(
 }
 
 function mapChannelLabel(source: string | null) {
-  if (isCareerSource(source)) return "커리어";
   const trimmed = (source || "").trim();
   if (channelAssets[trimmed]) return trimmed;
 
@@ -447,6 +444,7 @@ async function getDashboardFacts(
         SELECT day, metric, channel, dimension, value
         FROM public.analytics_dashboard_facts
         WHERE scope IN ('traffic', 'accounts', $3)
+          AND ${includedTrafficSourceCondition("channel")}
           AND day BETWEEN $1::date AND $2::date
       ), account_baseline AS (
         SELECT DISTINCT ON (metric, channel, dimension)
@@ -779,7 +777,6 @@ export async function getDashboardData({
       { key: "channel:스레드", label: "스레드", color: "#a54de8" },
       { key: "channel:검색", label: "검색", color: "#f5b91e" },
       { key: "channel:직접유입", label: "직접유입", color: "#5a6580" },
-      { key: "channel:커리어", label: "커리어", color: "#087f8c" },
     ],
   );
   const screenTrend = createTrendSeries(
@@ -879,7 +876,6 @@ export async function getDashboardData({
       { key: "channel:스레드", label: "스레드", color: "#a54de8" },
       { key: "channel:검색", label: "검색", color: "#f5b91e" },
       { key: "channel:직접유입", label: "직접유입", color: "#5a6580" },
-      { key: "channel:커리어", label: "커리어", color: "#087f8c" },
     ],
   );
   const screenListTrend = createTrendSeries(

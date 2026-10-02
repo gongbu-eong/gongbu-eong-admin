@@ -13,7 +13,7 @@ const status = (label: string): SelectFilter => ({ name: "status", label, option
 const config: Record<ManagementScreen, { path: string; label: string; placeholder?: string; selects: SelectFilter[] }> = {
   members: { path: "/members", label: "회원 관리", placeholder: "닉네임 · 이메일", selects: [
     { name: "status", label: "회원 상태", options: [["all", "상태 전체"], ["active", "활동중"], ["pending_signup", "가입대기"], ["blocked", "정지"], ["withdrawn", "탈퇴"], ["forced_withdrawn", "강제탈퇴"]] },
-    { name: "channel", label: "유입 채널", options: [["all", "채널 전체"], ["instagram", "인스타그램"], ["blog", "블로그"], ["threads", "스레드"], ["search", "검색"], ["direct", "직접유입"], ["career", "커리어"]] },
+    { name: "channel", label: "유입 채널", options: [["all", "채널 전체"], ["instagram", "인스타그램"], ["blog", "블로그"], ["threads", "스레드"], ["search", "검색"], ["direct", "직접유입"]] },
   ] },
   jobs: { path: "/jobs", label: "공고 목록", placeholder: "공고명 · 기관 · NCS", selects: [
     { name: "source", label: "공고 출처", options: [["all", "출처 전체"], ["alio", "알리오 수집"], ["manual", "수동 등록"]] },

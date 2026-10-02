@@ -64,7 +64,6 @@ export type TrafficData = {
 export type TrafficPeriodPreset = "today" | "7d" | "30d" | "custom";
 export type TrafficLogChannelFilter =
   | "all"
-  | "career"
   | "instagram"
   | "blog"
   | "threads"
@@ -233,7 +232,6 @@ export type CampaignPerformanceData = {
 };
 
 export const trafficChannelColors: Record<string, string> = {
-  "커리어": "#087f8c",
   "인스타그램": "#2f7ff0",
   "블로그": "#1fb573",
   "스레드": "#a54de8",
@@ -248,5 +246,4 @@ export const trafficChannelOrder = [
   "스레드",
   "검색",
   "직접유입",
-  "커리어",
 ];

@@ -8,7 +8,6 @@ import { getActivityLogData, type ActivityLogRow } from "@/features/admin/server
 export type MemberStatusFilter = "all" | "active" | "pending_signup" | "blocked" | "withdrawn" | "forced_withdrawn";
 export type MemberChannelFilter =
   | "all"
-  | "career"
   | "instagram"
   | "blog"
   | "threads"
@@ -395,7 +394,6 @@ function normalizeStatus(value?: string | null): MemberStatusFilter {
 
 function normalizeChannel(value?: string | null): MemberChannelFilter {
   if (
-    value === "career" ||
     value === "instagram" ||
     value === "blog" ||
     value === "threads" ||
@@ -420,7 +418,7 @@ function toMemberSummary(row: MemberRow): MemberSummary {
     phone: row.phone?.trim() || "없음",
     gender: formatGender(row.gender),
     ageGroup: formatAgeGroup(row.age_group),
-    source: isCareerSource(row.first_source) ? "커리어" : row.first_source || "직접유입",
+    source: isCareerSource(row.first_source) ? "-" : row.first_source || "직접유입",
     campaign: row.first_campaign || "캠페인 없음",
     joinedAt: formatDate(row.signup_at),
     joinedAtShort: formatDate(row.signup_at),
@@ -529,7 +527,7 @@ const memberFilterSql = `
     AND (
       $3::text = 'all'
       OR CASE
-        WHEN ${careerSourceSql("attribution.first_source")} THEN 'career'
+        WHEN ${careerSourceSql("attribution.first_source")} THEN NULL
         WHEN LOWER(COALESCE(attribution.first_source, '')) LIKE '%instagram%'
           OR LOWER(COALESCE(attribution.first_source, '')) = 'ig'
           THEN 'instagram'
