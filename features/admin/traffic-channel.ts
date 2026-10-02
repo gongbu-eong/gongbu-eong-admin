@@ -1,3 +1,5 @@
+export const ADMIN_ANALYTICS_RELEASE = "20261002-career-excluded-v2";
+
 // Match the referral host, not a substring in a URL or our own subdomain.
 // Keep this pattern compatible with both JavaScript and PostgreSQL regexes.
 export const careerSourcePattern = "^(career|커리어|((https?:)?//)?(www[.])?career[.]co[.]kr(:[0-9]+)?([/?#].*)?)$";

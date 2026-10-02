@@ -10,6 +10,7 @@ import { ScreenClickList } from "@/features/admin/components/dashboard/ScreenCli
 import { TrendViewCard } from "@/features/admin/components/dashboard/TrendViewCard";
 import type { LinePoint } from "@/features/admin/data/dashboard";
 import { getDashboardData } from "@/features/admin/server/dashboard.repository";
+import { ADMIN_ANALYTICS_RELEASE } from "@/features/admin/traffic-channel";
 import styles from "./AdminDashboardPage.module.css";
 
 function createChartScale(series: LinePoint[][]) {
@@ -212,7 +213,7 @@ export async function AdminDashboardPage({
         />
       }
     >
-      <section id="visit-signup" className={styles.dashboardSection} aria-label="방문·가입 흐름">
+      <section id="visit-signup" className={styles.dashboardSection} aria-label="방문·가입 흐름" data-analytics-release={ADMIN_ANALYTICS_RELEASE}>
         <div className={styles.sectionHeader}>
           <div>
             <h2>방문·가입 흐름</h2>

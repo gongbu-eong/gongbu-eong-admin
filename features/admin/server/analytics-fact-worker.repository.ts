@@ -270,12 +270,19 @@ async function saveFacts(
 }
 
 async function refreshItemAttempt(item: QueueItem) {
+  const startedAt = Date.now();
+  const logPhase = (phase: string) => console.info("[analytics facts] Refresh progress", {
+    scope: item.scope, day: item.day, workerId: item.locked_by,
+    phase, elapsedMs: Date.now() - startedAt,
+  });
+  logPhase("database_connection");
   const client = await db.connect();
 
   try {
     // Summary and drilldown rows must be calculated from the same snapshot.
     // Queue triggers can keep updating the revision while these reads run.
     await client.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");
+    logPhase("aggregate");
     const factResult = await client.query<AnalyticsFact>(factsSql(item.scope), [item.day]);
     const relation = await client.query<{ ready: boolean }>(
       `SELECT to_regclass('public.analytics_dashboard_fact_details') IS NOT NULL
@@ -283,6 +290,7 @@ async function refreshItemAttempt(item: QueueItem) {
     );
     const detailsSchemaReady = relation.rows[0]?.ready === true;
     const detailSql = detailsSchemaReady ? factDetailsSql(item.scope) : null;
+    logPhase("details");
     const detailResult = detailSql
       ? await client.query<AnalyticsFactDetail>(detailSql, [item.day])
       : { rows: [] as AnalyticsFactDetail[] };
@@ -300,11 +308,14 @@ async function refreshItemAttempt(item: QueueItem) {
     );
     if (!owned.rows.length) {
       await client.query("ROLLBACK");
+      logPhase("claim_expired");
       return null;
     }
 
+    logPhase("save");
     await saveFacts(client, item, rows, detailResult.rows, detailsSchemaReady);
     await client.query("COMMIT");
+    logPhase("complete");
     return rows.length;
   } catch (error) {
     await client.query("ROLLBACK");
@@ -362,7 +373,9 @@ export async function processAnalyticsFactQueue({
     // Finish the current atomic refresh, but do not keep starting work in a
     // long HTTP batch. This is not a timeout for an individual SQL statement.
     if (index > 0 && Date.now() - startedAt >= budgetMs) break;
-    const item = await claimNext(`${workerId}:${randomUUID()}`);
+    const claimId = `${workerId}:${randomUUID()}`;
+    console.info("[analytics facts] Claim started", { workerId: claimId });
+    const item = await claimNext(claimId);
     if (!item) break;
 
     try {
