@@ -16,6 +16,7 @@ export async function GET(request: Request, { params }: Context) {
       "Content-Type": image.image_mime_type,
       "Content-Disposition": `inline; filename*=UTF-8''${encodeURIComponent(image.image_filename || "banner")}`,
       "Cache-Control": "private, no-store",
+      "Content-Security-Policy": "default-src 'none'; img-src data:; style-src 'unsafe-inline'; sandbox",
       "X-Content-Type-Options": "nosniff",
     },
   });

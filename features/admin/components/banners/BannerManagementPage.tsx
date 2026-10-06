@@ -267,7 +267,7 @@ export function BannerManagementPage({
               <div className={`${styles.fullField} ${styles.imageUploadGrid}`}>
                 <BannerImageUpload
                   label="PC용 배너 이미지 (필수)"
-                  guide="권장 600 × 114px · WebP · 최대 500KB"
+                  guide="텍스트 포함 시 SVG 권장 · PNG/WebP는 1800 × 342px (3배율) · 최대 500KB"
                   fileRef={fileRef}
                   selectedFile={imageFile}
                   previewUrl={imagePreviewUrl}
@@ -287,7 +287,7 @@ export function BannerManagementPage({
                 />
                 <BannerImageUpload
                   label="모바일용 배너 이미지"
-                  guide="권장 390 × 114px · 미등록 시 PC 이미지 사용 · 최대 500KB"
+                  guide="텍스트 포함 시 SVG 권장 · PNG/WebP는 1179 × 342px (3배율) · 미등록 시 PC 이미지 사용 · 최대 500KB"
                   fileRef={mobileFileRef}
                   selectedFile={mobileImageFile}
                   previewUrl={mobileImagePreviewUrl}
@@ -350,7 +350,7 @@ function BannerImageUpload({
       <input
         ref={fileRef}
         type="file"
-        accept="image/png,image/jpeg,image/webp,image/gif"
+        accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml"
         onChange={(event) => {
           const file = event.target.files?.[0] || null;
           if (file && file.size > MAX_BANNER_IMAGE_BYTES) {

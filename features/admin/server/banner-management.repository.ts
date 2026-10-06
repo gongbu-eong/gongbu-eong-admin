@@ -351,12 +351,24 @@ function parseBannerDate(value: string, label: string) {
 }
 
 function validateImage(image: NonNullable<BannerInput["image"]>) {
-  const allowedTypes = ["image/jpeg", "image/png", "image/webp", "image/gif"];
-  if (!allowedTypes.includes(image.mimeType)) throw new Error("JPG, PNG, WEBP, GIF 이미지만 등록할 수 있습니다.");
+  const allowedTypes = ["image/jpeg", "image/png", "image/webp", "image/gif", "image/svg+xml"];
+  if (!allowedTypes.includes(image.mimeType)) throw new Error("JPG, PNG, WEBP, GIF, SVG 이미지만 등록할 수 있습니다.");
   if (!image.data.length || image.data.length > MAX_BANNER_IMAGE_BYTES) {
     throw new Error("배너 이미지는 파일당 500KB 이하로 등록해 주세요.");
   }
   if (!image.filename || image.filename.length > 255) throw new Error("이미지 파일명이 올바르지 않습니다.");
+  if (image.mimeType === "image/svg+xml") validateSvgImage(image.data);
+}
+
+function validateSvgImage(data: Buffer) {
+  const source = data.toString("utf8").replace(/^\uFEFF/, "").trim();
+  if (!/^<svg[\s>]/i.test(source)) throw new Error("올바른 SVG 이미지가 아닙니다.");
+
+  const unsafePattern =
+    /<!DOCTYPE|<!ENTITY|<script[\s>]|<foreignObject[\s>]|\son[a-z]+\s*=|url\(\s*["']?(?:https?:|\/\/)|(?:href|xlink:href)\s*=\s*["']\s*(?!#|data:image\/(?:png|jpeg|webp|gif);base64,)/i;
+  if (unsafePattern.test(source)) {
+    throw new Error("외부 리소스나 실행 코드가 포함된 SVG는 등록할 수 없습니다.");
+  }
 }
 
 function isSafeTargetUrl(value: string) {
