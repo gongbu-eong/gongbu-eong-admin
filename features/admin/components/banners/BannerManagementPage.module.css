@@ -59,6 +59,7 @@
 .uploadPreview { display: flex; align-items: center; justify-content: center; min-height: 150px; overflow: hidden; border: 1px dashed #bdc8d8; border-radius: 6px; background: #f6f8fb; }
 .uploadPreview img { display: block; width: 100%; max-height: 220px; object-fit: contain; }
 .uploadPreview p { margin: 0; color: var(--admin-light); font-size: 12px; }
+.uploadPreview .pendingRemoval { color: var(--admin-danger); font-weight: 800; }
 .uploadRow { display: flex; align-items: center; gap: 10px; min-height: 42px; }
 .uploadRow button { flex: 0 0 auto; height: 38px; padding: 0 13px; border: 1px solid var(--admin-border); border-radius: 5px; background: #f5f7fa; color: var(--admin-text); font: inherit; font-size: 12px; font-weight: 800; cursor: pointer; }
 .uploadRow p { min-width: 0; flex: 1; margin: 0; overflow: hidden; color: var(--admin-muted); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }

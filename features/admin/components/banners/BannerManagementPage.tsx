@@ -135,7 +135,8 @@ export function BannerManagementPage({
       setFeedback({ tone: "error", text: "노출 종료일시는 시작일시보다 이후여야 합니다." });
       return;
     }
-    if (editor.status === "active" && !imageFile && (!editor.hasImage || removeImage)) {
+    const willHaveDesktopImage = Boolean(imageFile) || (editor.hasImage && !removeImage);
+    if (editor.status === "active" && !willHaveDesktopImage) {
       setFeedback({ tone: "error", text: "활성 배너에는 이미지가 필요합니다." });
       return;
     }
@@ -160,8 +161,19 @@ export function BannerManagementPage({
       );
       const body = (await response.json()) as { ok?: boolean; message?: string };
       if (!response.ok || !body.ok) throw new Error(body.message || "배너를 저장하지 못했습니다.");
+      const removedDesktopImage = Boolean(editor.id && removeImage && !imageFile);
+      const removedMobileImage = Boolean(editor.id && removeMobileImage && !mobileImageFile);
       setEditor(null);
-      setFeedback({ tone: "success", text: editor.id ? "배너를 수정했습니다." : "배너를 등록했습니다." });
+      setFeedback({
+        tone: "success",
+        text: removedDesktopImage
+          ? "PC용 이미지를 제거하고 배너를 비활성화했습니다."
+          : removedMobileImage
+            ? "모바일용 이미지를 제거했습니다. 모바일에서는 PC용 이미지가 노출됩니다."
+            : editor.id
+              ? "배너를 수정했습니다."
+              : "배너를 등록했습니다.",
+      });
       router.refresh();
     } catch (error) {
       setFeedback({ tone: "error", text: error instanceof Error ? error.message : "배너를 저장하지 못했습니다." });
@@ -261,9 +273,16 @@ export function BannerManagementPage({
                   previewUrl={imagePreviewUrl}
                   currentImageUrl={editor.hasImage && !removeImage ? `/api/admin/banners/${editor.id}/image` : ""}
                   currentFilename={editor.imageFilename}
+                  removed={removeImage}
                   canRemove={editor.hasImage && !imageFile && !removeImage}
                   onFile={(file) => { setImageFile(file); if (file) { setRemoveImage(false); setFeedback(null); } }}
-                  onRemove={() => setRemoveImage(true)}
+                  onRemove={() => {
+                    setRemoveImage(true);
+                    setImageFile(null);
+                    setEditor((current) => current ? { ...current, status: "inactive" } : current);
+                    setFeedback(null);
+                  }}
+                  onUndoRemove={() => setRemoveImage(false)}
                   onError={(text) => setFeedback({ tone: "error", text })}
                 />
                 <BannerImageUpload
@@ -274,9 +293,15 @@ export function BannerManagementPage({
                   previewUrl={mobileImagePreviewUrl}
                   currentImageUrl={editor.hasMobileImage && !removeMobileImage ? `/api/admin/banners/${editor.id}/image?variant=mobile` : ""}
                   currentFilename={editor.mobileImageFilename}
+                  removed={removeMobileImage}
                   canRemove={editor.hasMobileImage && !mobileImageFile && !removeMobileImage}
                   onFile={(file) => { setMobileImageFile(file); if (file) { setRemoveMobileImage(false); setFeedback(null); } }}
-                  onRemove={() => setRemoveMobileImage(true)}
+                  onRemove={() => {
+                    setRemoveMobileImage(true);
+                    setMobileImageFile(null);
+                    setFeedback(null);
+                  }}
+                  onUndoRemove={() => setRemoveMobileImage(false)}
                   onError={(text) => setFeedback({ tone: "error", text })}
                 />
               </div>
@@ -298,9 +323,11 @@ function BannerImageUpload({
   previewUrl,
   currentImageUrl,
   currentFilename,
+  removed,
   canRemove,
   onFile,
   onRemove,
+  onUndoRemove,
   onError,
 }: {
   label: string;
@@ -310,9 +337,11 @@ function BannerImageUpload({
   previewUrl: string;
   currentImageUrl: string;
   currentFilename: string;
+  removed: boolean;
   canRemove: boolean;
   onFile: (file: File | null) => void;
   onRemove: () => void;
+  onUndoRemove: () => void;
   onError: (text: string) => void;
 }) {
   return (
@@ -333,12 +362,13 @@ function BannerImageUpload({
         }}
       />
       <div className={styles.uploadPreview}>
-        {previewUrl ? <Image unoptimized width={520} height={180} src={previewUrl} alt={`${label} 미리보기`} /> : currentImageUrl ? <Image unoptimized width={520} height={180} src={currentImageUrl} alt={`현재 ${label}`} /> : <p>등록된 이미지가 없습니다.</p>}
+        {removed ? <p className={styles.pendingRemoval}>저장하면 기존 이미지가 제거됩니다.</p> : previewUrl ? <Image unoptimized width={520} height={180} src={previewUrl} alt={`${label} 미리보기`} /> : currentImageUrl ? <Image unoptimized width={520} height={180} src={currentImageUrl} alt={`현재 ${label}`} /> : <p>등록된 이미지가 없습니다.</p>}
       </div>
       <div className={styles.uploadRow}>
         <button type="button" onClick={() => fileRef.current?.click()}>이미지 선택</button>
-        <p>{selectedFile?.name || currentFilename || "선택된 이미지 없음"}</p>
+        <p>{removed ? "기존 이미지 제거 예정" : selectedFile?.name || currentFilename || "선택된 이미지 없음"}</p>
         {canRemove ? <button className={styles.removeImageButton} type="button" onClick={onRemove}>기존 이미지 제거</button> : null}
+        {removed ? <button type="button" onClick={onUndoRemove}>제거 취소</button> : null}
       </div>
       <small>{guide}</small>
     </div>

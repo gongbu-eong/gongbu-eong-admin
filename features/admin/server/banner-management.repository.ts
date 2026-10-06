@@ -233,15 +233,13 @@ export async function updateManagedBanner(
   );
   if (!current.rows[0]) return null;
   const willHaveImage = Boolean(value.image) || (current.rows[0].has_image && !value.removeImage);
-  if (value.status === "active" && !willHaveImage) {
-    throw new Error("활성 배너에는 이미지가 필요합니다.");
-  }
+  const nextStatus = value.status === "active" && !willHaveImage ? "inactive" : value.status;
   const params: unknown[] = [
     bannerId,
     value.placement,
     value.name,
     value.targetUrl || null,
-    value.status,
+    nextStatus,
     value.sortOrder,
     value.startsAt,
     value.endsAt,
