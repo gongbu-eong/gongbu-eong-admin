@@ -103,7 +103,7 @@ export function NotificationManagementPage({ data }: { data: NotificationRecipie
               <tr>
                 <th className={styles.checkboxCell}><input type="checkbox" checked={allEligibleSelected} onChange={toggleAll} aria-label="현재 페이지 발송 가능 회원 전체 선택" /></th>
                 <th>회원</th>
-                <th>연령·템플릿</th>
+                <th>연령대</th>
                 <th>휴대폰번호</th>
                 <th>광고성 정보 수신</th>
                 <th>발송 상태</th>
@@ -116,7 +116,7 @@ export function NotificationManagementPage({ data }: { data: NotificationRecipie
                     <input type="checkbox" disabled={!recipient.eligible} checked={selectedIds.includes(recipient.id)} onChange={() => toggleOne(recipient.id)} aria-label={`${recipient.name} 선택`} />
                   </td>
                   <td><strong>{recipient.name}</strong><small>{recipient.email} · {recipient.statusLabel}</small></td>
-                  <td><span>{recipient.ageGroup}</span><small>{recipient.templateGroup}</small></td>
+                  <td>{recipient.ageGroup}</td>
                   <td>{recipient.phone}</td>
                   <td><span>{recipient.marketingAgreed ? "동의" : "미동의"}</span></td>
                   <td>{recipient.eligible ? <i className={styles.readyBadge}>발송 가능</i> : <i className={styles.disabledBadge}>{recipient.unavailableReason}</i>}</td>

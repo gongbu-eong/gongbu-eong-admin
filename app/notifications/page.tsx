@@ -21,7 +21,7 @@ export default async function NotificationsPage({ searchParams }: Props) {
     <AdminLayout
       activeNav="notifications"
       title="알림 발송 관리"
-      description="수신 동의 회원을 선택해 연령대별 카카오 알림톡을 발송합니다."
+      description="광고성 정보 수신에 동의하고 휴대폰번호가 있는 회원에게 카카오 알림톡을 발송합니다."
       stickyHeader
     >
       <NotificationManagementPage data={data} />

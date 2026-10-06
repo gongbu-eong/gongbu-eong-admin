@@ -18,7 +18,6 @@ export type NotificationRecipient = {
   status: string;
   statusLabel: string;
   ageGroup: string;
-  templateGroup: string;
   marketingAgreed: boolean;
   eligible: boolean;
   unavailableReason: string;
@@ -44,7 +43,7 @@ type RecipientRow = {
   status: string;
   signup_at: Date | string;
   age_group: string | null;
-  template_group: string | null;
+  age_bucket: string | null;
   marketing_agreed: boolean;
   eligible: boolean;
   total_filtered: string | number;
@@ -82,7 +81,7 @@ export async function getNotificationRecipientData(args: {
             WHEN users.age_group = '40-49' THEN '40s'
             WHEN users.age_group IN ('50-59', '60-69', '70-79', '80-89', '90+') THEN '50plus'
             ELSE NULL
-          END AS template_group,
+          END AS age_bucket,
           COALESCE(marketing_consent.agreed, preferences.marketing_enabled, false) AS marketing_agreed
         FROM public.users users
         LEFT JOIN public.notification_preferences preferences
@@ -102,7 +101,6 @@ export async function getNotificationRecipientData(args: {
           (
             NULLIF(BTRIM(recipient_base.phone), '') IS NOT NULL
             AND recipient_base.status = 'active'
-            AND recipient_base.template_group IS NOT NULL
             AND recipient_base.marketing_agreed
           ) AS eligible
         FROM recipient_base
@@ -119,7 +117,7 @@ export async function getNotificationRecipientData(args: {
             AND REGEXP_REPLACE(COALESCE(phone, ''), '[^0-9]', '', 'g') LIKE $4
           )
         )
-          AND ($2::text = 'all' OR template_group = $2)
+          AND ($2::text = 'all' OR age_bucket = $2)
           AND (
             $3::text = 'all'
             OR ($3::text = 'eligible' AND eligible)
@@ -163,11 +161,9 @@ export async function getNotificationRecipientData(args: {
 
 function toRecipient(row: RecipientRow): NotificationRecipient {
   const phone = row.phone?.trim() || "";
-  const templateGroup = row.template_group || "";
   let unavailableReason = "";
   if (row.status !== "active") unavailableReason = `${formatStatus(row.status)} 회원`;
   else if (!phone) unavailableReason = "휴대폰번호 없음";
-  else if (!templateGroup) unavailableReason = "지원 연령대 없음";
   else if (!row.marketing_agreed) unavailableReason = "광고성 정보 수신 미동의";
 
   return {
@@ -178,7 +174,6 @@ function toRecipient(row: RecipientRow): NotificationRecipient {
     status: row.status,
     statusLabel: formatStatus(row.status),
     ageGroup: formatAgeGroup(row.age_group),
-    templateGroup: formatTemplateGroup(templateGroup),
     marketingAgreed: Boolean(row.marketing_agreed),
     eligible: Boolean(row.eligible),
     unavailableReason,
@@ -209,16 +204,6 @@ function normalizeAgeFilter(value?: string): NotificationAgeFilter {
 
 function normalizeEligibilityFilter(value?: string): NotificationEligibilityFilter {
   return value === "eligible" || value === "unavailable" ? value : "all";
-}
-
-function formatTemplateGroup(value: string) {
-  return ({
-    "10s": "10대 템플릿",
-    "20s": "20대 템플릿",
-    "30s": "30대 템플릿",
-    "40s": "40대 템플릿",
-    "50plus": "50대 이상 템플릿",
-  } as Record<string, string>)[value] || "매칭 안 됨";
 }
 
 function formatAgeGroup(value: string | null) {
