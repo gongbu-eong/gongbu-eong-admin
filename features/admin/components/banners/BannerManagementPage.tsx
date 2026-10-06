@@ -385,7 +385,7 @@ function imageUploadGuide(
 ) {
   if (placement === "resume_coaching" || placement === "interview_coaching") {
     return variant === "desktop"
-      ? "표시 영역 568 × 126px · SVG 권장 · PNG/WebP는 1704 × 378px (3배율) · 최대 500KB"
+      ? "표시 비율 600 × 114px · SVG 권장 · PNG/WebP는 1800 × 342px (3배율) · 최대 500KB"
       : "표시 영역 361 × 80px · SVG 권장 · PNG/WebP는 1083 × 240px (3배율) · 미등록 시 PC 이미지 사용 · 최대 500KB";
   }
 

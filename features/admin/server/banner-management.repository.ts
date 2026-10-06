@@ -19,13 +19,13 @@ export const BANNER_PLACEMENTS = [
     key: "resume_coaching",
     label: "AI NCS 자소서 코칭",
     description: "자소서 코칭 진입 화면의 가이드·프로모션 배너",
-    sizeGuide: "피그마 기준 모바일 361 × 80px, 웹은 본문 너비에 맞춰 동일 비율로 사용",
+    sizeGuide: "웹 600 × 114 비율, 피그마 기준 모바일 361 × 80 비율로 각각 사용",
   },
   {
     key: "interview_coaching",
     label: "AI NCS 면접 코칭",
     description: "면접 코칭 진입 화면의 가이드·프로모션 배너",
-    sizeGuide: "피그마 기준 모바일 361 × 80px, 웹은 본문 너비에 맞춰 동일 비율로 사용",
+    sizeGuide: "웹 600 × 114 비율, 피그마 기준 모바일 361 × 80 비율로 각각 사용",
   },
   {
     key: "job_detail",
