@@ -35,6 +35,11 @@ export type NotificationRecipientData = {
   eligibility: NotificationEligibilityFilter;
 };
 
+export type NotificationSendRecipient = {
+  id: string;
+  phone: string;
+};
+
 type RecipientRow = {
   id: string;
   name: string | null;
@@ -157,6 +162,36 @@ export async function getNotificationRecipientData(args: {
     age,
     eligibility,
   };
+}
+
+export async function getEligibleNotificationRecipients(
+  userIds: string[],
+): Promise<NotificationSendRecipient[]> {
+  const result = await query<{ id: string; phone: string }>(
+    `
+      SELECT
+        users.id,
+        BTRIM(users.phone) AS phone
+      FROM public.users users
+      LEFT JOIN public.notification_preferences preferences
+        ON preferences.user_id = users.id
+      LEFT JOIN LATERAL (
+        SELECT consents.agreed
+        FROM public.user_consents consents
+        WHERE consents.user_id = users.id
+          AND consents.terms_key = 'marketing_notifications'
+        ORDER BY consents.updated_at DESC, consents.created_at DESC, consents.id DESC
+        LIMIT 1
+      ) marketing_consent ON TRUE
+      WHERE users.id = ANY($1::uuid[])
+        AND users.status = 'active'
+        AND NULLIF(BTRIM(users.phone), '') IS NOT NULL
+        AND COALESCE(marketing_consent.agreed, preferences.marketing_enabled, false)
+    `,
+    [userIds],
+  );
+
+  return result.rows;
 }
 
 function toRecipient(row: RecipientRow): NotificationRecipient {
