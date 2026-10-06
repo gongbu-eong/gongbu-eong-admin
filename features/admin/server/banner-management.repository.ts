@@ -19,13 +19,13 @@ export const BANNER_PLACEMENTS = [
     key: "resume_coaching",
     label: "AI NCS 자소서 코칭",
     description: "자소서 코칭 진입 화면의 가이드·프로모션 배너",
-    sizeGuide: "웹 최대 600px, 모바일 본문 너비에 맞춰 사용",
+    sizeGuide: "피그마 기준 모바일 361 × 80px, 웹은 본문 너비에 맞춰 동일 비율로 사용",
   },
   {
     key: "interview_coaching",
     label: "AI NCS 면접 코칭",
     description: "면접 코칭 진입 화면의 가이드·프로모션 배너",
-    sizeGuide: "웹 최대 600px, 모바일 본문 너비에 맞춰 사용",
+    sizeGuide: "피그마 기준 모바일 361 × 80px, 웹은 본문 너비에 맞춰 동일 비율로 사용",
   },
   {
     key: "job_detail",
@@ -143,6 +143,26 @@ export async function ensureBannerManagementSchema() {
   await query("ALTER TABLE public.site_banners ADD COLUMN IF NOT EXISTS mobile_image_filename VARCHAR(255)");
   await query("ALTER TABLE public.site_banners ADD COLUMN IF NOT EXISTS mobile_image_mime_type VARCHAR(80)");
   await query("ALTER TABLE public.site_banners ADD COLUMN IF NOT EXISTS mobile_image_size_bytes INTEGER");
+  await query(`
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1
+        FROM pg_constraint
+        WHERE conname = 'site_banners_placement_check'
+          AND conrelid = 'public.site_banners'::regclass
+          AND pg_get_constraintdef(oid) LIKE '%resume_coaching%'
+          AND pg_get_constraintdef(oid) LIKE '%interview_coaching%'
+      ) THEN
+        ALTER TABLE public.site_banners
+          DROP CONSTRAINT IF EXISTS site_banners_placement_check;
+        ALTER TABLE public.site_banners
+          ADD CONSTRAINT site_banners_placement_check CHECK (
+            placement IN ('home_main', 'ai_tools_main', 'resume_coaching', 'interview_coaching', 'job_detail')
+          );
+      END IF;
+    END $$
+  `);
   await query(`
     CREATE INDEX IF NOT EXISTS idx_site_banners_active_period
       ON public.site_banners(placement, status, starts_at, ends_at, sort_order, updated_at DESC)

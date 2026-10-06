@@ -267,7 +267,7 @@ export function BannerManagementPage({
               <div className={`${styles.fullField} ${styles.imageUploadGrid}`}>
                 <BannerImageUpload
                   label="PC용 배너 이미지 (필수)"
-                  guide="텍스트 포함 시 SVG 권장 · PNG/WebP는 1800 × 342px (3배율) · 최대 500KB"
+                  guide={imageUploadGuide(editor.placement, "desktop")}
                   fileRef={fileRef}
                   selectedFile={imageFile}
                   previewUrl={imagePreviewUrl}
@@ -287,7 +287,7 @@ export function BannerManagementPage({
                 />
                 <BannerImageUpload
                   label="모바일용 배너 이미지"
-                  guide="텍스트 포함 시 SVG 권장 · PNG/WebP는 1179 × 342px (3배율) · 미등록 시 PC 이미지 사용 · 최대 500KB"
+                  guide={imageUploadGuide(editor.placement, "mobile")}
                   fileRef={mobileFileRef}
                   selectedFile={mobileImageFile}
                   previewUrl={mobileImagePreviewUrl}
@@ -377,6 +377,21 @@ function BannerImageUpload({
 
 function placementLabel(placements: readonly Placement[], key: BannerPlacement) {
   return placements.find((placement) => placement.key === key)?.label || key;
+}
+
+function imageUploadGuide(
+  placement: BannerPlacement,
+  variant: "desktop" | "mobile",
+) {
+  if (placement === "resume_coaching" || placement === "interview_coaching") {
+    return variant === "desktop"
+      ? "표시 영역 568 × 126px · SVG 권장 · PNG/WebP는 1704 × 378px (3배율) · 최대 500KB"
+      : "표시 영역 361 × 80px · SVG 권장 · PNG/WebP는 1083 × 240px (3배율) · 미등록 시 PC 이미지 사용 · 최대 500KB";
+  }
+
+  return variant === "desktop"
+    ? "텍스트 포함 시 SVG 권장 · PNG/WebP는 1800 × 342px (3배율) · 최대 500KB"
+    : "텍스트 포함 시 SVG 권장 · PNG/WebP는 1179 × 342px (3배율) · 미등록 시 PC 이미지 사용 · 최대 500KB";
 }
 
 function statusLabel(status: BannerStatus) {
