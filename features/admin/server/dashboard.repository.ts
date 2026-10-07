@@ -14,11 +14,9 @@ import { query } from "@/features/admin/server/db";
 import {
   dashboardFactsSql,
   includedTrafficSourceCondition,
-  nonAutomatedUserAgentCondition,
-  productTrafficSourceSql,
+  trafficFactsCtes,
   type AnalyticsFact,
 } from "./analytics-facts";
-import { excludedEventCondition } from "./analytics-exclusion.repository";
 
 type DashboardData = {
   metrics: MetricItem[];
@@ -494,48 +492,18 @@ async function getDashboardBannerDefinitions() {
 }
 
 async function getLiveBannerClicks(startDate: string, endDate: string) {
-  const source = `COALESCE(
-    NULLIF(to_jsonb(e)->>'current_source', ''),
-    NULLIF(to_jsonb(e)->>'first_source', ''),
-    NULLIF(${productTrafficSourceSql("e.properties")}, ''),
-    'direct'
-  )`;
   const result = await query<LiveBannerClickRow>(
     `
-      WITH click_events AS (
-        SELECT
-          (e.created_at AT TIME ZONE 'Asia/Seoul')::date AS day,
-          CASE
-            WHEN e.event_type = 'banner_click'
-              THEN NULLIF(e.properties->>'banner_key', '')
-            WHEN e.event_type IN (
-              'job_detail_bookmark_click',
-              'job_detail_apply_click'
-            ) THEN e.event_type
-          END AS banner_key,
-          COALESCE(
-            NULLIF(e.anonymous_id::text, ''),
-            NULLIF(e.user_id::text, ''),
-            e.id::text
-          ) AS visitor_key
-        FROM public.product_events e
-        WHERE e.created_at >= ($1::date::timestamp AT TIME ZONE 'Asia/Seoul')
-          AND e.created_at < (($2::date + 1)::timestamp AT TIME ZONE 'Asia/Seoul')
-          AND e.event_type IN (
-            'banner_click',
-            'job_detail_bookmark_click',
-            'job_detail_apply_click'
-          )
-          AND ${excludedEventCondition("e.user_id", "NULLIF(e.properties->>'ip_address', '')")}
-          AND ${nonAutomatedUserAgentCondition("NULLIF(e.properties->>'user_agent', '')")}
-          AND ${includedTrafficSourceCondition(source)}
-      )
+      WITH ${trafficFactsCtes(
+        "($1::date::timestamp AT TIME ZONE 'Asia/Seoul')",
+        "(($2::date + 1)::timestamp AT TIME ZONE 'Asia/Seoul')",
+      )}
       SELECT
         day::text AS day,
         banner_key,
         COUNT(*)::text AS click_count,
         COUNT(DISTINCT visitor_key)::text AS unique_count
-      FROM click_events
+      FROM analytics_products
       WHERE banner_key IS NOT NULL
       GROUP BY day, banner_key
       ORDER BY day, banner_key

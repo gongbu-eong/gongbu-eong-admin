@@ -664,6 +664,9 @@ export async function getActivityLogData(args?: ActivityLogQuery): Promise<Activ
   // Stored dashboard cohorts do not apply per-member or free-text filters.
   if (
     factDetailSelector &&
+    // Click totals are read live on the dashboard. Stored fact details can
+    // lag behind and must never make a click-count link show fewer events.
+    !bannerKey &&
     !userId && !keyword && !ip && !includeExcluded && !eventType && !uniqueOnly && !allDates &&
     await hasCompleteDashboardFactDetails(factDetailSelector, startDate, endDate)
   ) {
