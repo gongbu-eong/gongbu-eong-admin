@@ -14,8 +14,11 @@ import { query } from "@/features/admin/server/db";
 import {
   dashboardFactsSql,
   includedTrafficSourceCondition,
+  nonAutomatedUserAgentCondition,
+  productTrafficSourceSql,
   type AnalyticsFact,
 } from "./analytics-facts";
+import { excludedEventCondition } from "./analytics-exclusion.repository";
 
 type DashboardData = {
   metrics: MetricItem[];
@@ -115,6 +118,13 @@ type BannerDefinitionRow = {
   banner_name: string | null;
   placement: string | null;
   source_priority: number;
+};
+
+type LiveBannerClickRow = {
+  day: string;
+  banner_key: string;
+  click_count: string;
+  unique_count: string;
 };
 
 const dashboardScreenKeys = [
@@ -483,6 +493,96 @@ async function getDashboardBannerDefinitions() {
   return definitions;
 }
 
+async function getLiveBannerClicks(startDate: string, endDate: string) {
+  const source = `COALESCE(
+    NULLIF(to_jsonb(e)->>'current_source', ''),
+    NULLIF(to_jsonb(e)->>'first_source', ''),
+    NULLIF(${productTrafficSourceSql("e.properties")}, ''),
+    'direct'
+  )`;
+  const result = await query<LiveBannerClickRow>(
+    `
+      WITH click_events AS (
+        SELECT
+          (e.created_at AT TIME ZONE 'Asia/Seoul')::date AS day,
+          CASE
+            WHEN e.event_type = 'banner_click'
+              THEN NULLIF(e.properties->>'banner_key', '')
+            WHEN e.event_type IN (
+              'job_detail_bookmark_click',
+              'job_detail_apply_click'
+            ) THEN e.event_type
+          END AS banner_key,
+          COALESCE(
+            NULLIF(e.anonymous_id::text, ''),
+            NULLIF(e.user_id::text, ''),
+            e.id::text
+          ) AS visitor_key
+        FROM public.product_events e
+        WHERE e.created_at >= ($1::date::timestamp AT TIME ZONE 'Asia/Seoul')
+          AND e.created_at < (($2::date + 1)::timestamp AT TIME ZONE 'Asia/Seoul')
+          AND e.event_type IN (
+            'banner_click',
+            'job_detail_bookmark_click',
+            'job_detail_apply_click'
+          )
+          AND ${excludedEventCondition("e.user_id", "NULLIF(e.properties->>'ip_address', '')")}
+          AND ${nonAutomatedUserAgentCondition("NULLIF(e.properties->>'user_agent', '')")}
+          AND ${includedTrafficSourceCondition(source)}
+      )
+      SELECT
+        day::text AS day,
+        banner_key,
+        COUNT(*)::text AS click_count,
+        COUNT(DISTINCT visitor_key)::text AS unique_count
+      FROM click_events
+      WHERE banner_key IS NOT NULL
+      GROUP BY day, banner_key
+      ORDER BY day, banner_key
+    `,
+    [startDate, endDate],
+  );
+
+  return result.rows;
+}
+
+function createLiveBannerTrendRows(
+  rows: LiveBannerClickRow[],
+  startDate: string,
+  endDate: string,
+) {
+  const trendRows: Array<{ label: string; metric_key: string; count: number }> = [];
+  const byDay = new Map<string, LiveBannerClickRow[]>();
+
+  for (const row of rows) {
+    const items = byDay.get(row.day) || [];
+    items.push(row);
+    byDay.set(row.day, items);
+  }
+
+  for (let day = startDate; day <= endDate;) {
+    const items = byDay.get(day) || [];
+    let total = 0;
+
+    for (const item of items) {
+      const count = numberValue(item.click_count);
+      total += count;
+      trendRows.push({
+        label: day,
+        metric_key: `banner:${item.banner_key}`,
+        count,
+      });
+    }
+
+    trendRows.push({ label: day, metric_key: "banner:total", count: total });
+    const nextDay = new Date(`${day}T00:00:00Z`);
+    nextDay.setUTCDate(nextDay.getUTCDate() + 1);
+    day = nextDay.toISOString().slice(0, 10);
+  }
+
+  return trendRows;
+}
+
 async function getDashboardFacts(
   product: string,
   startDate: string,
@@ -594,6 +694,7 @@ export async function getDashboardData({
     shiftDay(todayForCalendar, -6),
   ].sort()[0];
   const lastCalendarDay = [dashboardDateRange.endDate, todayForCalendar].sort().at(-1)!;
+  const liveBannerClicks = await getLiveBannerClicks(firstCalendarDay, lastCalendarDay);
   const factDays = new Set(storedFacts.map((fact) => fact.day));
   const calendarFacts: AnalyticsFact[] = [];
   for (let day = firstCalendarDay; day <= lastCalendarDay; day = shiftDay(day, 1)) {
@@ -603,6 +704,12 @@ export async function getDashboardData({
   }
   const facts = [...storedFacts, ...calendarFacts];
   const bannerDefinitions = { ...configuredBannerDefinitions };
+  for (const row of liveBannerClicks) {
+    bannerDefinitions[row.banner_key] ||= {
+      label: row.banner_key,
+      placement: "other",
+    };
+  }
   for (const fact of facts) {
     if ((fact.metric === "banner" || fact.metric === "banner_uv") && fact.dimension) {
       bannerDefinitions[fact.dimension] ||= {
@@ -620,6 +727,12 @@ export async function getDashboardData({
   // today. Graph ranges must follow the current KST date, never refresh time.
   const today = toKstDateInput();
   const graphFacts = facts.filter(f => f.day >= shiftDay(today, -6) && f.day <= today);
+  const selectedBannerClicks = liveBannerClicks.filter(
+    (row) => row.day >= dashboardDateRange.startDate && row.day <= dashboardDateRange.endDate,
+  );
+  const graphBannerClicks = liveBannerClicks.filter(
+    (row) => row.day >= shiftDay(today, -6) && row.day <= today,
+  );
   const sum = (rows: AnalyticsFact[], metric: string, dimension?: string) => rows.reduce((n, f) =>
     n + (f.metric === metric && (dimension === undefined || f.dimension === dimension) ? Number(f.value) : 0), 0);
   const todayVisitors = sum(selectedFacts, "visitor");
@@ -717,10 +830,16 @@ export async function getDashboardData({
   ).sort((a, b) => b[1] - a[1]);
   const maxChannelCount = Math.max(...sortedChannels.map(([, n]) => n), 1);
   const totalChannelCount = todayVisitors;
-  const bannerClickResult = { rows: Object.keys(bannerLabels).map(key => ({
-    banner_key: key, banner_name: bannerLabels[key],
+  const bannerClickResult = { rows: Object.keys(bannerLabels).map((key) => ({
+    banner_key: key,
+    banner_name: bannerLabels[key],
     placement: bannerDefinitions[key]?.placement || "other",
-    click_count: sum(selectedFacts, "banner", key), unique_count: sum(selectedFacts, "banner_uv", key),
+    click_count: selectedBannerClicks
+      .filter((row) => row.banner_key === key)
+      .reduce((total, row) => total + numberValue(row.click_count), 0),
+    unique_count: selectedBannerClicks
+      .filter((row) => row.banner_key === key)
+      .reduce((total, row) => total + numberValue(row.unique_count), 0),
   })) };
   const screenInflowResult = { rows: selectedFacts.filter(f => f.metric === "screen").map(f => ({
     channel_source: f.channel, screen_key: f.dimension, inflow_count: Number(f.value),
@@ -887,7 +1006,11 @@ export async function getDashboardData({
     screenChartDefinitions,
   );
   const bannerClickTrend = createTrendSeries(
-    trafficTrendResult.rows,
+    createLiveBannerTrendRows(
+      graphBannerClicks,
+      shiftDay(today, -6),
+      today,
+    ),
     bannerTrendDefinitions,
   );
   const jobDetailBehaviorTrend = createTrendSeries(
@@ -974,7 +1097,11 @@ export async function getDashboardData({
     screenTrendDefinitions,
   );
   const bannerClickListTrend = createTrendSeries(
-    listTrendResult.rows,
+    createLiveBannerTrendRows(
+      selectedBannerClicks,
+      dashboardDateRange.startDate,
+      dashboardDateRange.endDate,
+    ),
     bannerTrendDefinitions,
   );
   const jobDetailBehaviorListTrend = createTrendSeries(
