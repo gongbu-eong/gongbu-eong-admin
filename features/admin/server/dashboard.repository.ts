@@ -12,9 +12,9 @@ import {
 } from "@/features/admin/data/dashboard";
 import { query } from "@/features/admin/server/db";
 import {
+  bannerClickEventsCte,
   dashboardFactsSql,
   includedTrafficSourceCondition,
-  trafficFactsCtes,
   type AnalyticsFact,
 } from "./analytics-facts";
 
@@ -494,7 +494,7 @@ async function getDashboardBannerDefinitions() {
 async function getLiveBannerClicks(startDate: string, endDate: string) {
   const result = await query<LiveBannerClickRow>(
     `
-      WITH ${trafficFactsCtes(
+      WITH ${bannerClickEventsCte(
         "($1::date::timestamp AT TIME ZONE 'Asia/Seoul')",
         "(($2::date + 1)::timestamp AT TIME ZONE 'Asia/Seoul')",
       )}
@@ -503,7 +503,7 @@ async function getLiveBannerClicks(startDate: string, endDate: string) {
         banner_key,
         COUNT(*)::text AS click_count,
         COUNT(DISTINCT visitor_key)::text AS unique_count
-      FROM analytics_products
+      FROM analytics_banner_clicks
       WHERE banner_key IS NOT NULL
       GROUP BY day, banner_key
       ORDER BY day, banner_key

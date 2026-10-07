@@ -1,4 +1,5 @@
 import {
+  bannerClickEventsCte,
   conversionCtes,
   includedTrafficSourceCondition,
   nonAutomatedUserAgentCondition,
@@ -76,6 +77,7 @@ type TrafficLogRow = {
 
 type BannerClickLogRow = {
   id: string;
+  user_id: string | null;
   clicked_at: string;
   banner_key: string | null;
   banner_name: string | null;
@@ -88,6 +90,7 @@ type BannerClickLogRow = {
   anonymous_id: string | null;
   ip_address: string | null;
   user_agent: string | null;
+  channel: string | null;
 };
 
 type FunnelLogRow = {
@@ -1413,7 +1416,7 @@ export async function getBannerClickLogData(
   const bannerKey = normalizeBannerKey(args?.bannerKey);
   const keyword = normalizeKeyword(args?.keyword);
   const page = normalizePage(args?.page);
-  const pageSize = 20;
+  const pageSize = Math.min(10_000, Math.max(1, Number(args?.limit || 20)));
   const filterParams = [startDate, endDate, keyword, bannerKey];
   const baseSql = `
     WITH input AS (
@@ -1431,10 +1434,14 @@ export async function getBannerClickLogData(
         requested_banner_key
       FROM input
     ),
-    ${trafficFactsCtes("(SELECT current_start FROM ranges)", "(SELECT current_end FROM ranges)")},
+    ${bannerClickEventsCte(
+      "(SELECT current_start FROM ranges)",
+      "(SELECT current_end FROM ranges)",
+    )},
     normalized_clicks AS (
       SELECT
         events.id::text AS id,
+        events.user_id::text AS user_id,
         events.created_at AS clicked_at,
         CASE
           WHEN events.event_type = 'banner_click'
@@ -1466,9 +1473,10 @@ export async function getBannerClickLogData(
         oauth.provider::text AS provider,
         events.anonymous_id::text AS anonymous_id,
         COALESCE(NULLIF(events.properties->>'ip_address', ''), '-') AS ip_address,
-        NULLIF(events.properties->>'user_agent', '') AS user_agent
+        NULLIF(events.properties->>'user_agent', '') AS user_agent,
+        included_events.acquisition_channel AS channel
       FROM public.product_events events
-      JOIN analytics_products included_events ON included_events.id = events.id::text
+      JOIN analytics_banner_clicks included_events ON included_events.id = events.id
       LEFT JOIN public.users users ON users.id = events.user_id
       LEFT JOIN LATERAL (
         SELECT
@@ -1534,6 +1542,7 @@ export async function getBannerClickLogData(
   return {
     rows: rowsResult.rows.map((row) => ({
       id: row.id,
+      userId: row.user_id || "",
       clickedAt: formatLogDateTime(row.clicked_at),
       bannerKey: row.banner_key || "unknown",
       bannerName: mapBannerLabel(row.banner_key, row.banner_name),
@@ -1544,9 +1553,10 @@ export async function getBannerClickLogData(
       userEmail: row.user_email || "-",
       provider: mapProvider(row.provider),
       providerLabel: mapProviderLabel(row.provider),
-      anonymousId: row.anonymous_id ? row.anonymous_id.slice(0, 8) : "-",
+      anonymousId: row.anonymous_id || "-",
       ipAddress: row.ip_address || "-",
       device: getDeviceLabel(row.user_agent),
+      channel: row.channel || "직접유입",
     })),
     totalCount,
     totalPages,

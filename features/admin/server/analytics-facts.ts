@@ -144,6 +144,60 @@ export function screenSql(path: string) {
     ELSE 'other' END`;
 }
 
+// Banner/button analytics only need persisted click events. Reusing the full
+// traffic/session CTE here scans page views and a 30-day attribution window,
+// which is far too expensive for every dashboard request.
+export function bannerClickEventsCte(
+  start: string,
+  end: string,
+  name = "analytics_banner_clicks",
+) {
+  const propertySource = productTrafficSourceSql("e.properties");
+  const source = `COALESCE(
+    NULLIF(to_jsonb(e)->>'current_source', ''),
+    NULLIF(to_jsonb(e)->>'first_source', ''),
+    CASE
+      WHEN ${propertySource} !~* '(page_move|page move|internal|페이지 이동)'
+        THEN ${propertySource}
+    END,
+    'direct'
+  )`;
+
+  return `${name} AS MATERIALIZED (
+    SELECT
+      e.id,
+      e.user_id,
+      e.anonymous_id,
+      e.created_at,
+      (e.created_at AT TIME ZONE 'Asia/Seoul')::date AS day,
+      e.event_type,
+      e.properties,
+      CASE
+        WHEN e.event_type = 'banner_click'
+          THEN NULLIF(e.properties->>'banner_key', '')
+        WHEN e.event_type IN ('job_detail_bookmark_click', 'job_detail_apply_click')
+          THEN e.event_type
+      END AS banner_key,
+      COALESCE(
+        NULLIF(e.anonymous_id::text, ''),
+        NULLIF(e.user_id::text, ''),
+        e.id::text
+      ) AS visitor_key,
+      ${channelSql(source)} AS acquisition_channel
+    FROM public.product_events e
+    WHERE e.created_at >= (${start})
+      AND e.created_at < (${end})
+      AND e.event_type IN (
+        'banner_click',
+        'job_detail_bookmark_click',
+        'job_detail_apply_click'
+      )
+      AND ${excludedEventCondition("e.user_id", "NULLIF(e.properties->>'ip_address', '')")}
+      AND ${nonAutomatedUserAgentCondition("NULLIF(e.properties->>'user_agent', '')")}
+      AND ${includedTrafficSourceCondition(source)}
+  )`;
+}
+
 function analyticsExcludedCondition(userExpression: string, ipExpression: string) {
   return `NOT EXISTS (
       SELECT 1 FROM analytics_excluded_ip_hosts excluded_ips

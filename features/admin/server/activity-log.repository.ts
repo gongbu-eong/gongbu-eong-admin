@@ -9,7 +9,7 @@ import {
   trafficChannelKeySql,
   trafficFactsCtes,
 } from "./analytics-facts";
-import { getFunnelLogData } from "./traffic.repository";
+import { getBannerClickLogData, getFunnelLogData } from "./traffic.repository";
 import { query } from "@/features/admin/server/db";
 import { trafficChannelOptions } from "../traffic-channel";
 import {
@@ -651,6 +651,61 @@ export async function getActivityLogData(args?: ActivityLogQuery): Promise<Activ
   const pattern = keyword && !keywordIdentity ? `%${keyword}%` : "";
   const offset = (page - 1) * resultPageSize;
   await ensureAnalyticsExclusionSchema();
+
+  if (
+    bannerKey &&
+    !userId && !ip && channel === "all" && !uniqueOnly && !includeExcluded &&
+    !allDates && !eventType && !cohort && screen === "all" &&
+    !funnelProduct && !funnelStep && ["activity", "all", "product"].includes(event)
+  ) {
+    const clicks = await getBannerClickLogData({
+      startDate,
+      endDate,
+      bannerKey,
+      keyword,
+      page,
+      limit: resultPageSize,
+    });
+
+    return {
+      allDates,
+      startDate,
+      endDate,
+      event,
+      eventType,
+      cohort,
+      bannerKey,
+      screen,
+      keyword,
+      ip,
+      channel,
+      uniqueOnly,
+      includeExcluded,
+      from,
+      funnelProduct,
+      funnelStep,
+      funnelLabel: "",
+      page: clicks.page,
+      totalPages: clicks.totalPages,
+      totalCount: clicks.totalCount,
+      userId: "",
+      rows: clicks.rows.map((row) => ({
+        id: row.id,
+        userId: row.userId,
+        eventAt: row.clickedAt,
+        event: "배너·버튼 클릭",
+        userName: row.userName,
+        userEmail: row.userEmail === "-" ? "" : row.userEmail,
+        identity: row.anonymousId,
+        ipAddress: row.ipAddress,
+        path: row.sourcePath,
+        detail: `${row.bannerName} → ${row.targetPath}`,
+        channel: formatChannel(row.channel),
+        screen: formatScreen(screenKeyFromPath(row.sourcePath)),
+        device: row.device,
+      })),
+    };
+  }
 
   const factDetailSelector = dashboardFactDetailSelector({
     cohort,

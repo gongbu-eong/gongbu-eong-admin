@@ -121,11 +121,13 @@ export type BannerClickLogQuery = {
   bannerKey?: string | null;
   keyword?: string | null;
   page?: string | number | null;
+  limit?: string | number | null;
   from?: string | null;
 };
 
 export type BannerClickLogItem = {
   id: string;
+  userId: string;
   clickedAt: string;
   bannerKey: string;
   bannerName: string;
@@ -139,6 +141,7 @@ export type BannerClickLogItem = {
   anonymousId: string;
   ipAddress: string;
   device: "모바일" | "웹" | "알 수 없음";
+  channel: string;
 };
 
 export type BannerClickLogData = {
