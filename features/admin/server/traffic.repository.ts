@@ -286,7 +286,7 @@ const bannerLabels: Record<string, string> = {
   job_detail_resume_b: "자소서 배너 B",
   job_detail_strength_a: "강약점 배너 A",
   job_detail_strength_b: "강약점 배너 B",
-  job_detail_bookmark_click: "공고 찜하고 준비하기",
+  job_detail_bookmark_click: "마감 알림 받기",
   job_detail_apply_click: "지원하기/이메일 지원하기",
 };
 
@@ -1442,7 +1442,7 @@ export async function getBannerClickLogData(
           ELSE events.event_type
         END AS banner_key,
         CASE
-          WHEN events.event_type = 'job_detail_bookmark_click' THEN '공고 찜하고 준비하기'
+          WHEN events.event_type = 'job_detail_bookmark_click' THEN '마감 알림 받기'
           WHEN events.event_type = 'job_detail_apply_click' THEN '지원하기/이메일 지원하기'
           ELSE NULLIF(events.properties->>'banner_name', '')
         END AS banner_name,
@@ -1482,15 +1482,7 @@ export async function getBannerClickLogData(
       CROSS JOIN ranges
       WHERE (
           events.event_type IN ('job_detail_bookmark_click', 'job_detail_apply_click')
-          OR (
-            events.event_type = 'banner_click'
-            AND COALESCE(NULLIF(events.properties->>'banner_key', ''), 'unknown') IN (
-              'job_detail_resume_a',
-              'job_detail_resume_b',
-              'job_detail_strength_a',
-              'job_detail_strength_b'
-            )
-          )
+          OR events.event_type = 'banner_click'
         )
         AND events.created_at >= ranges.current_start
         AND events.created_at < ranges.current_end

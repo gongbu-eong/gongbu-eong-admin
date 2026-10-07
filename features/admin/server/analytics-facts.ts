@@ -144,11 +144,6 @@ export function screenSql(path: string) {
     ELSE 'other' END`;
 }
 
-export const bannerKeys = [
-  "job_detail_resume_a", "job_detail_resume_b", "job_detail_strength_a",
-  "job_detail_strength_b", "job_detail_bookmark_click", "job_detail_apply_click",
-];
-
 function analyticsExcludedCondition(userExpression: string, ipExpression: string) {
   return `NOT EXISTS (
       SELECT 1 FROM analytics_excluded_ip_hosts excluded_ips
@@ -510,10 +505,10 @@ const dashboardTrafficFactsSqlBody = `
       UNION ALL
       SELECT p.day, 'banner', COALESCE(u.channel, '식별 불가'), p.banner_key, COUNT(*)
       FROM analytics_products p LEFT JOIN analytics_daily_users u USING (day, visitor_key)
-      WHERE p.banner_key IN ('job_detail_resume_a','job_detail_resume_b','job_detail_strength_a','job_detail_strength_b','job_detail_bookmark_click','job_detail_apply_click') GROUP BY 1, 3, 4
+      WHERE NULLIF(p.banner_key, '') IS NOT NULL GROUP BY 1, 3, 4
       UNION ALL
       SELECT p.day, 'banner_uv', '', p.banner_key, COUNT(DISTINCT p.visitor_key)
-      FROM analytics_products p WHERE p.banner_key IN ('job_detail_resume_a','job_detail_resume_b','job_detail_strength_a','job_detail_strength_b','job_detail_bookmark_click','job_detail_apply_click') GROUP BY 1, 4
+      FROM analytics_products p WHERE NULLIF(p.banner_key, '') IS NOT NULL GROUP BY 1, 4
       UNION ALL
       SELECT j.day, 'job_entry', j.channel, '', COUNT(*) FROM analytics_job_people j GROUP BY 1, 3
       UNION ALL
@@ -621,12 +616,12 @@ export function dashboardTrafficFactDetailsForDaySql() {
         p.ip_address, p.user_agent, p.path,
         CASE p.banner_key
           WHEN 'job_detail_apply_click' THEN '지원 버튼 클릭'
-          WHEN 'job_detail_bookmark_click' THEN '찜 버튼 클릭'
+          WHEN 'job_detail_bookmark_click' THEN '마감 알림 받기 버튼 클릭'
           ELSE '배너·버튼 클릭'
         END
       FROM analytics_products p
       LEFT JOIN analytics_daily_users u USING (day, visitor_key)
-      WHERE p.banner_key IN ('job_detail_resume_a','job_detail_resume_b','job_detail_strength_a','job_detail_strength_b','job_detail_bookmark_click','job_detail_apply_click')
+      WHERE NULLIF(p.banner_key, '') IS NOT NULL
       UNION ALL
       SELECT j.day, item.metric, j.channel, ''::text,
         j.visitor_key, item.event_at, p.user_id, p.anonymous_id,
@@ -789,10 +784,10 @@ export function dashboardFactsSql(product: string) {
       UNION ALL
       SELECT p.day, 'banner', COALESCE(u.channel, '식별 불가'), p.banner_key, COUNT(*)
       FROM analytics_products p LEFT JOIN analytics_daily_users u USING (day, visitor_key)
-      WHERE p.banner_key IN (${bannerKeys.map(k => `'${k}'`).join(",")}) GROUP BY 1, 3, 4
+      WHERE NULLIF(p.banner_key, '') IS NOT NULL GROUP BY 1, 3, 4
       UNION ALL
       SELECT p.day, 'banner_uv', '', p.banner_key, COUNT(DISTINCT p.visitor_key)
-      FROM analytics_products p WHERE p.banner_key IN (${bannerKeys.map(k => `'${k}'`).join(",")}) GROUP BY 1, 4
+      FROM analytics_products p WHERE NULLIF(p.banner_key, '') IS NOT NULL GROUP BY 1, 4
       UNION ALL
       SELECT j.day, 'job_entry', j.channel, '', COUNT(*) FROM analytics_job_people j GROUP BY 1, 3
       UNION ALL

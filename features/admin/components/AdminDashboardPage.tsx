@@ -1,6 +1,6 @@
 import { AdminLayout } from "@/features/admin/components/AdminLayout";
 import { AdminCard } from "@/features/admin/components/common/AdminCard";
-import { BannerClickList } from "@/features/admin/components/dashboard/BannerClickList";
+import { BannerClickSection } from "@/features/admin/components/dashboard/BannerClickSection";
 import { BehaviorPatternList } from "@/features/admin/components/dashboard/BehaviorPatternList";
 import { ChannelList } from "@/features/admin/components/dashboard/ChannelList";
 import { DashboardFilterBar } from "@/features/admin/components/dashboard/DashboardFilterBar";
@@ -90,7 +90,7 @@ export async function AdminDashboardPage({
     metrics,
     jobDetailMetrics,
     bannerClicks,
-    bannerClickTotal,
+    bannerPlacementOptions,
     behaviorPatterns,
     channelTotal,
     screenInflows,
@@ -149,9 +149,6 @@ export async function AdminDashboardPage({
   const screenScale = createChartScale(
     screenTrend.map((series) => series.data),
   );
-  const bannerClickScale = createChartScale(
-    bannerClickTrend.map((series) => series.data),
-  );
   const jobDetailBehaviorScale = createChartScale(
     jobDetailBehaviorTrend.map((series) => series.data),
   );
@@ -174,16 +171,6 @@ export async function AdminDashboardPage({
     screenInflows[0],
   );
   const topScreen = numberFrom(topScreenCandidate?.count) > 0 ? topScreenCandidate : undefined;
-  const totalBannerClicks = numberFrom(bannerClickTotal);
-  const bannerClickerSum = bannerClicks.reduce(
-    (total, item) => total + numberFrom(item.uniqueCount),
-    0,
-  );
-  const topBannerCandidate = bannerClicks.reduce(
-    (top, item) => numberFrom(item.count) > numberFrom(top?.count) ? item : top,
-    bannerClicks[0],
-  );
-  const topBanner = numberFrom(topBannerCandidate?.count) > 0 ? topBannerCandidate : undefined;
   const behaviorTotals = behaviorPatterns.reduce(
     (totals, item) => ({
       visitors: totals.visitors + numberFrom(item.visitors),
@@ -467,47 +454,13 @@ export async function AdminDashboardPage({
         </div>
       </section>
 
-      <section id="banner-clicks" className={styles.dashboardSection} aria-label="배너·버튼 클릭">
-        <div className={styles.sectionHeader}>
-          <div>
-            <h2>배너·버튼 클릭</h2>
-            <p>실제 클릭만 집계하며 배너 노출은 포함하지 않습니다.</p>
-          </div>
-        </div>
-        <SectionSummary
-          items={[
-            {
-              label: "전체 클릭",
-              value: `${totalBannerClicks.toLocaleString("ko-KR")}건`,
-              description: `${dashboardPeriodText}의 배너·버튼 실제 클릭`,
-            },
-            {
-              label: "가장 많이 누른 항목",
-              value: topBanner?.label || "-",
-              description: topBanner ? `${topBanner.count}으로 가장 많은 항목` : "조회된 클릭 없음",
-            },
-            {
-              label: "항목별 클릭자 합계",
-              value: `${bannerClickerSum.toLocaleString("ko-KR")}명`,
-              description: "같은 사람이 다른 항목을 누르면 항목마다 한 번씩 포함",
-            },
-          ]}
-        />
-        <div className={styles.sectionGrid}>
-          <TrendViewCard
-            title="배너·버튼 클릭 추이"
-            subtitle="최근 7일 · 전체 클릭 / 찜 / 지원 (모두 건수)"
-            listSubtitle={`목록 · ${dashboardPeriodText}`}
-            yLabels={bannerClickScale.yLabels}
-            series={bannerClickTrend}
-            listSeries={bannerClickListTrend}
-            maxValue={bannerClickScale.maxValue}
-          />
-          <AdminCard className={styles.bannerCard}>
-            <BannerClickList items={bannerClicks} total={bannerClickTotal} periodLabel={dashboardPeriodText} />
-          </AdminCard>
-        </div>
-      </section>
+      <BannerClickSection
+        items={bannerClicks}
+        placementOptions={bannerPlacementOptions}
+        trend={bannerClickTrend}
+        listTrend={bannerClickListTrend}
+        periodText={dashboardPeriodText}
+      />
 
       <section id="job-entry-behavior" className={styles.dashboardSection} aria-label="공고 상세 시작 방문 후 행동">
         <div className={styles.sectionHeader}>

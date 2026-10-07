@@ -1,5 +1,6 @@
 import {
   BannerClickItem,
+  BannerPlacementOption,
   BehaviorPatternItem,
   ChannelItem,
   DashboardProductOption,
@@ -34,6 +35,7 @@ type DashboardData = {
   channels: ChannelItem[];
   channelTotal: string;
   bannerClicks: BannerClickItem[];
+  bannerPlacementOptions: BannerPlacementOption[];
   bannerClickTotal: string;
   behaviorPatterns: BehaviorPatternItem[];
   screenInflows: ScreenInflowItem[];
@@ -89,11 +91,30 @@ const dashboardProductOptions = [
   { key: "interview_coaching", label: "AI NCS 면접" },
 ] satisfies DashboardProductOption[];
 
-const bannerLabels: Record<string, string> = {
-  job_detail_resume_a: "자소서 배너 A",
-  job_detail_strength_b: "강약점 배너 B",
-  job_detail_bookmark_click: "공고 찜하고 준비하기",
-  job_detail_apply_click: "지원하기/이메일 지원하기",
+type BannerDefinition = {
+  label: string;
+  placement: string;
+};
+
+const defaultBannerDefinitions: Record<string, BannerDefinition> = {
+  job_detail_bookmark_click: { label: "마감 알림 받기", placement: "job_detail" },
+  job_detail_apply_click: { label: "지원하기/이메일 지원하기", placement: "job_detail" },
+};
+
+const bannerPlacementLabels: Record<string, string> = {
+  home_main: "홈",
+  ai_tools_main: "AI 도구",
+  resume_coaching: "AI NCS 자소서 코칭",
+  interview_coaching: "AI NCS 면접 코칭",
+  job_detail: "공고 상세",
+  job_detail_bottom: "공고 상세",
+};
+
+type BannerDefinitionRow = {
+  banner_key: string;
+  banner_name: string | null;
+  placement: string | null;
+  source_priority: number;
 };
 
 const dashboardScreenKeys = [
@@ -237,6 +258,7 @@ function createTrendSeries(
   }
 
   return definitions.map((definition) => ({
+    key: definition.key,
     label: definition.label,
     color: definition.color,
     valueSuffix: definition.key.startsWith("banner:") || definition.key.startsWith("screen:") ? "건" : "명",
@@ -409,7 +431,56 @@ function mapBannerLabel(key: string | null, name: string | null) {
   const trimmedKey = key?.trim();
   if (!trimmedKey) return "알 수 없는 배너";
 
-  return bannerLabels[trimmedKey] || trimmedKey;
+  return defaultBannerDefinitions[trimmedKey]?.label || trimmedKey;
+}
+
+function normalizeBannerPlacement(placement: string) {
+  return placement === "job_detail_bottom" ? "job_detail" : placement;
+}
+
+async function getDashboardBannerDefinitions() {
+  const result = await query<BannerDefinitionRow>(
+    `
+      WITH managed_banners AS (
+        SELECT
+          'site_banner_' || id::text AS banner_key,
+          name AS banner_name,
+          placement,
+          0 AS source_priority
+        FROM public.site_banners
+      ), latest_event_names AS (
+        SELECT DISTINCT ON (properties->>'banner_key')
+          properties->>'banner_key' AS banner_key,
+          NULLIF(properties->>'banner_name', '') AS banner_name,
+          COALESCE(
+            NULLIF(properties->>'placement', ''),
+            NULLIF(properties->>'banner_placement', '')
+          ) AS placement,
+          1 AS source_priority
+        FROM public.product_events
+        WHERE event_type = 'banner_click'
+          AND NULLIF(properties->>'banner_key', '') IS NOT NULL
+        ORDER BY properties->>'banner_key', created_at DESC
+      )
+      SELECT * FROM managed_banners
+      UNION ALL
+      SELECT * FROM latest_event_names
+      ORDER BY source_priority, banner_key
+    `,
+  );
+  const definitions: Record<string, BannerDefinition> = {
+    ...defaultBannerDefinitions,
+  };
+
+  for (const row of result.rows) {
+    const key = row.banner_key?.trim();
+    if (!key || definitions[key]) continue;
+    const name = row.banner_name?.trim() || key;
+    const placement = normalizeBannerPlacement(row.placement?.trim() || "other");
+    definitions[key] = { label: name, placement };
+  }
+
+  return definitions;
 }
 
 async function getDashboardFacts(
@@ -503,11 +574,14 @@ export async function getDashboardData({
     dashboardDateRange.endDate,
   ];
 
-  const storedFacts = await getDashboardFacts(
-    selectedProductKey,
-    dashboardDateParams[0],
-    dashboardDateParams[1],
-  );
+  const [storedFacts, configuredBannerDefinitions] = await Promise.all([
+    getDashboardFacts(
+      selectedProductKey,
+      dashboardDateParams[0],
+      dashboardDateParams[1],
+    ),
+    getDashboardBannerDefinitions(),
+  ]);
   const shiftDay = (day: string, offset: number) => {
     const date = new Date(day + "T00:00:00Z");
     date.setUTCDate(date.getUTCDate() + offset);
@@ -528,6 +602,18 @@ export async function getDashboardData({
     }
   }
   const facts = [...storedFacts, ...calendarFacts];
+  const bannerDefinitions = { ...configuredBannerDefinitions };
+  for (const fact of facts) {
+    if ((fact.metric === "banner" || fact.metric === "banner_uv") && fact.dimension) {
+      bannerDefinitions[fact.dimension] ||= {
+        label: fact.dimension,
+        placement: "other",
+      };
+    }
+  }
+  const bannerLabels = Object.fromEntries(
+    Object.entries(bannerDefinitions).map(([key, definition]) => [key, definition.label]),
+  );
   const selectedFacts = facts.filter(f => f.day >= dashboardDateRange.startDate && f.day <= dashboardDateRange.endDate);
   const previousFacts = facts.filter(f => f.day >= shiftDay(dashboardDateRange.startDate, -periodDays) && f.day < dashboardDateRange.startDate);
   // A fact row can have been refreshed yesterday even when the page is opened
@@ -633,6 +719,7 @@ export async function getDashboardData({
   const totalChannelCount = todayVisitors;
   const bannerClickResult = { rows: Object.keys(bannerLabels).map(key => ({
     banner_key: key, banner_name: bannerLabels[key],
+    placement: bannerDefinitions[key]?.placement || "other",
     click_count: sum(selectedFacts, "banner", key), unique_count: sum(selectedFacts, "banner_uv", key),
   })) };
   const screenInflowResult = { rows: selectedFacts.filter(f => f.metric === "screen").map(f => ({
@@ -661,6 +748,22 @@ export async function getDashboardData({
     (sum, row) => sum + numberValue(row.click_count),
     0,
   );
+  const bannerColors = [
+    "#f5b91e",
+    "#1fb573",
+    "#a54de8",
+    "#e8544d",
+    "#0f8b9d",
+    "#5a6580",
+  ];
+  const bannerTrendDefinitions = [
+    { key: "banner:total", label: "전체 클릭", color: "#2f7ff0" },
+    ...Object.entries(bannerLabels).map(([key, label], index) => ({
+      key: `banner:${key}`,
+      label,
+      color: bannerColors[index % bannerColors.length],
+    })),
+  ];
   const groupedScreenInflows = new Map<string, number>();
   for (const row of screenInflowResult.rows) {
     const channelLabel = mapChannelLabel(row.channel_source);
@@ -785,19 +888,7 @@ export async function getDashboardData({
   );
   const bannerClickTrend = createTrendSeries(
     trafficTrendResult.rows,
-    [
-      { key: "banner:total", label: "전체 클릭", color: "#2f7ff0" },
-      {
-        key: "banner:job_detail_bookmark_click",
-        label: "찜",
-        color: "#f5b91e",
-      },
-      {
-        key: "banner:job_detail_apply_click",
-        label: "지원",
-        color: "#1fb573",
-      },
-    ],
+    bannerTrendDefinitions,
   );
   const jobDetailBehaviorTrend = createTrendSeries(
     trafficTrendResult.rows,
@@ -884,19 +975,7 @@ export async function getDashboardData({
   );
   const bannerClickListTrend = createTrendSeries(
     listTrendResult.rows,
-    [
-      { key: "banner:total", label: "전체 클릭", color: "#2f7ff0" },
-      {
-        key: "banner:job_detail_bookmark_click",
-        label: "찜",
-        color: "#f5b91e",
-      },
-      {
-        key: "banner:job_detail_apply_click",
-        label: "지원",
-        color: "#1fb573",
-      },
-    ],
+    bannerTrendDefinitions,
   );
   const jobDetailBehaviorListTrend = createTrendSeries(
     listTrendResult.rows,
@@ -1109,6 +1188,8 @@ export async function getDashboardData({
     bannerClicks: bannerClickRows.map((row) => ({
       key: row.banner_key || "unknown",
       label: mapBannerLabel(row.banner_key, row.banner_name),
+      placement: row.placement,
+      placementLabel: bannerPlacementLabels[row.placement] || row.placement,
       count: `${formatCount(numberValue(row.click_count))}건`,
       uniqueCount: `${formatCount(numberValue(row.unique_count))}명`,
       fill: fillPercent(numberValue(row.click_count), maxBannerClickCount),
@@ -1116,6 +1197,9 @@ export async function getDashboardData({
         bannerKey: row.banner_key || "unknown",
       }),
     })),
+    bannerPlacementOptions: Object.entries(bannerPlacementLabels)
+      .filter(([key]) => key !== "job_detail_bottom")
+      .map(([key, label]) => ({ key, label })),
     bannerClickTotal: formatCount(totalBannerClickCount),
     behaviorPatterns,
     screenInflows: dashboardScreenKeys.map((screen) => {

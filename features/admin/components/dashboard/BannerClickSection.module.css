@@ -1,0 +1,27 @@
+.placementFilter {
+  display: grid;
+  grid-template-columns: auto 180px;
+  align-items: center;
+  gap: 10px;
+  color: var(--admin-muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.placementFilter select {
+  width: 100%;
+  height: 38px;
+  padding: 0 34px 0 12px;
+  border: 1px solid var(--admin-border);
+  border-radius: 6px;
+  background: var(--admin-surface);
+  color: var(--admin-text);
+  font: inherit;
+}
+
+@media (max-width: 720px) {
+  .placementFilter {
+    width: 100%;
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+}

@@ -25,6 +25,7 @@ export type LinePoint = {
 };
 
 export type DashboardTrendSeries = {
+  key?: string;
   valueSuffix?: string;
   label: string;
   color: string;
@@ -57,10 +58,17 @@ export type ChannelItem = {
 export type BannerClickItem = {
   key: string;
   label: string;
+  placement: string;
+  placementLabel: string;
   count: string;
   uniqueCount: string;
   fill: number;
   href?: string;
+};
+
+export type BannerPlacementOption = {
+  key: string;
+  label: string;
 };
 
 export type ScreenInflowItem = {

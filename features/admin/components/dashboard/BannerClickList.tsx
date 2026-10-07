@@ -34,7 +34,7 @@ export function BannerClickList({ items, total, periodLabel }: BannerClickListPr
                     <b>{item.count}</b>
                   )}
                 </div>
-                <p>일별 중복 제거 클릭자 합산 {item.uniqueCount}</p>
+                <p>{item.placementLabel} · 일별 중복 제거 클릭자 합산 {item.uniqueCount}</p>
                 <div className={styles.track}>
                   <i style={{ width: `${item.fill}%` }} />
                 </div>
