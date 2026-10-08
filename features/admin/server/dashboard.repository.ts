@@ -678,14 +678,6 @@ export async function getDashboardData({
       placement: "other",
     };
   }
-  for (const fact of facts) {
-    if ((fact.metric === "banner" || fact.metric === "banner_uv") && fact.dimension) {
-      bannerDefinitions[fact.dimension] ||= {
-        label: fact.dimension,
-        placement: "other",
-      };
-    }
-  }
   const bannerLabels = Object.fromEntries(
     Object.entries(bannerDefinitions).map(([key, definition]) => [key, definition.label]),
   );
