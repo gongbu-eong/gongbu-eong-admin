@@ -164,7 +164,7 @@ test("diagnosis ownership includes signup conversions, rejects foreign results a
   assert.equal(await diagnosis.getMemberDiagnosisResult("invalid", resultId), null);
   assert.equal(queries, beforeQueries);
   const { detail, nickname } = await diagnosis.getMemberDiagnosisResult(user, resultId);
-  assert.equal(nickname, "테스트 회원");
+  assert.equal(nickname, "테***원");
   assert.deepEqual(Array.from(detail.result.axisResults, item => item.percent), [80, 65, 40, 90]);
   assert.equal(detail.result.percentages.planning, 60);
   assert.equal(detail.percentile.topPercent, 100);

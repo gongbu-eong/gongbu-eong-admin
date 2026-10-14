@@ -1,6 +1,7 @@
 import { query } from "./db";
 import type { CoachingFeedback, CoachingHistoryItem } from "../components/members/service-results/coaching/coaching.dto";
 import type { InterviewCoachingSession, InterviewMessage } from "../components/members/service-results/interview-coaching/interview-coaching.dto";
+import { maskPersonalData } from "../privacy-mask";
 
 const isUuid = (value: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
 
@@ -25,7 +26,7 @@ export async function getMemberResumeResult(userId: string, resultId: string) {
   `, [userId, resultId]);
   const row = result.rows[0];
   if (!row?.feedback) return null;
-  return {
+  return maskPersonalData({
     id: row.id,
     inputType: row.input_type,
     inputText: row.input_text || "",
@@ -33,7 +34,7 @@ export async function getMemberResumeResult(userId: string, resultId: string) {
     job: row.job,
     result: row.feedback,
     isLocked: false,
-  };
+  });
 }
 
 type InterviewRow = {
@@ -74,7 +75,7 @@ export async function getMemberInterviewResult(userId: string, sessionId: string
   if (!row) return null;
   const profile = row.analysis?.profile;
   // Match the service DTO, especially message IDs and follow-up ordering.
-  return {
+  return maskPersonalData({
     id: row.id,
     status: row.status || (row.completed_at ? "completed" : "ready"),
     lastErrorMessage: row.last_error_message,
@@ -101,5 +102,5 @@ export async function getMemberInterviewResult(userId: string, sessionId: string
     messages: row.messages,
     result: row.result || null,
     isAnonymous: false,
-  };
+  });
 }

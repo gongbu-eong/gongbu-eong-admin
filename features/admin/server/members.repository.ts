@@ -4,6 +4,13 @@ import { careerSourceSql } from "./analytics-facts";
 import type { ManagementDateInput, ManagementDateRange } from "@/features/admin/management-date";
 import { appendManagementDate } from "./management-date-filter";
 import { getActivityLogData, type ActivityLogRow } from "@/features/admin/server/activity-log.repository";
+import {
+  maskDisplayName,
+  maskEmail,
+  maskPersonalData,
+  maskPersonalText,
+  maskPhoneNumber,
+} from "../privacy-mask";
 
 export type MemberStatusFilter = "all" | "active" | "pending_signup" | "blocked" | "withdrawn" | "forced_withdrawn";
 export type MemberChannelFilter =
@@ -109,6 +116,13 @@ export type MemberInterviewCoaching = {
   detail: unknown;
 };
 
+export type MemberCoachingDraft = {
+  id: string;
+  productType: "resume_coaching" | "interview_coaching";
+  updatedAt: string;
+  content: Record<string, unknown>;
+};
+
 export type MemberCommunityActivity = {
   id: string;
   postId: string;
@@ -139,6 +153,7 @@ export type MemberDetailData = {
   diagnosis: MemberDiagnosis[];
   resumeCoachings: MemberResumeCoaching[];
   interviewCoachings: MemberInterviewCoaching[];
+  coachingDrafts: MemberCoachingDraft[];
   community: MemberCommunityActivity[];
   logs: ActivityLogRow[];
   logCount: number;
@@ -231,6 +246,13 @@ type InterviewCoachingRow = {
   material_filename: string | null;
   material_file_available: boolean | null;
   detail: unknown;
+};
+
+type CoachingDraftRow = {
+  id: string;
+  product_type: "resume_coaching" | "interview_coaching";
+  updated_at: string | Date;
+  content: Record<string, unknown> | null;
 };
 
 const pageSize = 10;
@@ -375,15 +397,6 @@ function formatCommunityStatus(value: string | null) {
   return value || "-";
 }
 
-function maskEmail(value: string | null) {
-  if (!value || !value.includes("@")) return value || "-";
-
-  const [name, domain] = value.split("@");
-  const prefix = name.slice(0, Math.min(3, name.length));
-
-  return `${prefix}***@${domain}`;
-}
-
 function normalizeStatus(value?: string | null): MemberStatusFilter {
   if (value === "active" || value === "pending_signup" || value === "blocked" || value === "withdrawn" || value === "forced_withdrawn") {
     return value;
@@ -408,14 +421,14 @@ function normalizeChannel(value?: string | null): MemberChannelFilter {
 
 function toMemberSummary(row: MemberRow): MemberSummary {
   const email = row.email || row.provider_email || "-";
-  const name = row.nickname || row.display_name || maskEmail(email) || "이름 없음";
+  const name = row.nickname || row.display_name || email || "이름 없음";
   const avatarKey = row.profile_avatar_key || "fox";
   return {
     id: row.id,
-    name,
-    email,
+    name: maskDisplayName(name),
+    email: maskEmail(email),
     maskedEmail: maskEmail(email),
-    phone: row.phone?.trim() || "없음",
+    phone: maskPhoneNumber(row.phone),
     gender: formatGender(row.gender),
     ageGroup: formatAgeGroup(row.age_group),
     source: isCareerSource(row.first_source) ? "-" : row.first_source || "직접유입",
@@ -682,6 +695,7 @@ export async function getMemberDetailData(
     diagnosis: [],
     resumeCoachings: [],
     interviewCoachings: [],
+    coachingDrafts: [],
     community: [],
     logs: [],
     logCount: 0,
@@ -720,6 +734,7 @@ export async function getMemberDetailData(
     resumeCoachingResult,
     communityResult,
     interviewCoachingResult,
+    coachingDraftResult,
   ] = await Promise.all([
     query<DiagnosisRow>(
       `
@@ -828,6 +843,15 @@ export async function getMemberDetailData(
       `,
       [memberRow.id],
     ),
+    query<CoachingDraftRow>(
+      `
+        SELECT id, product_type, updated_at, content
+        FROM public.coaching_input_drafts
+        WHERE user_id = $1::uuid
+        ORDER BY updated_at DESC
+      `,
+      [memberRow.id],
+    ),
   ]);
 
   const activityLogResult = logQuery?.activeTab === "logs"
@@ -858,31 +882,37 @@ export async function getMemberDetailData(
     resumeCoachings: resumeCoachingResult.rows.map((row) => ({
       id: row.id,
       date: formatShortDate(row.date_value),
-      title: row.title || "자소서 코칭",
+      title: maskPersonalText(row.title || "자소서 코칭"),
       result: row.score === null || row.score === undefined ? "결과 확인" : `${row.score}점`,
-      inputText: row.input_text || "",
+      inputText: maskPersonalText(row.input_text || ""),
       inputType: row.input_type || "text",
-      sourceFilename: row.source_filename || "",
+      sourceFilename: maskPersonalText(row.source_filename || ""),
       sourceFileUrl: row.source_file_url || "",
-      detail: row.detail,
+      detail: maskPersonalData(row.detail),
     })),
     interviewCoachings: interviewCoachingResult.rows.map((row) => ({
       id: row.id,
       date: formatShortDate(row.date_value),
-      title: row.title || "AI NCS 면접 코칭",
+      title: maskPersonalText(row.title || "AI NCS 면접 코칭"),
       result: row.status === "completed" ? "완료" : formatInterviewStatus(row.status),
       status: row.status || "-",
-      materialFilename: row.material_filename || "",
+      materialFilename: maskPersonalText(row.material_filename || ""),
       materialFileAvailable: Boolean(row.material_file_available),
-      detail: row.detail,
+      detail: maskPersonalData(row.detail),
+    })),
+    coachingDrafts: coachingDraftResult.rows.map((row) => ({
+      id: row.id,
+      productType: row.product_type,
+      updatedAt: formatDateTime(row.updated_at),
+      content: maskPersonalData(row.content || {}),
     })),
     community: communityResult.rows.map((row) => ({
       id: row.id,
       postId: row.post_id,
       date: formatShortDate(row.date_value),
       kind: row.kind || "-",
-      title: row.title || "-",
-      content: row.content || "",
+      title: maskPersonalText(row.title || "-"),
+      content: maskPersonalText(row.content || ""),
       status: formatCommunityStatus(row.status),
       href: `/community/${row.post_id}${row.kind === "게시글" ? "" : `#comment-${row.id}`}`,
     })),

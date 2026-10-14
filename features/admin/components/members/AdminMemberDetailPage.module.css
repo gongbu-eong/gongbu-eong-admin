@@ -316,6 +316,44 @@
   white-space: nowrap;
 }
 
+.draftDetail {
+  min-width: 320px;
+  max-width: 640px;
+  text-align: left;
+}
+
+.draftDetail summary {
+  cursor: pointer;
+  color: var(--admin-primary);
+  font-weight: 700;
+}
+
+.draftDetail section {
+  margin-top: 12px;
+}
+
+.draftDetail section strong {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--admin-muted);
+  font-size: 13px;
+}
+
+.draftDetail pre {
+  max-height: 360px;
+  margin: 0;
+  overflow: auto;
+  padding: 12px;
+  border-radius: 8px;
+  background: var(--admin-bg);
+  color: var(--admin-text);
+  font-family: inherit;
+  font-size: 13px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
 .sectionDescription {
   margin: -18px 0 20px;
   color: var(--admin-light);
@@ -735,6 +773,11 @@
     max-width: none;
     padding: 0;
     white-space: normal;
+  }
+
+  .draftDetail {
+    min-width: 0;
+    max-width: none;
   }
 
   .resultView {

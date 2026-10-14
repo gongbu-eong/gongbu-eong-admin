@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import { AdminLayout } from "@/features/admin/components/AdminLayout";
 import { publicSiteHref } from "@/features/admin/public-site";
 import {
+  type MemberCoachingDraft,
   MemberDetailTab,
   getMemberDetailData,
   normalizeMemberTab,
@@ -11,6 +12,7 @@ import {
 import { AdminMemberActions } from "./AdminMemberActions";
 import { ActivityLogTable } from "@/features/admin/components/activity-logs/ActivityLogTable";
 import { ActivityLogFilterBar } from "@/features/admin/components/activity-logs/ActivityLogFilterBar";
+import { maskIpAddress } from "@/features/admin/privacy-mask";
 import styles from "./AdminMemberDetailPage.module.css";
 import logStyles from "@/features/admin/components/traffic/TrafficLogsPage.module.css";
 
@@ -150,6 +152,9 @@ export async function AdminMemberDetailPage({
     );
   }
 
+  const resumeDrafts = data.coachingDrafts.filter((item) => item.productType === "resume_coaching");
+  const interviewDrafts = data.coachingDrafts.filter((item) => item.productType === "interview_coaching");
+
 
   return (
     <AdminLayout activeNav="members" title="회원 정보 상세" description="회원의 정보 상세 페이지입니다.">
@@ -216,27 +221,41 @@ export async function AdminMemberDetailPage({
       ) : null}
 
       {tab === "resume-coaching" ? (
-        <ActivitySection title="자소서 코칭">
-          <DataTable columns={["날짜", "제목", "결과", "입력 파일", "상세"]} rows={data.resumeCoachings.map((item) => [
-            item.date,
-            item.title,
-            item.result,
-            item.sourceFileUrl ? <a href={item.sourceFileUrl} target="_blank" rel="noreferrer" key={`file-${item.id}`}>{item.sourceFilename || "첨부 파일 열기"}</a> : item.sourceFilename || (item.inputType === "file" ? "파일 정보 없음" : "직접 입력"),
-            item.id ? <Link href={`/members/${member.id}/resume-coaching/${item.id}`} key={item.id}>결과 보기</Link> : "결과 없음",
-          ])} />
-        </ActivitySection>
+        <>
+          {resumeDrafts.length ? (
+            <ActivitySection title="작성 중인 미제출 자소서" description="코칭을 실행하지 않고 이탈한 입력도 마지막 저장 상태로 표시합니다.">
+              <CoachingDraftTable drafts={resumeDrafts} />
+            </ActivitySection>
+          ) : null}
+          <ActivitySection title="자소서 코칭">
+            <DataTable columns={["날짜", "제목", "결과", "입력 파일", "상세"]} rows={data.resumeCoachings.map((item) => [
+              item.date,
+              item.title,
+              item.result,
+              item.sourceFileUrl ? <a href={item.sourceFileUrl} target="_blank" rel="noreferrer" key={`file-${item.id}`}>{item.sourceFilename || "첨부 파일 열기"}</a> : item.sourceFilename || (item.inputType === "file" ? "파일 정보 없음" : "직접 입력"),
+              item.id ? <Link href={`/members/${member.id}/resume-coaching/${item.id}`} key={item.id}>결과 보기</Link> : "결과 없음",
+            ])} />
+          </ActivitySection>
+        </>
       ) : null}
 
       {tab === "interview-coaching" ? (
-        <ActivitySection title="면접 코칭">
-          <DataTable columns={["날짜", "공고/직무", "상태", "첨부 파일", "상세"]} rows={data.interviewCoachings.map((item) => [
-            item.date,
-            item.title,
-            item.result,
-            item.materialFileAvailable ? <a href={`/members/${member.id}/interview-coaching/${item.id}/file`} key={`file-${item.id}`}>{item.materialFilename || "면접 자료 다운로드"}</a> : item.materialFilename || "없음",
-            <Link href={`/members/${member.id}/interview-coaching/${item.id}`} key={item.id}>결과 보기</Link>,
-          ])} />
-        </ActivitySection>
+        <>
+          {interviewDrafts.length ? (
+            <ActivitySection title="작성 중인 미제출 면접 자료·답변" description="면접 코칭 시작 전 자료와 제출 전 답변의 마지막 저장 상태입니다.">
+              <CoachingDraftTable drafts={interviewDrafts} />
+            </ActivitySection>
+          ) : null}
+          <ActivitySection title="면접 코칭">
+            <DataTable columns={["날짜", "공고/직무", "상태", "첨부 파일", "상세"]} rows={data.interviewCoachings.map((item) => [
+              item.date,
+              item.title,
+              item.result,
+              item.materialFileAvailable ? <a href={`/members/${member.id}/interview-coaching/${item.id}/file`} key={`file-${item.id}`}>{item.materialFilename || "면접 자료 다운로드"}</a> : item.materialFilename || "없음",
+              <Link href={`/members/${member.id}/interview-coaching/${item.id}`} key={item.id}>결과 보기</Link>,
+            ])} />
+          </ActivitySection>
+        </>
       ) : null}
 
       {tab === "community" ? (
@@ -273,7 +292,7 @@ export async function AdminMemberDetailPage({
             <div>
               <h2>{data.logEvent === "visit" ? "방문 이력" : data.logEvent === "activity" ? "사용자 활동 이력" : data.logEvent === "all" ? "원본 전체 방문·이벤트 이력" : "이벤트 이력"}</h2>
               <p>{data.logStartDate || data.logEndDate ? `${data.logStartDate} ~ ${data.logEndDate}` : "전체 기간"} · 방문·이벤트 로그와 동일한 조건으로 최신순 표시합니다.</p>
-              <p>총 <strong>{data.logCount.toLocaleString("ko-KR")}</strong>건 · 이 회원의 로그만 조회 중{data.logIp ? ` · ${data.logIp} IP만 조회 중` : ""}</p>
+              <p>총 <strong>{data.logCount.toLocaleString("ko-KR")}</strong>건 · 이 회원의 로그만 조회 중{data.logIp ? ` · ${maskIpAddress(data.logIp)} IP만 조회 중` : ""}</p>
             </div>
             <span className={logStyles.tableActions}>
               {data.logIp ? <Link className={logStyles.backButtonSecondary} href={memberLogHref(member.id, data, 1, { ip: "" })}>전체 IP 보기</Link> : null}
@@ -283,10 +302,10 @@ export async function AdminMemberDetailPage({
           <ActivityLogTable
             rows={data.logs}
             emptyMessage="조회 조건에 해당하는 로그가 없습니다."
-            renderIp={(row) => row.ipAddress !== "-" ? <Link href={memberIdentityLogHref(member.id, data, { ip: row.ipAddress })}>{row.ipAddress}</Link> : row.ipAddress}
-              renderIdentity={(row) => !["회원 식별됨", "식별 정보 없음", "-"].includes(row.identity)
-              ? <Link href={memberIdentityLogHref(member.id, data, { keyword: row.identity })}>{row.identity}</Link>
-              : row.identity}
+            renderIp={(row, maskedIp) => row.ipAddress !== "-" ? <Link href={memberIdentityLogHref(member.id, data, { ip: row.ipAddress })}>{maskedIp}</Link> : maskedIp}
+              renderIdentity={(row, maskedIdentity) => !["회원 식별됨", "식별 정보 없음", "-"].includes(row.identity)
+              ? <Link href={memberIdentityLogHref(member.id, data, { keyword: row.identity })}>{maskedIdentity}</Link>
+              : maskedIdentity}
           />
           <nav className={logStyles.pagination} aria-label="회원 방문 이벤트 로그 페이지">
             <Link className={data.logPage <= 1 ? logStyles.disabledPage : ""} href={memberLogHref(member.id, data, Math.max(1, data.logPage - 1))}>&lt;</Link>
@@ -319,4 +338,79 @@ function DataTable({ columns, rows }: { columns: string[]; rows: ReactNode[][] }
     <thead><tr>{columns.map((column) => <th key={column}>{column}</th>)}</tr></thead>
     <tbody>{rows.length > 0 ? rows.map((row, rowIndex) => <tr key={rowIndex}>{row.map((cell, cellIndex) => <td data-label={columns[cellIndex]} key={cellIndex}>{cell}</td>)}</tr>) : <tr><td colSpan={columns.length}>표시할 데이터가 없습니다.</td></tr>}</tbody>
   </table>;
+}
+
+function CoachingDraftTable({ drafts }: { drafts: MemberCoachingDraft[] }) {
+  return <DataTable
+    columns={["최근 저장", "단계", "연결 정보", "전체 입력"]}
+    rows={drafts.map((draft) => {
+      const job = asRecord(draft.content.job);
+      const stage = draft.content.stage === "answers"
+        ? "면접 답변 작성"
+        : draft.productType === "resume_coaching"
+          ? "자소서 작성"
+          : "면접 자료 작성";
+      const jobLabel = [job?.institutionName, job?.title, job?.duty]
+        .filter((value): value is string => typeof value === "string" && Boolean(value.trim()))
+        .join(" · ") || "연결 정보 없음";
+      return [
+        draft.updatedAt,
+        stage,
+        jobLabel,
+        <CoachingDraftContent content={draft.content} key={draft.id} />,
+      ];
+    })}
+  />;
+}
+
+function CoachingDraftContent({ content }: { content: Record<string, unknown> }) {
+  const sections: Array<{ label: string; value: string }> = [];
+  addDraftText(sections, "자소서", content.inputText);
+  addDraftText(sections, "면접 자료·자소서", content.materialText);
+
+  const answers = asRecord(content.answers);
+  if (answers) {
+    Object.values(answers).forEach((value, index) => {
+      const answer = asRecord(value);
+      if (!answer) return;
+      const question = typeof answer.question === "string" && answer.question.trim()
+        ? answer.question.trim()
+        : `질문 ${index + 1}`;
+      addDraftText(sections, question, answer.answer);
+    });
+  }
+
+  const file = asRecord(content.file) || asRecord(content.materialFile);
+  if (file && typeof file.name === "string") {
+    const size = typeof file.size === "number" ? ` · ${Math.ceil(file.size / 1024).toLocaleString("ko-KR")}KB` : "";
+    sections.push({ label: "선택한 파일", value: `${file.name}${size}` });
+  }
+
+  if (!sections.length) {
+    sections.push({ label: "저장 내용", value: JSON.stringify(content, null, 2) });
+  }
+
+  return <details className={styles.draftDetail}>
+    <summary>전체 입력 보기</summary>
+    {sections.map((section, index) => <section key={`${section.label}-${index}`}>
+      <strong>{section.label}</strong>
+      <pre>{section.value}</pre>
+    </section>)}
+  </details>;
+}
+
+function addDraftText(
+  sections: Array<{ label: string; value: string }>,
+  label: string,
+  value: unknown,
+) {
+  if (typeof value === "string" && value.trim()) {
+    sections.push({ label, value });
+  }
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null;
 }
