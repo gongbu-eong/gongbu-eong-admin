@@ -8,6 +8,7 @@ import {
   maskEmail,
   maskPersonalData,
   maskPersonalText,
+  maskPhoneNumber,
 } from "../privacy-mask";
 
 export type MemberStatusFilter = "all" | "active" | "pending_signup" | "blocked" | "withdrawn" | "forced_withdrawn";
@@ -448,7 +449,7 @@ function toMemberSummary(row: MemberRow): MemberSummary {
     name,
     email: maskEmail(email),
     maskedEmail: maskEmail(email),
-    phone: row.phone?.trim() || "없음",
+    phone: maskPhoneNumber(row.phone),
     gender: formatGender(row.gender),
     ageGroup: formatAgeGroup(row.age_group),
     source: isCareerSource(row.first_source) ? "-" : row.first_source || "직접유입",

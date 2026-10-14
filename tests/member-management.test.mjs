@@ -69,6 +69,8 @@ test("member date filters distinguish signup and last login while preserving sel
   assert.equal(joined.totalCount, 1);
   assert.equal(joined.members[0].id, user);
   assert.equal(joined.selectedMember.id, user);
+  assert.equal(joined.members[0].phone, "010-****-5678");
+  assert.equal(joined.selectedMember.phone, "010-****-5678");
   const login = await members.getMemberListData({ period: "custom", dateField: "login", startDate: "2025-09-22", endDate: "2025-09-22" });
   assert.equal(login.totalCount, 1);
   assert.equal(login.members[0].id, user);
@@ -107,8 +109,8 @@ before(async () => {
       hiring_count integer, is_active boolean, raw_payload jsonb, announcement_at timestamptz, created_at timestamptz, view_count integer);
     CREATE TABLE user_job_bookmarks(user_id uuid, job_posting_id uuid);
   `);
-  await database.query(`INSERT INTO users(id,nickname,email,signup_completed_at,last_login_at,selected_diagnosis_result_id)
-    VALUES ($1,'테스트 회원','test@example.local','2026-12-31T16:00:00Z','2025-09-22T01:32:11Z',$3),($2,'다른 회원','other@example.local',NOW(),NULL,$4)`, [user, other, resultId, peerResultId]);
+  await database.query(`INSERT INTO users(id,nickname,email,phone,signup_completed_at,last_login_at,selected_diagnosis_result_id)
+    VALUES ($1,'테스트 회원','test@example.local','010-1234-5678','2026-12-31T16:00:00Z','2025-09-22T01:32:11Z',$3),($2,'다른 회원','other@example.local',NULL,NOW(),NULL,$4)`, [user, other, resultId, peerResultId]);
   await database.query("INSERT INTO community_posts(user_id,status) VALUES ($1,'active'),($1,'deleted'),($2,'active')", [user, other]);
   await database.query("INSERT INTO community_comments(user_id,parent_comment_id,status) VALUES ($1,NULL,'active'),($1,$3,'active'),($1,NULL,'deleted'),($2,NULL,'active')", [user, other, resultId]);
   await database.query("INSERT INTO diagnosis_runs(id,user_id) VALUES ($1,NULL),($2,$3)", [resultId, peerResultId, other]);
