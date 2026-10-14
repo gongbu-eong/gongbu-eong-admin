@@ -7,7 +7,6 @@ import { toDiagnosisResultResponse, PERCENTILE_TRAIT_LABELS } from "./service-di
 import { findRecommendedJobPostings } from "./service-diagnosis/jobs/jobs.repository";
 import { toJobPostingDto } from "./service-diagnosis/jobs/jobs.service";
 import type { DiagnosisResultDetailResponseDto } from "./service-diagnosis/diagnosis/diagnosis.dto";
-import { maskDisplayName } from "../privacy-mask";
 
 export async function getMemberDiagnosisResult(userId: string, resultId: string) {
   const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -41,6 +40,6 @@ export async function getMemberDiagnosisResult(userId: string, resultId: string)
   };
   return {
     detail,
-    nickname: maskDisplayName(member.rows[0]?.nickname || member.rows[0]?.display_name || "회원"),
+    nickname: member.rows[0]?.nickname || member.rows[0]?.display_name || "회원",
   };
 }

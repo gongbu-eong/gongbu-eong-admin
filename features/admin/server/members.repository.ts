@@ -5,11 +5,9 @@ import type { ManagementDateInput, ManagementDateRange } from "@/features/admin/
 import { appendManagementDate } from "./management-date-filter";
 import { getActivityLogData, type ActivityLogRow } from "@/features/admin/server/activity-log.repository";
 import {
-  maskDisplayName,
   maskEmail,
   maskPersonalData,
   maskPersonalText,
-  maskPhoneNumber,
 } from "../privacy-mask";
 
 export type MemberStatusFilter = "all" | "active" | "pending_signup" | "blocked" | "withdrawn" | "forced_withdrawn";
@@ -447,10 +445,10 @@ function toMemberSummary(row: MemberRow): MemberSummary {
   const avatarKey = row.profile_avatar_key || "fox";
   return {
     id: row.id,
-    name: maskDisplayName(name),
+    name,
     email: maskEmail(email),
     maskedEmail: maskEmail(email),
-    phone: maskPhoneNumber(row.phone),
+    phone: row.phone?.trim() || "없음",
     gender: formatGender(row.gender),
     ageGroup: formatAgeGroup(row.age_group),
     source: isCareerSource(row.first_source) ? "-" : row.first_source || "직접유입",

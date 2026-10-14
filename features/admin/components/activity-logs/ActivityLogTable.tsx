@@ -1,11 +1,6 @@
 import type { ReactNode } from "react";
 import type { ActivityLogRow } from "@/features/admin/server/activity-log.repository";
-import {
-  maskDisplayName,
-  maskEmail,
-  maskIdentifier,
-  maskPersonalText,
-} from "@/features/admin/privacy-mask";
+import { maskEmail, maskPersonalText } from "@/features/admin/privacy-mask";
 import styles from "@/features/admin/components/traffic/TrafficLogsPage.module.css";
 
 type ActivityLogTableProps = {
@@ -27,15 +22,15 @@ export function ActivityLogTable({ rows, emptyMessage, renderIp, renderIdentity 
         </thead>
         <tbody>
           {rows.length ? rows.map((row) => {
-            const displayIdentity = row.userId ? maskIdentifier(row.identity) : row.identity;
+            const displayIdentity = row.identity;
             const displayIp = row.ipAddress;
-            const maskedPath = maskPersonalText(row.path, { maskIp: false });
-            const maskedDetail = maskPersonalText(row.detail, { maskIp: false });
+            const maskedPath = maskPersonalText(row.path);
+            const maskedDetail = maskPersonalText(row.detail);
 
             return (
             <tr key={row.id}>
               <td data-label="접속일시">{row.eventAt}</td>
-              <td data-label="주체"><span className={styles.userCell}><strong>{maskDisplayName(row.userName)}</strong><em>{row.userEmail ? maskEmail(row.userEmail) : (row.userId ? "이메일 없음" : "비회원")}</em></span></td>
+              <td data-label="주체"><span className={styles.userCell}><strong>{row.userName}</strong><em>{row.userEmail ? maskEmail(row.userEmail) : (row.userId ? "이메일 없음" : "비회원")}</em></span></td>
               <td data-label="식별 정보" className={styles.pathCell} title={displayIdentity}>{renderIdentity ? renderIdentity(row, displayIdentity) : displayIdentity}</td>
               <td data-label="IP">{renderIp ? renderIp(row, displayIp) : displayIp}</td>
               <td data-label="기기"><span className={`${styles.deviceBadge} ${row.device === "모바일" ? styles.deviceMobile : row.device === "웹" ? styles.deviceWeb : styles.deviceUnknown}`}>{row.device}</span></td>
