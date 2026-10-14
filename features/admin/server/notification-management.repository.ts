@@ -1,5 +1,5 @@
 import { query } from "@/features/admin/server/db";
-import { maskEmail } from "../privacy-mask";
+import { maskEmail, maskPhoneNumber } from "../privacy-mask";
 
 export type NotificationAgeFilter =
   | "all"
@@ -206,7 +206,7 @@ function toRecipient(row: RecipientRow): NotificationRecipient {
     id: row.id,
     name: row.name || "이름 없음",
     email: row.email ? maskEmail(row.email) : "없음",
-    phone: phone || "없음",
+    phone: maskPhoneNumber(phone),
     status: row.status,
     statusLabel: formatStatus(row.status),
     ageGroup: formatAgeGroup(row.age_group),
