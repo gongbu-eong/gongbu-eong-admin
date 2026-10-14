@@ -4,7 +4,6 @@ import { AdminCard } from "@/features/admin/components/common/AdminCard";
 import { getActivityLogData, ActivityLogQuery } from "@/features/admin/server/activity-log.repository";
 import { ActivityLogTable } from "./ActivityLogTable";
 import { ActivityLogFilterBar } from "./ActivityLogFilterBar";
-import { maskIpAddress } from "@/features/admin/privacy-mask";
 import styles from "@/features/admin/components/traffic/TrafficLogsPage.module.css";
 
 type ActivityLogsPageProps = { filters?: ActivityLogQuery };
@@ -105,7 +104,7 @@ export async function ActivityLogsPage({ filters }: ActivityLogsPageProps) {
               <h2>{data.funnelLabel || (data.event === "visit" ? "방문 이력" : data.event === "activity" ? "사용자 활동 이력" : data.event === "all" ? "원본 전체 방문·이벤트 이력" : "이벤트 이력")}</h2>
               {data.bannerKey ? <p>선택한 배너·버튼의 실제 클릭만 조회 중</p> : null}
               {data.cohort ? <p>{cohortLabels[data.cohort]} · 대시보드와 동일한 일별 중복 제거 기준</p> : null}
-              <p>총 <strong>{formatCount(data.totalCount)}</strong>{data.funnelLabel ? "명 · 대시보드 전환 퍼널과 동일한 시작 코호트 기준 · " : totalUnit + " · "}{data.uniqueOnly ? "순 방문자 기준 · " : data.cohort ? "대시보드 코호트 기준 · " : data.event === "activity" ? "방문·사용자 행동 기준 · " : "원본 이벤트 기준 · "}비회원은 IP와 익명 식별자로 확인합니다.{data.includeExcluded ? " · 제외 IP 포함 조회 중" : ""}{data.ip ? ` · ${maskIpAddress(data.ip)} 로그만 조회 중` : ""}</p>
+              <p>총 <strong>{formatCount(data.totalCount)}</strong>{data.funnelLabel ? "명 · 대시보드 전환 퍼널과 동일한 시작 코호트 기준 · " : totalUnit + " · "}{data.uniqueOnly ? "순 방문자 기준 · " : data.cohort ? "대시보드 코호트 기준 · " : data.event === "activity" ? "방문·사용자 행동 기준 · " : "원본 이벤트 기준 · "}비회원은 IP와 익명 식별자로 확인합니다.{data.includeExcluded ? " · 제외 IP 포함 조회 중" : ""}{data.ip ? ` · ${data.ip} 로그만 조회 중` : ""}</p>
             </div>
             <span className={styles.tableActions}>
               {data.ip ? <Link className={styles.backButtonSecondary} href={makeHref(data, 1, { ip: "" })}>전체 IP 보기</Link> : null}
@@ -114,10 +113,10 @@ export async function ActivityLogsPage({ filters }: ActivityLogsPageProps) {
           <ActivityLogTable
             rows={data.rows}
             emptyMessage="조회 조건에 해당하는 로그가 없습니다."
-            renderIp={(row, maskedIp) => row.ipAddress !== "-" ? <Link href={makeIdentityHref(data, { ip: row.ipAddress })}>{maskedIp}</Link> : maskedIp}
-            renderIdentity={(row, maskedIdentity) => !["회원 식별됨", "식별 정보 없음", "-"].includes(row.identity)
-              ? <Link href={makeIdentityHref(data, { keyword: row.identity })}>{maskedIdentity}</Link>
-              : maskedIdentity}
+            renderIp={(row, displayIp) => row.ipAddress !== "-" ? <Link href={makeIdentityHref(data, { ip: row.ipAddress })}>{displayIp}</Link> : displayIp}
+            renderIdentity={(row, displayIdentity) => !["회원 식별됨", "식별 정보 없음", "-"].includes(row.identity)
+              ? <Link href={makeIdentityHref(data, { keyword: row.identity })}>{displayIdentity}</Link>
+              : displayIdentity}
           />
           <nav className={styles.pagination} aria-label="방문 이벤트 로그 페이지">
             <Link className={data.page <= 1 ? styles.disabledPage : ""} href={makeHref(data, Math.max(1, data.page - 1))}>&lt;</Link>

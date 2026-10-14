@@ -255,7 +255,29 @@ type CoachingDraftRow = {
   content: Record<string, unknown> | null;
 };
 
+type TableExistenceRow = {
+  table_name: string | null;
+};
+
 const pageSize = 10;
+
+async function getCoachingDraftRows(userId: string): Promise<CoachingDraftRow[]> {
+  const table = await query<TableExistenceRow>(
+    "SELECT to_regclass('public.coaching_input_drafts')::text AS table_name",
+  );
+  if (!table.rows[0]?.table_name) return [];
+
+  const result = await query<CoachingDraftRow>(
+    `
+      SELECT id, product_type, updated_at, content
+      FROM public.coaching_input_drafts
+      WHERE user_id = $1::uuid
+      ORDER BY updated_at DESC
+    `,
+    [userId],
+  );
+  return result.rows;
+}
 
 export function normalizeMemberTab(value?: string | null): MemberDetailTab {
   if (
@@ -843,15 +865,7 @@ export async function getMemberDetailData(
       `,
       [memberRow.id],
     ),
-    query<CoachingDraftRow>(
-      `
-        SELECT id, product_type, updated_at, content
-        FROM public.coaching_input_drafts
-        WHERE user_id = $1::uuid
-        ORDER BY updated_at DESC
-      `,
-      [memberRow.id],
-    ),
+    getCoachingDraftRows(memberRow.id),
   ]);
 
   const activityLogResult = logQuery?.activeTab === "logs"
@@ -900,7 +914,7 @@ export async function getMemberDetailData(
       materialFileAvailable: Boolean(row.material_file_available),
       detail: maskPersonalData(row.detail),
     })),
-    coachingDrafts: coachingDraftResult.rows.map((row) => ({
+    coachingDrafts: coachingDraftResult.map((row) => ({
       id: row.id,
       productType: row.product_type,
       updatedAt: formatDateTime(row.updated_at),

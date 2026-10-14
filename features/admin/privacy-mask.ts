@@ -87,14 +87,20 @@ export function maskIdentifier(value: string | null | undefined): string {
   return `${characters.slice(0, 3).join("")}***${characters.slice(-3).join("")}`;
 }
 
-export function maskPersonalText(value: string | null | undefined): string {
+export function maskPersonalText(
+  value: string | null | undefined,
+  options: { maskIp?: boolean } = {},
+): string {
   if (!value) return value || "";
 
-  return value
+  const masked = value
     .replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, (email) => maskEmail(email))
     .replace(/(?<!\d)(?:\+?82[-.\s]?)?0?1[016789][-.\s]?\d{3,4}[-.\s]?\d{4}(?!\d)/g, (phone) => maskPhoneNumber(phone))
-    .replace(/(?<!\d)\d{6}-\d{7}(?!\d)/g, (residentNumber) => `${residentNumber.slice(0, 6)}-*******`)
-    .replace(/(?<!\d)(?:\d{1,3}\.){3}\d{1,3}(?!\d)/g, (ip) => maskIpAddress(ip));
+    .replace(/(?<!\d)\d{6}-\d{7}(?!\d)/g, (residentNumber) => `${residentNumber.slice(0, 6)}-*******`);
+
+  return options.maskIp === false
+    ? masked
+    : masked.replace(/(?<!\d)(?:\d{1,3}\.){3}\d{1,3}(?!\d)/g, (ip) => maskIpAddress(ip));
 }
 
 export function maskPersonalData<T>(value: T): T {

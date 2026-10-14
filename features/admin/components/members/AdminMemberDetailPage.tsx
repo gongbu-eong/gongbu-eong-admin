@@ -12,7 +12,6 @@ import {
 import { AdminMemberActions } from "./AdminMemberActions";
 import { ActivityLogTable } from "@/features/admin/components/activity-logs/ActivityLogTable";
 import { ActivityLogFilterBar } from "@/features/admin/components/activity-logs/ActivityLogFilterBar";
-import { maskIpAddress } from "@/features/admin/privacy-mask";
 import styles from "./AdminMemberDetailPage.module.css";
 import logStyles from "@/features/admin/components/traffic/TrafficLogsPage.module.css";
 
@@ -292,7 +291,7 @@ export async function AdminMemberDetailPage({
             <div>
               <h2>{data.logEvent === "visit" ? "방문 이력" : data.logEvent === "activity" ? "사용자 활동 이력" : data.logEvent === "all" ? "원본 전체 방문·이벤트 이력" : "이벤트 이력"}</h2>
               <p>{data.logStartDate || data.logEndDate ? `${data.logStartDate} ~ ${data.logEndDate}` : "전체 기간"} · 방문·이벤트 로그와 동일한 조건으로 최신순 표시합니다.</p>
-              <p>총 <strong>{data.logCount.toLocaleString("ko-KR")}</strong>건 · 이 회원의 로그만 조회 중{data.logIp ? ` · ${maskIpAddress(data.logIp)} IP만 조회 중` : ""}</p>
+              <p>총 <strong>{data.logCount.toLocaleString("ko-KR")}</strong>건 · 이 회원의 로그만 조회 중{data.logIp ? ` · ${data.logIp} IP만 조회 중` : ""}</p>
             </div>
             <span className={logStyles.tableActions}>
               {data.logIp ? <Link className={logStyles.backButtonSecondary} href={memberLogHref(member.id, data, 1, { ip: "" })}>전체 IP 보기</Link> : null}
@@ -302,10 +301,10 @@ export async function AdminMemberDetailPage({
           <ActivityLogTable
             rows={data.logs}
             emptyMessage="조회 조건에 해당하는 로그가 없습니다."
-            renderIp={(row, maskedIp) => row.ipAddress !== "-" ? <Link href={memberIdentityLogHref(member.id, data, { ip: row.ipAddress })}>{maskedIp}</Link> : maskedIp}
-              renderIdentity={(row, maskedIdentity) => !["회원 식별됨", "식별 정보 없음", "-"].includes(row.identity)
-              ? <Link href={memberIdentityLogHref(member.id, data, { keyword: row.identity })}>{maskedIdentity}</Link>
-              : maskedIdentity}
+            renderIp={(row, displayIp) => row.ipAddress !== "-" ? <Link href={memberIdentityLogHref(member.id, data, { ip: row.ipAddress })}>{displayIp}</Link> : displayIp}
+              renderIdentity={(row, displayIdentity) => !["회원 식별됨", "식별 정보 없음", "-"].includes(row.identity)
+              ? <Link href={memberIdentityLogHref(member.id, data, { keyword: row.identity })}>{displayIdentity}</Link>
+              : displayIdentity}
           />
           <nav className={logStyles.pagination} aria-label="회원 방문 이벤트 로그 페이지">
             <Link className={data.logPage <= 1 ? logStyles.disabledPage : ""} href={memberLogHref(member.id, data, Math.max(1, data.logPage - 1))}>&lt;</Link>
