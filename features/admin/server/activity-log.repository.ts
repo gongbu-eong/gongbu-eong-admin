@@ -78,6 +78,7 @@ export type ActivityLogRow = {
   channel: string;
   screen: string;
   device: "웹" | "모바일" | "알 수 없음";
+  authenticationState: "authenticated" | "linked_after_event" | "anonymous";
 };
 
 type ActivityLogDbRow = {
@@ -95,6 +96,7 @@ type ActivityLogDbRow = {
   detail: string | null;
   acquisition_channel: string | null;
   screen_key: string | null;
+  is_authenticated_at_event: boolean | null;
   total_count: string;
 };
 
@@ -285,6 +287,11 @@ function mapActivityRows(rows: ActivityLogDbRow[]): ActivityLogRow[] {
     channel: formatChannel(row.acquisition_channel),
     screen: formatScreen(row.screen_key),
     device: getDeviceLabel(row.user_agent),
+    authenticationState: row.user_id
+      ? row.is_authenticated_at_event === false
+        ? "linked_after_event"
+        : "authenticated"
+      : "anonymous",
   }));
 }
 
@@ -703,6 +710,7 @@ export async function getActivityLogData(args?: ActivityLogQuery): Promise<Activ
         channel: formatChannel(row.channel),
         screen: formatScreen(screenKeyFromPath(row.sourcePath)),
         device: row.device,
+        authenticationState: row.userId ? "authenticated" : "anonymous",
       })),
     };
   }
@@ -804,6 +812,7 @@ export async function getActivityLogData(args?: ActivityLogQuery): Promise<Activ
         channel: formatChannel(row.channel),
         screen: formatScreen(screenKeyFromPath(row.path)),
         device: row.device,
+        authenticationState: row.userId ? "authenticated" : "anonymous",
       })),
     };
   }
@@ -853,6 +862,7 @@ export async function getActivityLogData(args?: ActivityLogQuery): Promise<Activ
         access.event_name AS event_type,
         'access'::text AS event_source,
         access.user_id,
+        access.identity_linked_at,
         access.anonymous_id,
         access.session_id,
         SPLIT_PART(access.ip_address::text, '/', 1) AS ip_address,
@@ -891,6 +901,7 @@ export async function getActivityLogData(args?: ActivityLogQuery): Promise<Activ
         events.event_type,
         'product'::text,
         events.user_id,
+        events.identity_linked_at,
         events.anonymous_id,
         NULL::uuid,
         SPLIT_PART(NULLIF(events.properties->>'ip_address', ''), '/', 1),
@@ -932,6 +943,7 @@ export async function getActivityLogData(args?: ActivityLogQuery): Promise<Activ
         events.event_name,
         'attribution'::text,
         events.user_id,
+        events.identity_linked_at,
         events.anonymous_id,
         NULL::uuid,
         SPLIT_PART(events.ip_address::text, '/', 1),
@@ -957,6 +969,7 @@ export async function getActivityLogData(args?: ActivityLogQuery): Promise<Activ
         CASE WHEN events.success THEN 'login_success' ELSE 'login_failed' END,
         'auth'::text,
         events.user_id,
+        NULL::timestamptz,
         NULL::uuid,
         NULL::uuid,
         SPLIT_PART(events.ip_address::text, '/', 1),
@@ -982,6 +995,7 @@ export async function getActivityLogData(args?: ActivityLogQuery): Promise<Activ
         'entry',
         'entry'::text,
         events.user_id,
+        NULL::timestamptz,
         events.anonymous_id,
         NULL::uuid,
         SPLIT_PART(events.ip_address::text, '/', 1),
@@ -1022,6 +1036,8 @@ export async function getActivityLogData(args?: ActivityLogQuery): Promise<Activ
         users.display_name,
         users.community_nickname,
         users.email::text AS email,
+        (raw_events.user_id IS NOT NULL AND raw_events.identity_linked_at IS NULL)
+          AS is_authenticated_at_event,
         COALESCE(raw_events.anonymous_id::text, raw_events.session_id::text, raw_events.user_id::text) AS identity,
         CASE
           WHEN raw_events.path LIKE '/ai-tools/job-tools%' OR raw_events.event_type LIKE 'job_tool_%' THEN
@@ -1113,6 +1129,7 @@ export async function getActivityLogData(args?: ActivityLogQuery): Promise<Activ
         NULLIF(BTRIM(display_name), '')) AS user_name,
       email AS user_email, anonymous_id, session_id, ip_address, user_agent, path, detail,
       acquisition_channel, normalized_screen_key AS screen_key,
+      is_authenticated_at_event,
       COUNT(*) OVER()::text AS total_count
     FROM ${rowsSource}
     ORDER BY event_at DESC, id DESC
